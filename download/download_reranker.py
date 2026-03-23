@@ -16,4 +16,4 @@ try:
     )
     print("重排序模型下载成功！")
 except Exception as e:
-    print(f"下载失败: {e}")
+    print(f"下载111失败: {e}")
