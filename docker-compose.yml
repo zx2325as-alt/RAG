@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 1. 基础中间件服务
+  # 1. 基础中间件服务123123
   redis:
     image: redis:6.2-alpine
     ports:
