@@ -22,6 +22,6 @@ try:
         resume_download=True,
         allow_patterns=["*.json", "*.txt", "*.safetensors", "tokenizer*"]
     )
-    print("模型下载成功！现在本地读取不会再报错了。")
+    print("模型下载成1111功！现在本地读取不会再报错了。")
 except Exception as e:
     print(f"下载失败: {e}")
