@@ -272,19 +272,40 @@ from app.config import Config
 
 @api_bp.route('/ollama/models', methods=['GET'])
 def get_ollama_models():
-    """获取本地 Ollama 正在运行的模型列表"""
+    """获取本地 Ollama 或 vLLM 正在运行的模型列表"""
     try:
-        response = requests.get(f"{Config.OLLAMA_BASE_URL}/api/tags", timeout=3)
-        if response.status_code == 200:
-            models = response.json().get('models', [])
-            all_model_names = [m['name'] for m in models]
-            # 直接返回所有模型，方便用户在页面上选择和删除
-            return jsonify({'models': all_model_names})
-        else:
-            return jsonify({'error': 'Failed to fetch models from Ollama'}), response.status_code
+        models_list = []
+        
+        # 1. 尝试获取 Ollama 模型
+        try:
+            response = requests.get(f"{Config.OLLAMA_BASE_URL}/api/tags", timeout=3)
+            if response.status_code == 200:
+                models = response.json().get('models', [])
+                models_list.extend([m['name'] for m in models])
+        except Exception as e:
+            current_app.logger.warning(f"Ollama 服务未启动或连接失败: {e}")
+            
+        # 2. 尝试获取 vLLM (OpenAI 兼容接口) 模型列表
+        try:
+            # 兼容带有 /v1/chat/completions 的情况，截取 base_url
+            vllm_base = Config.VLLM_API_URL.split('/chat/completions')[0]
+            if not vllm_base.endswith('/v1'):
+                vllm_base = vllm_base.rstrip('/') + '/v1'
+                
+            vllm_resp = requests.get(f"{vllm_base}/models", timeout=3)
+            if vllm_resp.status_code == 200:
+                vllm_models = vllm_resp.json().get('data', [])
+                models_list.extend([f"vllm: {m['id']}" for m in vllm_models])
+        except Exception as e:
+            current_app.logger.warning(f"vLLM 服务未启动或连接失败: {e}")
+            
+        # 如果两者都失败，不抛出 500，而是返回空列表，让前端优雅降级
+        return jsonify({'models': models_list})
+        
     except Exception as e:
-        current_app.logger.error(f'Error connecting to Ollama: {str(e)}')
-        return jsonify({'error': 'Cannot connect to local Ollama service'}), 500
+        current_app.logger.error(f'Error fetching models: {str(e)}')
+        # 依然返回 200 和空列表，避免前端报错弹窗
+        return jsonify({'models': []})
 
 @api_bp.route('/ollama/models', methods=['DELETE'])
 def delete_ollama_model():
@@ -326,19 +347,26 @@ def set_llm_model():
         Config.ACTIVE_LLM = llm_type
         if llm_type == 'ollama' and model_name:
             Config.OLLAMA_MODEL_NAME = model_name
+        elif llm_type == 'vllm' and model_name:
+            # 如果选择的是 vllm 模型，格式通常为 "vllm: model_id"，提取真实模型名
+            real_model_name = model_name.replace('vllm: ', '') if model_name.startswith('vllm:') else model_name
+            Config.VLLM_MODEL_NAME = real_model_name
             
         # 重新初始化 QAService 中的大模型实例
         qa_service = get_qa_service()
         qa_service.initialize_llm()
         
         current_model = f"Ollama ({model_name})" if llm_type == 'ollama' else (
-            f"DeepSeek ({Config.DEEPSEEK_MODEL_NAME})" if llm_type == 'deepseek' else f"Qwen ({Config.QWEN_MODEL_NAME})"
+            f"vLLM ({Config.VLLM_MODEL_NAME})" if llm_type == 'vllm' else (
+                f"DeepSeek ({Config.DEEPSEEK_MODEL_NAME})" if llm_type == 'deepseek' else f"Qwen ({Config.QWEN_MODEL_NAME})"
+            )
         )
         return jsonify({
             'message': f'Successfully switched to {llm_type}',
             'current_model': current_model
         })
     except Exception as e:
+        current_app.logger.error(f'Error switching LLM model: {str(e)}')
         return jsonify({'error': str(e)}), 500
 
 @api_bp.route('/llm/current', methods=['GET'])
@@ -346,7 +374,9 @@ def get_current_llm():
     """获取当前正在使用的大模型配置"""
     llm_type = Config.ACTIVE_LLM
     current_model = f"Ollama ({Config.OLLAMA_MODEL_NAME})" if llm_type == 'ollama' else (
-        f"DeepSeek ({Config.DEEPSEEK_MODEL_NAME})" if llm_type == 'deepseek' else f"Qwen ({Config.QWEN_MODEL_NAME})"
+        f"vLLM ({Config.VLLM_MODEL_NAME})" if llm_type == 'vllm' else (
+            f"DeepSeek ({Config.DEEPSEEK_MODEL_NAME})" if llm_type == 'deepseek' else f"Qwen ({Config.QWEN_MODEL_NAME})"
+        )
     )
     return jsonify({
         'llm_type': llm_type,

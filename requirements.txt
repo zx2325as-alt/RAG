@@ -21,3 +21,5 @@ rank_bm25
 tensorboard
 pyyaml
 torch
+pdfplumber
+transformers

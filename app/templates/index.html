@@ -120,9 +120,10 @@
                         <h6 class="mb-1" style="font-size: 0.85rem;">模型切换 (当前: <span id="currentModelBadge" class="badge bg-info text-wrap" style="font-size: 0.75rem;"></span>)</h6>
                         <div class="input-group input-group-sm mb-2">
                             <select class="form-select" id="llmTypeSelect">
-                                <option value="qwen">Qwen-7B (本地 vLLM)</option>
+                                <option value="qwen">Qwen-7B (本地部署)</option>
                                 <option value="deepseek">DeepSeek (官方 API)</option>
                                 <option value="ollama">Ollama (本地模型)</option>
+                                <option value="vllm">vLLM (本地通用引擎)</option>
                             </select>
                         </div>
                         <div class="input-group mb-2" id="ollamaModelGroup" style="display: none;">

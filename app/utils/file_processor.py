@@ -16,8 +16,12 @@ try:
     import numpy as np
     import logging
     
-    # 禁用 PaddleOCR 日志输出
+    # 禁用 PaddleOCR 默认的 INFO 级别日志输出（包括那些模型下载、缓存提示）
     logging.getLogger('ppocr').setLevel(logging.ERROR)
+    import logging as sys_logging
+    # PaddleOCR 内部使用了原生的 logging，需要将总日志调低
+    sys_logging.getLogger('ppocr').setLevel(sys_logging.WARNING)
+    # 当前版本的 PaddleOCR 不支持 show_log 参数，通过上方 sys_logging 设置来控制日志
     ocr = PaddleOCR(use_angle_cls=True, lang="ch")
 except ImportError:
     ocr = None
@@ -68,7 +72,7 @@ def extract_text_from_pdf(file_path):
                 import cv2
                 img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
                 
-            result = ocr.ocr(img, cls=True)
+            result = ocr.ocr(img)
             if result and result[0]:
                 for line in result[0]:
                     text += line[1][0] + "\n"
@@ -85,7 +89,7 @@ def extract_text_from_image(file_path):
         return "Error: PaddleOCR not installed. Cannot process image."
     
     full_text = ""
-    result = ocr.ocr(file_path, cls=True)
+    result = ocr.ocr(file_path)
     if result and result[0]:
         for line in result[0]:
             full_text += line[1][0] + "\n"

@@ -88,6 +88,18 @@ class QAService:
                 model=Config.OLLAMA_MODEL_NAME,
                 temperature=0.3
             )
+        elif active_llm == 'vllm':
+            # vLLM 兼容 OpenAI 接口，需要将 /chat/completions 后缀去掉，保留到 /v1 级别
+            base_url = Config.VLLM_API_URL
+            if base_url.endswith('/chat/completions'):
+                base_url = base_url.replace('/chat/completions', '')
+                
+            self.llm = ChatOpenAI(
+                base_url=base_url, 
+                api_key=Config.VLLM_API_KEY,
+                model=Config.VLLM_MODEL_NAME,
+                temperature=0.3
+            )
         else: # 默认使用 qwen
             self.llm = ChatOpenAI(
                 base_url=Config.QWEN_API_URL.replace('/chat/completions', ''), 
