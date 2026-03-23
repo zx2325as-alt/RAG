@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模型微调 (Ollama) - 湖北移动运维知识助手</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">运维知识助手 (RAG)</a>
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">问答系统</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/finetune">模型微调(Ollama)</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/finetune_board">训练看板</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/eval_report">评估报告</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <h3 class="mb-4">Ollama 本地模型微调 (LoRA)</h3>
+        
+        <div class="row">
+            <!-- 左侧：基础配置（变窄） -->
+            <div class="col-md-4">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">1. 选择基座模型</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="baseModelSelect" class="form-label">选择本地已安装的 Ollama 模型：</label>
+                            <div class="input-group">
+                                <select class="form-select" id="baseModelSelect">
+                                    <option value="">加载中...</option>
+                                </select>
+                                <button class="btn btn-outline-danger" type="button" id="deleteModelBtn" title="删除选中的模型">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                                      <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                      <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <!-- 移除了“微调后的新模型名称”输入框 -->
+                    </div>
+                </div>
+
+                <div class="card shadow-sm">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">2. 上传微调数据集</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">支持格式：JSONL (问答对)</label>
+                            <input class="form-control" type="file" id="datasetFile" accept=".jsonl">
+                        </div>
+                        <div class="alert alert-info" style="font-size: 0.85rem;">
+                            <strong>提示：</strong>由于 Ollama 官方主要用于模型推理，本界面的微调底层需要借助外部工具（如 unsloth 或 LLaMA-Factory）完成训练，再通过 Ollama Modelfile 导入。
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：训练配置与状态（变宽，增加更多参数） -->
+            <div class="col-md-8">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">3. 训练高级配置与状态</h5>
+                    </div>
+                    <div class="card-body d-flex flex-column">
+                        <div class="row g-3 mb-2">
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">训练轮数 (Epochs)</label>
+                                <input type="number" id="epochsInput" class="form-control form-control-sm" value="3" title="模型在整个数据集上训练的次数">
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">批次大小 (Batch Size)</label>
+                                <input type="number" id="batchSizeInput" class="form-control form-control-sm" value="4" title="每次梯度更新所使用的样本数">
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">学习率 (Learning Rate)</label>
+                                <input type="text" id="lrInput" class="form-control form-control-sm" value="2e-4" title="控制模型权重更新的步长">
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">预热步数 (Warmup Steps)</label>
+                                <input type="number" id="warmupStepsInput" class="form-control form-control-sm" value="100" title="在训练初期逐渐增加学习率的步数">
+                            </div>
+                        </div>
+                        
+                        <div class="row g-3 mb-2">
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">LoRA 秩 (Rank r)</label>
+                                <input type="number" id="loraRankInput" class="form-control form-control-sm" value="8" title="低秩矩阵的维度，决定微调参数量">
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">LoRA Alpha</label>
+                                <input type="number" id="loraAlphaInput" class="form-control form-control-sm" value="16" title="LoRA 的缩放因子，通常设置为 r 的 2 倍">
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">LoRA Dropout</label>
+                                <input type="text" id="loraDropoutInput" class="form-control form-control-sm" value="0.1" title="防止过拟合的丢弃率">
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">LoRA 目标模块</label>
+                                <input type="text" id="loraTargetInput" class="form-control form-control-sm" value="all" title="应用 LoRA 的模块，逗号分隔或 'all'">
+                            </div>
+                        </div>
+                        
+                        <div class="row g-3 mb-3">
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">优化器 (Optimizer)</label>
+                                <select class="form-select form-select-sm" id="optimizerSelect" title="用于更新模型权重的算法">
+                                    <option value="adamw_torch" selected>AdamW (Torch)</option>
+                                    <option value="adamw_8bit">AdamW (8-bit)</option>
+                                    <option value="paged_adamw_32bit">Paged AdamW</option>
+                                </select>
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">调度器 (LR Scheduler)</label>
+                                <select class="form-select form-select-sm" id="lrSchedulerSelect" title="学习率衰减策略">
+                                    <option value="cosine" selected>Cosine</option>
+                                    <option value="linear">Linear</option>
+                                    <option value="constant">Constant</option>
+                                </select>
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">最大长度 (Max Length)</label>
+                                <input type="number" id="maxLengthInput" class="form-control form-control-sm" value="2048" title="模型处理的最大上下文Token长度">
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">精度 (Precision)</label>
+                                <select class="form-select form-select-sm" id="precisionSelect" title="训练过程中的数据精度格式">
+                                    <option value="fp16">FP16</option>
+                                    <option value="bf16" selected>BF16</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="row g-3 mb-3">
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">保存步数 (Save Steps)</label>
+                                <input type="number" id="saveStepsInput" class="form-control form-control-sm" value="500" title="每隔多少步保存一次 Checkpoint">
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">验证步数 (Eval Steps)</label>
+                                <input type="number" id="evalStepsInput" class="form-control form-control-sm" value="50" title="每隔多少步进行一次验证并在TensorBoard中绘图">
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">日志步数 (Logging Steps)</label>
+                                <input type="number" id="loggingStepsInput" class="form-control form-control-sm" value="10" title="每隔多少步打印一次日志并记录到TensorBoard">
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">梯度累积 (Grad Acc)</label>
+                                <input type="number" id="gradAccInput" class="form-control form-control-sm" value="4" title="更新梯度前累积的步数，用于变相增加Batch Size">
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">量化 (Quantization)</label>
+                                <select class="form-select form-select-sm" id="quantizationSelect" title="加载基座模型时的量化方式">
+                                    <option value="none" selected>不量化</option>
+                                    <option value="4bit">4-bit (推荐)</option>
+                                    <option value="8bit">8-bit</option>
+                                </select>
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">权重衰减 (Weight Decay)</label>
+                                <input type="number" step="0.01" id="weightDecayInput" class="form-control form-control-sm" value="0.0" title="L2正则化系数，防止过拟合">
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">最大梯度范数 (Max Grad Norm)</label>
+                                <input type="number" step="0.1" id="maxGradNormInput" class="form-control form-control-sm" value="1.0" title="梯度裁剪阈值，防止梯度爆炸">
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">随机种子 (Seed)</label>
+                                <input type="number" id="seedInput" class="form-control form-control-sm" value="42" title="确保训练结果可复现">
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label form-label-sm mb-0">分布式训练 (DeepSpeed)</label>
+                                <select class="form-select form-select-sm" id="deepspeedSelect" title="使用 DeepSpeed ZeRO 优化显存">
+                                    <option value="none">单卡训练 (不使用)</option>
+                                    <option value="zero2">ZeRO-2 (推荐多卡)</option>
+                                    <option value="zero3">ZeRO-3 (适合极大模型)</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex gap-2 mb-2 align-items-center">
+                            <button class="btn btn-primary btn-sm flex-grow-1" id="startFinetuneBtn" onclick="startFinetune()">开始微调任务</button>
+                            <button class="btn btn-danger btn-sm d-none" id="stopFinetuneBtn" onclick="stopFinetune()">终止训练</button>
+                            <!-- 新增 TensorBoard 按钮 -->
+                            <button class="btn btn-sm btn-outline-info" type="button" id="openTbBtn" onclick="openTensorBoardModal()">
+                                📈 实时监控 (TensorBoard)
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="$('#terminalOutput').empty()">清屏</button>
+                        </div>
+                        
+                        <div class="flex-grow-1 bg-dark text-light p-2 rounded overflow-auto" id="terminalOutput" style="font-family: monospace; font-size: 0.85rem; max-height: 200px;">
+                            > 准备就绪... 等待分配微调任务。
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TensorBoard 弹出框 Modal -->
+    <!-- 移除 fade 动画和 modal-dialog-centered 以便更好地拖拽 -->
+    <div class="modal" id="tensorboardModal" tabindex="-1" aria-labelledby="tensorboardModalLabel" aria-hidden="true" data-bs-backdrop="false">
+        <!-- 增加 resizable 和 draggable 样式支持 -->
+        <div class="modal-dialog modal-xl" id="tbModalDialog" style="margin-top: 5vh; transition: none;">
+            <div class="modal-content shadow-lg border-primary" style="height: 85vh; resize: both; overflow: auto; min-width: 600px; min-height: 400px;">
+                <div class="modal-header bg-light" id="tbModalHeader" style="cursor: move;">
+                    <h5 class="modal-title" id="tensorboardModalLabel">📈 TensorBoard 实时训练监控 (可拖动/缩放)</h5>
+                    <div class="ms-auto">
+                        <a href="http://127.0.0.1:6006" target="_blank" class="btn btn-sm btn-outline-primary me-2">新窗口打开全屏</a>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                </div>
+                <div class="modal-body p-0 d-flex flex-column">
+                    <!-- 使用 iframe 嵌入 -->
+                    <iframe id="tbIframe" src="" class="flex-grow-1" style="border: none; width: 100%;"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 引入 jQuery UI 以支持拖拽 -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // 启用拖拽功能，将 handle 设置为 modal-header
+            $("#tbModalDialog").draggable({
+                handle: "#tbModalHeader"
+            });
+            
+            // 监听模态框关闭事件，清除 iframe 的 src 以释放资源
+            $('#tensorboardModal').on('hidden.bs.modal', function () {
+                $('#tbIframe').attr('src', '');
+            });
+            
+            function loadModels() {
+                $.ajax({
+                    url: '/ollama/models',
+                    type: 'GET',
+                    success: function(response) {
+                        var select = $('#baseModelSelect');
+                        select.empty();
+                        if (response.models && response.models.length > 0) {
+                            response.models.forEach(function(model) {
+                                select.append(`<option value="${model}">${model}</option>`);
+                            });
+                        } else {
+                            select.append('<option value="">未发现本地模型</option>');
+                        }
+                    }
+                });
+            }
+            
+            // 初始加载
+            loadModels();
+            
+            // 删除模型绑定
+            $('#deleteModelBtn').click(function() {
+                var selectedModel = $('#baseModelSelect').val();
+                if (!selectedModel) {
+                    alert('请先选择要删除的模型！');
+                    return;
+                }
+                if (confirm(`确定要删除本地 Ollama 模型 [${selectedModel}] 吗？\n注意：此操作不可逆！`)) {
+                    var btn = $(this);
+                    btn.prop('disabled', true);
+                    $.ajax({
+                        url: '/ollama/models',
+                        type: 'DELETE',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ model_name: selectedModel }),
+                        success: function(res) {
+                            alert(res.message || '删除成功');
+                            loadModels(); // 重新加载列表
+                        },
+                        error: function(err) {
+                            alert('删除失败: ' + (err.responseJSON ? err.responseJSON.error : '未知错误'));
+                        },
+                        complete: function() {
+                            btn.prop('disabled', false);
+                        }
+                    });
+                }
+            });
+        });
+
+        let currentAbortController = null;
+
+        function startFinetune() {
+            var model = $('#baseModelSelect').val();
+            
+            if (!model) {
+                alert("请选择一个基座模型");
+                return;
+            }
+            
+            var fileInput = document.getElementById('datasetFile');
+            
+            // 组装表单数据发送给后端
+            var formData = new FormData();
+            formData.append('baseModel', model);
+            // newModelName 由后端自动生成版本号，前端不再传递
+            formData.append('epochs', $('#epochsInput').val());
+            formData.append('batchSize', $('#batchSizeInput').val());
+            formData.append('learningRate', $('#lrInput').val());
+            formData.append('warmupSteps', $('#warmupStepsInput').val());
+            formData.append('loraRank', $('#loraRankInput').val());
+            formData.append('loraAlpha', $('#loraAlphaInput').val());
+            formData.append('loraDropout', $('#loraDropoutInput').val());
+            formData.append('loraTarget', $('#loraTargetInput').val());
+            formData.append('optimizer', $('#optimizerSelect').val());
+            formData.append('lrScheduler', $('#lrSchedulerSelect').val());
+            formData.append('maxLength', $('#maxLengthInput').val());
+            formData.append('precision', $('#precisionSelect').val());
+            formData.append('quantization', $('#quantizationSelect').val());
+            formData.append('gradAcc', $('#gradAccInput').val());
+            formData.append('saveSteps', $('#saveStepsInput').val());
+            formData.append('evalSteps', $('#evalStepsInput').val());
+            formData.append('loggingSteps', $('#loggingStepsInput').val());
+            formData.append('deepspeed', $('#deepspeedSelect').val() || 'none');
+            formData.append('weightDecay', $('#weightDecayInput').val());
+            formData.append('maxGradNorm', $('#maxGradNormInput').val());
+            formData.append('seed', $('#seedInput').val());
+            
+            if (fileInput.files.length > 0) {
+                formData.append('datasetFile', fileInput.files[0]);
+            }
+            
+            $('#startFinetuneBtn').prop('disabled', true).addClass('d-none');
+            $('#stopFinetuneBtn').removeClass('d-none');
+            $('#terminalOutput').empty().append('> 正在向服务器提交微调任务...\n');
+            
+            currentAbortController = new AbortController();
+            
+            // 使用 fetch 和 SSE (Server-Sent Events) 接收流式日志
+            fetch('/finetune/start', {
+                method: 'POST',
+                body: formData,
+                signal: currentAbortController.signal
+            }).then(response => {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder('utf-8');
+                
+                function readStream() {
+                    reader.read().then(({done, value}) => {
+                        if (done) {
+                            resetButtons();
+                            return;
+                        }
+                        
+                        const chunk = decoder.decode(value, {stream: true});
+                        const lines = chunk.split('\n');
+                        lines.forEach(line => {
+                            if (line.startsWith('data: ')) {
+                                const msg = line.substring(6);
+                                if (msg === '[DONE]') {
+                                    return;
+                                }
+                                $('#terminalOutput').append(msg + '<br>');
+                                document.getElementById('terminalOutput').scrollTop = document.getElementById('terminalOutput').scrollHeight;
+                            }
+                        });
+                        readStream();
+                    }).catch(error => {
+                        if (error.name === 'AbortError') {
+                            $('#terminalOutput').append(`<br><span class="text-warning">> 训练已在前端终止，正在通知后端停止进程...</span>`);
+                        }
+                    });
+                }
+                readStream();
+            }).catch(error => {
+                if (error.name !== 'AbortError') {
+                    $('#terminalOutput').append(`<br><span class="text-danger">> 任务提交失败: ${error}</span>`);
+                }
+                resetButtons();
+            });
+        }
+        
+        function stopFinetune() {
+            if (currentAbortController) {
+                currentAbortController.abort();
+                currentAbortController = null;
+                
+                // 通知后端强杀进程
+                $.post('/finetune/stop', function(res) {
+                    $('#terminalOutput').append(`<br><span class="text-danger">> ${res.message}</span><br>`);
+                    resetButtons();
+                });
+            }
+        }
+        
+        function resetButtons() {
+            $('#startFinetuneBtn').prop('disabled', false).removeClass('d-none').text('开始微调任务');
+            $('#stopFinetuneBtn').addClass('d-none');
+        }
+
+        // TensorBoard 弹出框逻辑
+        function openTensorBoardModal() {
+            var btn = $('#openTbBtn');
+            var originalText = btn.html();
+            btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 正在拉起...');
+
+            // 请求后端拉起进程
+            $.post('/finetune_board/start_tensorboard', function(res) {
+                if (res.status === 'ok' || res.status === 'already_running') {
+                    // 使用轮询检测端口是否真正可用，防止 127.0.0.1 拒绝连接
+                    var maxRetries = 10;
+                    var retries = 0;
+                    
+                    function checkTbReady() {
+                        $.get('/finetune_board/check_tensorboard', function(checkRes) {
+                            if (checkRes.running) {
+                                $('#tbIframe').attr('src', 'http://127.0.0.1:6006');
+                                var tbModal = new bootstrap.Modal(document.getElementById('tensorboardModal'));
+                                tbModal.show();
+                                btn.prop('disabled', false).html(originalText);
+                            } else {
+                                retries++;
+                                if (retries < maxRetries) {
+                                    setTimeout(checkTbReady, 1000);
+                                } else {
+                                    btn.prop('disabled', false).html(originalText);
+                                    alert('拉起 TensorBoard 超时，请检查后端日志。');
+                                }
+                            }
+                        }).fail(function() {
+                            retries++;
+                            if (retries < maxRetries) {
+                                setTimeout(checkTbReady, 1000);
+                            } else {
+                                btn.prop('disabled', false).html(originalText);
+                                alert('检测 TensorBoard 状态失败。');
+                            }
+                        });
+                    }
+                    
+                    // 延迟 1 秒后开始检测
+                    setTimeout(checkTbReady, 1000);
+                } else {
+                    btn.prop('disabled', false).html(originalText);
+                    alert('拉起 TensorBoard 失败: ' + res.error);
+                }
+            }).fail(function() {
+                btn.prop('disabled', false).html(originalText);
+                alert('请求后端接口失败');
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>训练看板 - 湖北移动运维知识助手</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .iframe-container {
+            width: 100%;
+            height: 85vh;
+            border: 1px solid #dee2e6;
+            border-radius: 0.5rem;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            background-color: #fff;
+            overflow: hidden;
+        }
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">运维知识助手 (RAG)</a>
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">问答系统</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/finetune">模型微调(Ollama)</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/finetune_board">训练看板</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/eval_report">评估报告</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-3 px-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0">LLaMA-Factory 训练与监控看板</h4>
+            <div>
+                <button class="btn btn-outline-primary btn-sm me-2" onclick="startWebUI()" id="startWebUIBtn">
+                    <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true" id="webUILoading"></span>
+                    启动后台面板服务
+                </button>
+                <button id="startTensorboardBtn" class="btn btn-outline-success btn-sm me-2">拉起 TensorBoard (实时监控)</button>
+                <a href="http://127.0.0.1:7860" target="_blank" class="btn btn-outline-secondary btn-sm" id="openNewTabBtn" style="display: none;">在新标签页打开</a>
+            </div>
+        </div>
+        
+        <!-- TensorBoard Iframe -->
+        <div class="card shadow-sm mb-4" id="tensorboardContainer" style="display: none;">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">TensorBoard 实时监控面板</h5>
+                <a href="http://127.0.0.1:6006" target="_blank" class="btn btn-sm btn-outline-secondary">在新标签页打开</a>
+            </div>
+            <div class="card-body p-0">
+                <iframe id="tensorboardIframe" src="" width="100%" height="800px" style="border: none;"></iframe>
+            </div>
+        </div>
+        
+        <div class="alert alert-info py-2" id="webUIStatus">
+            点击右上角“启动后台面板服务”来加载 LLaMA-Factory 的原生 Gradio WebUI。它提供了比基础微调页面更专业、更丰富的数据集预览、LoRA 评估和模型合并功能。
+        </div>
+
+        <div class="row">
+            <!-- 左侧：启动日志 -->
+            <div class="col-md-3 mb-3">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">启动日志</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="webuiLogs" class="bg-dark text-light p-3" style="font-family: monospace; font-size: 0.85rem; height: 85vh; overflow-y: auto; white-space: pre-wrap;">等待获取日志...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 右侧：WebUI iframe -->
+            <div class="col-md-9 mb-3">
+                <div class="iframe-container h-100">
+                    <iframe id="webuiIframe" src="about:blank" title="LLaMA-Factory WebUI"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        let logInterval = null;
+
+        function fetchLogs() {
+            $.get('/finetune_board/logs', function(data) {
+                var logContainer = $('#webuiLogs');
+                // 只有当内容变化时才更新，避免滚动条一直跳
+                if (logContainer.text() !== data.logs) {
+                    logContainer.text(data.logs);
+                    logContainer.scrollTop(logContainer[0].scrollHeight);
+                }
+            });
+        }
+
+        function startLogPolling() {
+            if (!logInterval) {
+                logInterval = setInterval(fetchLogs, 1500);
+            }
+        }
+
+        function stopLogPolling() {
+            if (logInterval) {
+                clearInterval(logInterval);
+                logInterval = null;
+            }
+        }
+
+        function startWebUI() {
+            var btn = $('#startWebUIBtn');
+            var loading = $('#webUILoading');
+            var status = $('#webUIStatus');
+            var iframe = $('#webuiIframe');
+            var newTabBtn = $('#openNewTabBtn');
+
+            btn.prop('disabled', true);
+            loading.removeClass('d-none');
+            status.removeClass('alert-info alert-danger').addClass('alert-warning').text('正在拉起 LLaMA-Factory WebUI 进程，请稍候 (约需 5-10 秒)...');
+            
+            // 启动时立刻开始轮询日志
+            startLogPolling();
+
+            $.post('/finetune_board/start_webui', function(res) {
+                if (res.status === 'ok' || res.status === 'already_running') {
+                    status.removeClass('alert-warning alert-danger').addClass('alert-success').text('面板服务已就绪！正在加载页面...');
+                    // 等待几秒钟让 gradio 完全启动
+                    setTimeout(function() {
+                        iframe.attr('src', 'http://127.0.0.1:7860');
+                        btn.text('服务运行中');
+                        loading.addClass('d-none');
+                        newTabBtn.show();
+                    }, 5000);
+                } else {
+                    btn.prop('disabled', false);
+                    loading.addClass('d-none');
+                    status.removeClass('alert-warning alert-success').addClass('alert-danger').text('启动失败: ' + res.error);
+                }
+            }).fail(function() {
+                btn.prop('disabled', false);
+                loading.addClass('d-none');
+                status.removeClass('alert-warning alert-success').addClass('alert-danger').text('请求后端接口失败！');
+            });
+        }
+        
+        // TensorBoard 相关逻辑
+        $('#startTensorboardBtn').click(function() {
+            var btn = $(this);
+            var container = $('#tensorboardContainer');
+            var iframe = $('#tensorboardIframe');
+            
+            btn.prop('disabled', true).text('正在拉起 TensorBoard...');
+            
+            $.post('/finetune_board/start_tensorboard', function(res) {
+                if (res.status === 'ok' || res.status === 'already_running') {
+                    container.show();
+                    setTimeout(function() {
+                        iframe.attr('src', 'http://127.0.0.1:6006');
+                        btn.text('TensorBoard 运行中');
+                    }, 3000);
+                } else {
+                    btn.prop('disabled', false).text('拉起失败');
+                    alert('拉起失败: ' + res.error);
+                }
+            });
+        });
+
+        // 页面加载时检查是否已经运行，并加载一次历史日志
+        $(document).ready(function() {
+            fetchLogs(); // 读取上一次的日志
+
+            $.get('/finetune_board/check_webui', function(res) {
+                if (res.running) {
+                    $('#startWebUIBtn').prop('disabled', true).text('服务运行中');
+                    $('#openNewTabBtn').show();
+                    $('#webUIStatus').hide();
+                    $('#webuiIframe').attr('src', 'http://127.0.0.1:7860');
+                    startLogPolling(); // 如果正在运行，实时显示日志
+                }
+            });
+            
+            $.get('/finetune_board/check_tensorboard', function(res) {
+                if (res.running) {
+                    $('#startTensorboardBtn').text('TensorBoard 运行中').prop('disabled', true);
+                    $('#tensorboardContainer').show();
+                    $('#tensorboardIframe').attr('src', 'http://127.0.0.1:6006');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

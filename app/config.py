@@ -1,0 +1,30 @@
+import os
+
+class Config:
+    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'sqlite:///rag.db')
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+    FAISS_INDEX_PATH = os.getenv('FAISS_INDEX_PATH', 'faiss_index')
+    UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
+    
+    # --- 大模型切换配置 ---
+    # 可选值: 'qwen' (本地vLLM部署) 或 'deepseek' (官方API或本地部署) 或 'ollama'
+    ACTIVE_LLM = os.getenv('ACTIVE_LLM', 'deepseek') 
+
+    # 1. Qwen 本地服务配置 (vLLM 等)
+    QWEN_API_URL = os.getenv('QWEN_API_URL', 'http://localhost:8000/v1/chat/completions')
+    QWEN_API_KEY = os.getenv('QWEN_API_KEY', 'EMPTY')
+    QWEN_MODEL_NAME = os.getenv('QWEN_MODEL_NAME', 'Qwen/Qwen-7B-Chat')
+
+    # 2. DeepSeek 服务配置 (支持官方 API 或 本地 vLLM)
+    # 如果使用官方 API，URL 通常为 https://api.deepseek.com/v1/chat/completions
+    DEEPSEEK_API_URL = os.getenv('DEEPSEEK_API_URL', 'https://api.deepseek.com/v1/chat/completions')
+    # 请在系统环境变量中设置 DEEPSEEK_API_KEY，或在此处填入真实的 API Key
+    DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', 'sk-803936ec8add440db0dca13ec660f070')
+    # 模型名称通常为 deepseek-chat 或 deepseek-coder
+    DEEPSEEK_MODEL_NAME = os.getenv('DEEPSEEK_MODEL_NAME', 'deepseek-chat')
+    
+    # 3. Ollama 服务配置
+    OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
+    # 默认 Ollama 模型，可在前端切换
+    OLLAMA_MODEL_NAME = os.getenv('OLLAMA_MODEL_NAME', 'qwen2.5:latest')
