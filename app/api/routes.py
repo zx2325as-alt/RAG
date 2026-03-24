@@ -391,14 +391,14 @@ def get_ollama_models():
         except Exception as e:
             current_app.logger.debug(f"vLLM 模型列表解析异常: {e}")
             
-        # 3. 离线兜底：扫描本地 finetuned_models 目录，找出潜在的 vLLM 兼容模型（合并后的目录）
+        # 3. 离线兜底：扫描本地 finetuned_models 目录，找出潜在的 vLLM 兼容模型
         # 即使 8000 端口没起，也要让用户能在下拉框选到它们并点击“启动”
         try:
             models_dir = os.path.join(current_app.root_path, '..', 'finetuned_models')
             if os.path.exists(models_dir):
                 for d in os.listdir(models_dir):
-                    # 通常我们合并后的模型带 _merged，或者是一个标准的 huggingface 目录
-                    if os.path.isdir(os.path.join(models_dir, d)) and d not in ['base_models', 'runs']:
+                    # 过滤掉带有 _lora / _merged 后缀的权重文件夹和系统内部文件夹
+                    if os.path.isdir(os.path.join(models_dir, d)) and d not in ['base_models', 'runs'] and not d.endswith('_lora') and not d.endswith('_merged'):
                         # 为了避免重复，只添加那些不在已有列表里的
                         vllm_tag = f"vllm: {d}"
                         if vllm_tag not in vllm_models_list:
@@ -850,7 +850,7 @@ def get_finetuned_models():
             full_path = os.path.join(models_dir, d)
             if os.path.isdir(full_path):
                 # 过滤掉系统内部产生的非目标微调文件夹
-                if d in ['base_models', 'runs'] or d.endswith('_merged'):
+                if d in ['base_models', 'runs'] or d.endswith('_lora') or d.endswith('_merged'):
                     continue
                 models.append(d)
     return jsonify({'models': models})
@@ -911,16 +911,33 @@ def start_finetune():
             return jsonify({'error': 'Missing base model'}), 400
             
         # 自动生成版本号形式的 new_model
-        base_name_clean = base_model.replace(':', '_').replace('/', '_')
+        base_name_clean = base_model
+        # 1. 移除可能的前缀
+        if base_name_clean.startswith('vllm: '):
+            base_name_clean = base_name_clean.replace('vllm: ', '')
+            
+        # 2. 如果是绝对路径（如本地 HF 缓存），只提取最后一部分的模型名
+        import os
+        base_name_clean = os.path.basename(base_name_clean.rstrip('/\\'))
+        
+        # 3. 替换掉特殊字符，并清理 -- 为 -
+        base_name_clean = base_name_clean.replace(':', '_').replace('/', '_').replace('--', '-')
+        
+        # 4. 移除可能已经存在的后缀，避免类似 _v1_merged_v1 的情况
         import re
-        base_name_clean = re.sub(r'_v\d+$', '', base_name_clean) # 移除可能已经存在的 _v 版本后缀
+        base_name_clean = re.sub(r'_merged$', '', base_name_clean)
+        base_name_clean = re.sub(r'_lora$', '', base_name_clean)
+        base_name_clean = re.sub(r'_v\d+$', '', base_name_clean)
+        
         models_dir = os.path.join(current_app.root_path, '..', 'finetuned_models')
         os.makedirs(models_dir, exist_ok=True)
         
         version = 1
         while True:
             new_model = f"{base_name_clean}_v{version}"
-            if not os.path.exists(os.path.join(models_dir, new_model)):
+            # 确保不存在这个名称的目录，也不存在它的 lora 文件夹
+            if not os.path.exists(os.path.join(models_dir, new_model)) and \
+               not os.path.exists(os.path.join(models_dir, f"{new_model}_lora")):
                 break
             version += 1
             
@@ -1239,18 +1256,15 @@ def start_finetune():
                     del active_finetune_processes['current']
                     
                 if process.returncode == 0:
-                    yield f"data: > [SUCCESS] 模型微调完成，权重已保存至: {output_dir}\n\n"
+                    yield f"data: > [SUCCESS] 模型微调完成，LoRA 权重已保存至: {output_dir}\n\n"
                     
-                    # === 自动导入 Ollama 逻辑 ===
-                    yield f"data: > 正在准备将微调后的模型自动导入为 Ollama 模型...\n\n"
+                    # === 合并 LoRA 权重与基座模型 ===
+                    yield f"data: > 正在准备合并 LoRA 权重与基座模型，以便 vLLM 可以直接加载...\n\n"
                     try:
-                        # Ollama 的 `ADAPTER` 指令只能读取 GGUF 格式的 LoRA 权重，而 LLaMA-Factory 默认输出的是 safetensors
-                        # 因此，我们需要先将基座模型和 LoRA 权重合并，并导出为完整的 GGUF 文件，然后再让 Ollama 导入。
-                        
                         export_dir = os.path.join(root_path, '..', 'finetuned_models', f"{new_model}_merged")
                         os.makedirs(export_dir, exist_ok=True)
                         
-                        yield f"data: > 正在将 LoRA 权重与基座合并并导出为完整的 Safetensors (这可能需要几分钟)...\n\n"
+                        yield f"data: > 正在将 LoRA 权重与基座合并并导出为完整的模型权重 (这可能需要几分钟)...\n\n"
                         
                         # 生成导出配置 (针对 v0.8.3，移除所有不支持的 export_* 参数，只做标准的 safetensors 合并)
                         export_config_path = os.path.join(config_dir, f"export_{datetime.now().strftime('%Y%m%d%H%M%S')}.yaml")
@@ -1306,37 +1320,29 @@ def start_finetune():
                             yield f"data: [DONE]\n\n"
                             return
                             
-                        yield f"data: > 合并成功！接下来利用 Ollama 自动将合并后的 safetensors 转为内部格式...\n\n"
+                        yield f"data: > 合并成功！\n\n"
                         
-                        # Ollama 支持直接从一个包含了完整 config.json 和 safetensors 的目录中进行 FROM 构建
-                        modelfile_content = f"FROM {export_dir}\n"
-                        modelfile_path = os.path.join(export_dir, "Modelfile")
-                        with open(modelfile_path, "w", encoding="utf-8") as f:
-                            f.write(modelfile_content)
+                        # 不再转换为 Ollama 模型，直接重命名文件夹，使 vLLM 能够识别
+                        # 原本的 output_dir 存放的是 LoRA 权重，我们将其重命名为带 _lora 后缀
+                        # 然后将合并后的 export_dir 重命名为目标 new_model，这样它就会出现在 vLLM 的下拉列表中
+                        import time
+                        time.sleep(1) # 等待 Windows 释放可能的文件锁
+                        
+                        lora_dir = os.path.join(root_path, '..', 'finetuned_models', f"{new_model}_lora")
+                        if os.path.exists(output_dir):
+                            # 如果目标 lora_dir 已存在，先删除
+                            if os.path.exists(lora_dir):
+                                import shutil
+                                shutil.rmtree(lora_dir)
+                            os.rename(output_dir, lora_dir)
                             
-                        yield f"data: > 已生成 Modelfile。开始执行 ollama create {new_model} ...\n\n"
-                        
-                        # 执行 ollama create
-                        ollama_process = subprocess.Popen(
-                            ["ollama", "create", new_model, "-f", modelfile_path],
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT,
-                            text=True,
-                            encoding='utf-8',
-                            errors='replace'
-                        )
-                        for o_line in iter(ollama_process.stdout.readline, ''):
-                            if o_line.strip():
-                                yield f"data: > [Ollama] {o_line.strip()}\n\n"
-                        
-                        ollama_process.wait()
-                        if ollama_process.returncode == 0:
-                            yield f"data: > [SUCCESS] 导入完成！模型 [{new_model}] 现在已可在系统的模型切换下拉框中使用。\n\n"
-                        else:
-                            yield f"data: > [ERROR] Ollama 导入失败，状态码: {ollama_process.returncode}\n\n"
+                        if os.path.exists(export_dir):
+                            os.rename(export_dir, output_dir)
                             
-                    except Exception as ollama_err:
-                        yield f"data: > [ERROR] 尝试导入 Ollama 时出错: {str(ollama_err)}\n\n"
+                        yield f"data: > [SUCCESS] 模型 [{new_model}] 已就绪！您现在可以在系统的 vLLM 模型切换下拉框中选择并使用它，或者基于它继续微调。\n\n"
+                            
+                    except Exception as merge_err:
+                        yield f"data: > [ERROR] 尝试合并模型时出错: {str(merge_err)}\n\n"
                         
                 else:
                     # 返回码不为0，可能是报错，也可能是被用户强杀了 (-15)

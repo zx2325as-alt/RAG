@@ -66,10 +66,6 @@
                                     </svg>
                                 </button>
                             </div>
-                            <div class="d-flex gap-2">
-                                <button class="btn btn-sm btn-outline-success flex-grow-1" type="button" onclick="startLocalService('ollama')">🚀 启动 Ollama</button>
-                                <button class="btn btn-sm btn-outline-info flex-grow-1" type="button" onclick="startLocalService('vllm')">🚀 启动 vLLM</button>
-                            </div>
                         </div>
                         <!-- 移除了“微调后的新模型名称”输入框 -->
                     </div>
@@ -91,39 +87,43 @@
                 </div>
             </div>
 
-            <!-- 右侧：训练配置与状态（变宽，增加更多参数） -->
+            <!-- 右侧：训练配置与状态 -->
             <div class="col-md-8">
                 <div class="card shadow-sm h-100">
                     <div class="card-header bg-light">
                         <h5 class="mb-0">3. 训练高级配置与状态</h5>
                     </div>
-                    <div class="card-body d-flex flex-column">
-                        <div class="row g-3 mb-3">
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">学习率 (Learning Rate)</label>
-                                <input type="number" step="0.00001" id="learningRateInput" class="form-control form-control-sm" value="0.0002">
+                    <div class="card-body d-flex flex-column" style="font-size: 0.85rem;">
+                        <div class="row g-2 mb-2">
+                            <div class="col-2">
+                                <label class="form-label mb-0" title="控制模型权重更新的幅度。推荐：1e-4 到 2e-4 (即 0.0001 到 0.0002)">学习率</label>
+                                <input type="number" step="0.00001" id="learningRateInput" class="form-control form-control-sm" value="0.0001">
                             </div>
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">训练轮数 (Epochs)</label>
+                            <div class="col-2">
+                                <label class="form-label mb-0" title="模型在整个数据集上训练的次数。推荐：3.0 到 5.0">训练轮数</label>
                                 <input type="number" step="0.1" id="epochsInput" class="form-control form-control-sm" value="3.0">
                             </div>
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">批处理大小 (Batch Size)</label>
-                                <input type="number" id="batchSizeInput" class="form-control form-control-sm" value="4">
+                            <div class="col-2">
+                                <label class="form-label mb-0" title="每次处理的样本数量。推荐：2 或 4 (取决于显存)">批处理大小</label>
+                                <input type="number" id="batchSizeInput" class="form-control form-control-sm" value="2">
                             </div>
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">最大长度 (Max Length)</label>
-                                <input type="number" id="maxLengthInput" class="form-control form-control-sm" value="2048">
+                            <div class="col-2">
+                                <label class="form-label mb-0" title="输入文本的最大 Token 长度。推荐：1024 或 2048">最大长度</label>
+                                <input type="number" id="maxLengthInput" class="form-control form-control-sm" value="1024">
+                            </div>
+                            <div class="col-2">
+                                <label class="form-label mb-0" title="更新梯度前累积的步数，用于变相增加Batch Size。推荐：4 或 8">梯度累积</label>
+                                <input type="number" id="gradAccInput" class="form-control form-control-sm" value="8">
+                            </div>
+                            <div class="col-2">
+                                <label class="form-label mb-0" title="梯度裁剪阈值，防止梯度爆炸。推荐：1.0">梯度裁剪</label>
+                                <input type="number" step="0.1" id="maxGradNormInput" class="form-control form-control-sm" value="1.0">
                             </div>
                         </div>
                         
-                        <div class="row g-3 mb-3">
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">梯度累积 (Grad Acc)</label>
-                                <input type="number" id="gradAccInput" class="form-control form-control-sm" value="4" title="更新梯度前累积的步数，用于变相增加Batch Size">
-                            </div>
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">优化器 (Optimizer)</label>
+                        <div class="row g-2 mb-2">
+                            <div class="col-2">
+                                <label class="form-label mb-0" title="优化算法。推荐：adamw_torch">优化器</label>
                                 <select class="form-select form-select-sm" id="optimizerSelect">
                                     <option value="adamw_torch" selected>adamw_torch</option>
                                     <option value="adamw_8bit">adamw_8bit</option>
@@ -133,8 +133,8 @@
                                     <option value="lion_32bit">lion_32bit</option>
                                 </select>
                             </div>
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">学习率调节器 (LR Scheduler)</label>
+                            <div class="col-2">
+                                <label class="form-label mb-0" title="学习率的变化策略。推荐：cosine (余弦退火)">LR 策略</label>
                                 <select class="form-select form-select-sm" id="lrSchedulerSelect">
                                     <option value="cosine" selected>cosine</option>
                                     <option value="linear">linear</option>
@@ -142,86 +142,60 @@
                                     <option value="constant">constant</option>
                                 </select>
                             </div>
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">精度 (Precision)</label>
-                                <select class="form-select form-select-sm" id="precisionSelect" title="训练过程中的数据精度格式">
+                            <div class="col-2">
+                                <label class="form-label mb-0" title="训练过程中的数据精度。推荐：bf16 (如果显卡支持)">精度</label>
+                                <select class="form-select form-select-sm" id="precisionSelect">
                                     <option value="fp16">FP16</option>
                                     <option value="bf16" selected>BF16</option>
                                     <option value="fp32">FP32</option>
                                 </select>
                             </div>
-                        </div>
-                        
-                        <!-- 更多高级指标扩展 -->
-                        <div class="row g-3 mb-3">
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">量化等级 (Quantization)</label>
-                                <select class="form-select form-select-sm" id="quantizationSelect" title="加载基座模型时的量化方式">
+                            <div class="col-2">
+                                <label class="form-label mb-0" title="加载基座模型时的量化方式。推荐：none (全精度微调更稳定)">量化等级</label>
+                                <select class="form-select form-select-sm" id="quantizationSelect">
                                     <option value="none" selected>none</option>
                                     <option value="8">8-bit</option>
                                     <option value="4">4-bit</option>
                                 </select>
                             </div>
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">FlashAttention-2</label>
-                                <select class="form-select form-select-sm" id="flashAttnSelect" title="使用 FlashAttention-2 加速训练并降低显存">
+                            <div class="col-2">
+                                <label class="form-label mb-0" title="加速训练并降低显存。推荐：Auto">FlashAttn</label>
+                                <select class="form-select form-select-sm" id="flashAttnSelect">
                                     <option value="auto" selected>Auto</option>
                                     <option value="fa2">开启 (FA2)</option>
                                     <option value="sdpa">开启 (SDPA)</option>
                                     <option value="none">关闭</option>
                                 </select>
                             </div>
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">梯度裁剪 (Max Grad Norm)</label>
-                                <input type="number" step="0.1" id="maxGradNormInput" class="form-control form-control-sm" value="1.0" title="用于防止梯度爆炸">
-                            </div>
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">权重衰减 (Weight Decay)</label>
-                                <input type="number" step="0.001" id="weightDecayInput" class="form-control form-control-sm" value="0.1" title="L2正则化系数，防止过拟合">
+                            <div class="col-2">
+                                <label class="form-label mb-0" title="L2正则化系数，防止过拟合。推荐：0.1">权重衰减</label>
+                                <input type="number" step="0.001" id="weightDecayInput" class="form-control form-control-sm" value="0.1">
                             </div>
                         </div>
 
-                        <div class="row g-3 mb-3">
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">预热步数 (Warmup Steps)</label>
-                                <input type="number" id="warmupStepsInput" class="form-control form-control-sm" value="0" title="学习率预热的步数">
+                        <div class="row g-2 mb-3">
+                            <div class="col-2">
+                                <label class="form-label mb-0" title="学习率预热的绝对步数。推荐：0 (通常使用比例)">预热步数</label>
+                                <input type="number" id="warmupStepsInput" class="form-control form-control-sm" value="0">
                             </div>
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">预热比例 (Warmup Ratio)</label>
-                                <input type="number" step="0.01" id="warmupRatioInput" class="form-control form-control-sm" value="0.1" title="学习率预热占总步数的比例 (覆盖预热步数)">
+                            <div class="col-2">
+                                <label class="form-label mb-0" title="学习率预热占总步数的比例。推荐：0.1 (10%)">预热比例</label>
+                                <input type="number" step="0.01" id="warmupRatioInput" class="form-control form-control-sm" value="0.1">
                             </div>
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">序列打包 (Packing)</label>
-                                <select class="form-select form-select-sm" id="packingSelect" title="将多个短序列打包成长序列以提高训练效率">
-                                    <option value="false" selected>关闭</option>
-                                    <option value="true">开启</option>
-                                </select>
+                            <div class="col-2">
+                                <label class="form-label mb-0" title="每隔多少步保存一次 Checkpoint。推荐：500">保存步数</label>
+                                <input type="number" id="saveStepsInput" class="form-control form-control-sm" value="500">
                             </div>
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">RoPE Scaling</label>
-                                <select class="form-select form-select-sm" id="ropeScalingSelect" title="旋转位置编码扩展，用于支持更长的上下文">
-                                    <option value="none" selected>none</option>
-                                    <option value="linear">linear</option>
-                                    <option value="dynamic">dynamic</option>
-                                </select>
+                            <div class="col-2">
+                                <label class="form-label mb-0" title="每隔多少步进行一次验证并在TensorBoard中绘图。推荐：50">验证步数</label>
+                                <input type="number" id="evalStepsInput" class="form-control form-control-sm" value="50">
                             </div>
-                        </div>
-                        
-                        <div class="row g-3 mb-3">
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">保存步数 (Save Steps)</label>
-                                <input type="number" id="saveStepsInput" class="form-control form-control-sm" value="500" title="每隔多少步保存一次 Checkpoint">
+                            <div class="col-2">
+                                <label class="form-label mb-0" title="每隔多少步打印一次日志。推荐：10">日志步数</label>
+                                <input type="number" id="loggingStepsInput" class="form-control form-control-sm" value="10">
                             </div>
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">验证步数 (Eval Steps)</label>
-                                <input type="number" id="evalStepsInput" class="form-control form-control-sm" value="50" title="每隔多少步进行一次验证并在TensorBoard中绘图">
-                            </div>
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">日志步数 (Logging Steps)</label>
-                                <input type="number" id="loggingStepsInput" class="form-control form-control-sm" value="10" title="每隔多少步打印一次日志并记录到TensorBoard">
-                            </div>
-                            <div class="col-3">
-                                <label class="form-label form-label-sm mb-0">随机种子 (Seed)</label>
+                            <div class="col-2">
+                                <label class="form-label mb-0" title="随机种子，保证实验可复现。推荐：42">随机种子</label>
                                 <input type="number" id="seedInput" class="form-control form-control-sm" value="42">
                             </div>
                         </div>
@@ -272,22 +246,6 @@
     <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        window.startLocalService = function(service) {
-            $.ajax({
-                url: '/api/start_service',
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({ service: service }),
-                success: function(res) {
-                    alert(res.message);
-                    setTimeout(loadModels, 2000); // 等待2秒后尝试刷新模型列表
-                },
-                error: function(err) {
-                    alert('启动失败: ' + (err.responseJSON ? err.responseJSON.error : '未知错误'));
-                }
-            });
-        };
-        
         $(document).ready(function() {
             // 启用拖拽功能，将 handle 设置为 modal-header
             $("#tbModalDialog").draggable({
