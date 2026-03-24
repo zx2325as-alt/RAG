@@ -1,10 +1,16 @@
+import sys
 import os
 # 设置 HuggingFace 国内镜像源
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+
+# 引入项目配置
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from app.config import Config
+
 from huggingface_hub import snapshot_download
 
 # 指定模型下载目录
-local_dir = r"e:\python\conda\RAG\model\Qwen-7B-Chat"
+local_dir = Config.QWEN_LOCAL_MODEL_PATH
 os.makedirs(local_dir, exist_ok=True)
 
 print(f"===========================================================")

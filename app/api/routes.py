@@ -64,18 +64,18 @@ def start_webui():
     # 检查端口是否被占用 (如果被占用说明已经运行)
     def is_port_in_use(port):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            return s.connect_ex(('127.0.0.1', port)) == 0
+            return s.connect_ex((Config.WEBUI_HOST, port)) == 0
 
-    if is_port_in_use(7860):
+    if is_port_in_use(Config.WEBUI_PORT):
         return jsonify({'status': 'already_running'})
 
     try:
         # 使用 Popen 后台拉起 LLaMA-Factory WebUI
         # 必须设置环境变量，使其监听在 127.0.0.1:7860，且非阻塞
         env = os.environ.copy()
-        env['GRADIO_SERVER_PORT'] = '7860'
-        env['GRADIO_SERVER_NAME'] = '127.0.0.1' # 强制绑定到 127.0.0.1 避免 localhost 检查失败
-        env['NO_PROXY'] = 'localhost,127.0.0.1,0.0.0.0' # 避免被系统代理拦截
+        env['GRADIO_SERVER_PORT'] = str(Config.WEBUI_PORT)
+        env['GRADIO_SERVER_NAME'] = Config.WEBUI_HOST # 强制绑定避免 localhost 检查失败
+        env['NO_PROXY'] = f'localhost,127.0.0.1,0.0.0.0,{Config.WEBUI_HOST}' # 避免被系统代理拦截
         # 同时为了避免模型下载超时问题，加上国内镜像源
         env['HF_ENDPOINT'] = 'https://hf-mirror.com'
         
@@ -95,9 +95,9 @@ def check_webui():
     import socket
     def is_port_in_use(port):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            return s.connect_ex(('127.0.0.1', port)) == 0
+            return s.connect_ex((Config.WEBUI_HOST, port)) == 0
             
-    return jsonify({'running': is_port_in_use(7860)})
+    return jsonify({'running': is_port_in_use(Config.WEBUI_PORT)})
 
 @api_bp.route('/finetune_board/start_tensorboard', methods=['POST'])
 def start_tensorboard():
@@ -109,9 +109,9 @@ def start_tensorboard():
     # 检查端口是否被占用
     def is_port_in_use(port):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            return s.connect_ex(('127.0.0.1', port)) == 0
+            return s.connect_ex((Config.TENSORBOARD_HOST, port)) == 0
 
-    if is_port_in_use(6006):
+    if is_port_in_use(Config.TENSORBOARD_PORT):
         return jsonify({'status': 'already_running'})
 
     try:
@@ -121,7 +121,7 @@ def start_tensorboard():
         
         # 使用 Popen 后台拉起 TensorBoard，增加 --reload_interval 1 以实现秒级实时刷新
         tensorboard_process = subprocess.Popen(
-            [sys.executable, "-m", "tensorboard.main", "--logdir", log_dir, "--host", "127.0.0.1", "--port", "6006", "--reload_interval", "1"],
+            [sys.executable, "-m", "tensorboard.main", "--logdir", log_dir, "--host", Config.TENSORBOARD_HOST, "--port", str(Config.TENSORBOARD_PORT), "--reload_interval", "1"],
             stdout=open(os.path.join(current_app.root_path, '..', 'logs', 'tensorboard_stdout.log'), 'w'),
             stderr=subprocess.STDOUT
         )
@@ -134,9 +134,9 @@ def check_tensorboard():
     import socket
     def is_port_in_use(port):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            return s.connect_ex(('127.0.0.1', port)) == 0
+            return s.connect_ex((Config.TENSORBOARD_HOST, port)) == 0
             
-    return jsonify({'running': is_port_in_use(6006)})
+    return jsonify({'running': is_port_in_use(Config.TENSORBOARD_PORT)})
 
 @api_bp.route('/status', methods=['GET'])
 def status():

@@ -1,11 +1,16 @@
+import sys
 import os
 
 # 设置 HuggingFace 国内镜像源，解决 [WinError 10060] 连接超时问题
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
+# 引入项目配置
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from app.config import Config
+
 from huggingface_hub import snapshot_download
 
-local_dir = r"e:\python\conda\RAG\model\bge-large-zh"
+local_dir = Config.EMBEDDING_MODEL_PATH
 os.makedirs(local_dir, exist_ok=True)
 
 print(f"===========================================================")

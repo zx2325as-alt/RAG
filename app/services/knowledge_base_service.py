@@ -17,8 +17,8 @@ from rank_bm25 import BM25Okapi
 
 class KnowledgeBaseService:
     def __init__(self):
-        # 将模型路径指向本地统一的模型文件夹
-        self.embedding_model_name = r"e:\python\conda\RAG\model\bge-large-zh" # 确保该路径下有模型文件
+        # 从统一配置中读取模型路径
+        self.embedding_model_name = Config.EMBEDDING_MODEL_PATH
         self.index_path = Config.FAISS_INDEX_PATH
         # 使用本地路径加载 HuggingFaceEmbeddings，并启用 GPU 加速
         model_kwargs = {'device': 'cuda' if torch.cuda.is_available() else 'cpu'}
@@ -30,7 +30,7 @@ class KnowledgeBaseService:
         )
         
         # 引入重排序模型，并将其放置到 GPU 上以提升推理速度
-        self.reranker_model_name = r"e:\python\conda\RAG\model\bge-reranker-large"
+        self.reranker_model_name = Config.RERANKER_MODEL_PATH
         print("Loading reranker model...")
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.reranker_tokenizer = AutoTokenizer.from_pretrained(self.reranker_model_name)

@@ -1,11 +1,16 @@
 from flask import Flask, request, jsonify
 from langchain_huggingface import HuggingFaceEmbeddings
+import sys
 import os
+
+# 确保能导入 app.config
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from app.config import Config
 
 app = Flask(__name__)
 
 # 加载 Embedding 模型
-model_name = os.getenv("EMBEDDING_MODEL_PATH", r"e:\python\conda\RAG\model\bge-large-zh")
+model_name = os.getenv("EMBEDDING_MODEL_PATH", Config.EMBEDDING_MODEL_PATH)
 print(f"Loading embedding model from {model_name}...")
 embeddings = HuggingFaceEmbeddings(model_name=model_name)
 

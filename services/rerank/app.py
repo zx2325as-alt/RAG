@@ -1,12 +1,17 @@
 from flask import Flask, request, jsonify
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
+import sys
 import os
+
+# 确保能导入 app.config
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from app.config import Config
 
 app = Flask(__name__)
 
 # 加载 Rerank 模型
-model_name = os.getenv("RERANK_MODEL_PATH", r"e:\python\conda\RAG\model\bge-reranker-large")
+model_name = os.getenv("RERANK_MODEL_PATH", Config.RERANKER_MODEL_PATH)
 print(f"Loading reranker model from {model_name}...")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForSequenceClassification.from_pretrained(model_name)

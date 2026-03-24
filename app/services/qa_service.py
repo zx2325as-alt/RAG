@@ -222,19 +222,22 @@ class QAService:
             except Exception as e:
                 print(f"Redis set error: {e}")
         
-        # 6. Log Query (需要在一个新的 app context 或者独立处理)
+        # 6. Log Query (使用 app.app_context 确保在生成器线程中也能正常记录数据库)
         try:
             latency = (datetime.utcnow() - start_time).total_seconds()
             from app.db import db
             from app.db.models import QueryLog
-            log = QueryLog(
-                user_id=user_id,
-                query=question,
-                response=full_answer,
-                latency=latency
-            )
-            db.session.add(log)
-            db.session.commit()
+            # 获取当前 Flask app 实例
+            from flask import current_app
+            with current_app.app_context():
+                log = QueryLog(
+                    user_id=user_id,
+                    query=question,
+                    response=full_answer,
+                    latency=latency
+                )
+                db.session.add(log)
+                db.session.commit()
         except Exception as e:
             print(f"DB Log error: {e}")
 
