@@ -42,17 +42,24 @@
                     </div>
                     <div class="card-body">
                         <div class="mb-3">
-                            <label for="baseModelSelect" class="form-label">选择本地已安装的 Ollama 或 vLLM 模型：</label>
-                            <div class="input-group">
+                            <label for="baseModelSelect" class="form-label">选择基座模型：</label>
+                            <div class="input-group mb-2">
                                 <select class="form-select" id="baseModelSelect">
                                     <option value="">加载中...</option>
                                 </select>
-                                <button class="btn btn-outline-danger" type="button" id="deleteModelBtn" title="删除选中的模型">
+                                <button class="btn btn-outline-primary" type="button" id="downloadModelBtn" title="下载选中的在线模型">
+                                    ⬇️ 下载
+                                </button>
+                                <button class="btn btn-outline-danger" type="button" id="deleteModelBtn" title="删除选中的本地模型">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
                                       <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
                                       <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
                                     </svg>
                                 </button>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-success flex-grow-1" type="button" onclick="startLocalService('ollama')">🚀 启动 Ollama</button>
+                                <button class="btn btn-sm btn-outline-info flex-grow-1" type="button" onclick="startLocalService('vllm')">🚀 启动 vLLM</button>
                             </div>
                         </div>
                         <!-- 移除了“微调后的新模型名称”输入框 -->
@@ -246,10 +253,53 @@
     <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        window.startLocalService = function(service) {
+            $.ajax({
+                url: '/api/start_service',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ service: service }),
+                success: function(res) {
+                    alert(res.message);
+                    setTimeout(loadModels, 2000); // 等待2秒后尝试刷新模型列表
+                },
+                error: function(err) {
+                    alert('启动失败: ' + (err.responseJSON ? err.responseJSON.error : '未知错误'));
+                }
+            });
+        };
+        
         $(document).ready(function() {
             // 启用拖拽功能，将 handle 设置为 modal-header
             $("#tbModalDialog").draggable({
                 handle: "#tbModalHeader"
+            });
+            
+            // 下载模型绑定
+            $('#downloadModelBtn').click(function() {
+                var selectedModel = $('#baseModelSelect').val();
+                if (!selectedModel) {
+                    alert('请先选择要下载的模型！');
+                    return;
+                }
+                var btn = $(this);
+                btn.prop('disabled', true).text('下载中...');
+                
+                $.ajax({
+                    url: '/api/download_model',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ model_name: selectedModel }),
+                    success: function(res) {
+                        alert(res.message || '模型下载任务已提交到后台执行');
+                    },
+                    error: function(err) {
+                        alert('下载失败: ' + (err.responseJSON ? err.responseJSON.error : '未知错误'));
+                    },
+                    complete: function() {
+                        btn.prop('disabled', false).text('⬇️ 下载');
+                    }
+                });
             });
             
             // 监听模态框关闭事件，清除 iframe 的 src 以释放资源
@@ -264,13 +314,47 @@
                     success: function(response) {
                         var select = $('#baseModelSelect');
                         select.empty();
-                        if (response.models && response.models.length > 0) {
-                            response.models.forEach(function(model) {
-                                select.append(`<option value="${model}">${model}</option>`);
+                        
+                        var ollamaModels = response.ollama_models || [];
+                        var vllmModels = response.vllm_models || [];
+                        var onlineModels = response.online_models || [];
+                        
+                        var hasLocal = false;
+                        
+                        if (ollamaModels.length > 0) {
+                            hasLocal = true;
+                            var optgroupOllama = $('<optgroup label="本地模型 (Ollama)"></optgroup>');
+                            ollamaModels.forEach(function(model) {
+                                optgroupOllama.append(`<option value="${model}">${model}</option>`);
                             });
-                        } else {
-                            select.append('<option value="">未发现本地模型</option>');
+                            select.append(optgroupOllama);
                         }
+                        
+                        if (vllmModels.length > 0) {
+                            hasLocal = true;
+                            var optgroupVllm = $('<optgroup label="本地模型 (vLLM)"></optgroup>');
+                            vllmModels.forEach(function(model) {
+                                optgroupVllm.append(`<option value="${model}">${model}</option>`);
+                            });
+                            select.append(optgroupVllm);
+                        }
+                        
+                        if (!hasLocal) {
+                            select.append('<option value="">未发现本地模型 (请确保 Ollama 或 vLLM 已启动)</option>');
+                        }
+                        
+                        if (onlineModels.length > 0) {
+                            var optgroupOnline = $('<optgroup label="在线模型 (支持直接微调/下载)"></optgroup>');
+                            onlineModels.forEach(function(model) {
+                                optgroupOnline.append(`<option value="${model}">${model}</option>`);
+                            });
+                            select.append(optgroupOnline);
+                        }
+                    },
+                    error: function() {
+                        var select = $('#baseModelSelect');
+                        select.empty();
+                        select.append('<option value="">未发现本地模型 (获取失败)</option>');
                     }
                 });
             }

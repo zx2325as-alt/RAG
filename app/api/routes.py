@@ -270,18 +270,77 @@ def clear_all_documents():
 import requests
 from app.config import Config
 
+@api_bp.route('/api/start_service', methods=['POST'])
+def start_service():
+    """启动本地模型服务 (Ollama / vLLM)"""
+    service = request.json.get('service')
+    try:
+        import subprocess
+        if service == 'ollama':
+            # 后台启动 ollama serve
+            subprocess.Popen(
+                ["ollama", "serve"], 
+                stdout=subprocess.DEVNULL, 
+                stderr=subprocess.STDOUT
+            )
+            return jsonify({'message': 'Ollama 启动命令已发送到后台'})
+        elif service == 'vllm':
+            model = Config.VLLM_MODEL_NAME
+            # 尝试拼接可能的绝对路径（如果是微调后的模型）
+            if not "/" in model and not "\\" in model:
+                potential_path = os.path.join(current_app.root_path, '..', 'finetuned_models', model)
+                if os.path.exists(potential_path):
+                    model = potential_path
+                    
+            cmd = ["python", "-m", "vllm.entrypoints.openai.api_server", "--model", model, "--port", "8000"]
+            subprocess.Popen(
+                cmd, 
+                stdout=open(os.path.join(current_app.root_path, '..', 'logs', 'vllm_stdout.log'), 'w'), 
+                stderr=subprocess.STDOUT
+            )
+            return jsonify({'message': f'vLLM 启动命令已发送 (模型: {Config.VLLM_MODEL_NAME})'})
+        else:
+            return jsonify({'error': '不支持的服务类型'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/api/download_model', methods=['POST'])
+def download_model():
+    """下载在线 HuggingFace 模型或 Pull Ollama 模型"""
+    model_name = request.json.get('model_name')
+    if not model_name:
+        return jsonify({'error': '未提供模型名称'}), 400
+        
+    try:
+        import subprocess
+        if ":" in model_name and not "/" in model_name:
+            # 认为是 Ollama 模型
+            subprocess.Popen(["ollama", "pull", model_name], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+            return jsonify({'message': f'已在后台执行: ollama pull {model_name}'})
+        else:
+            # 认为是 HuggingFace 模型，调用 huggingface-cli
+            subprocess.Popen(
+                ["huggingface-cli", "download", model_name], 
+                stdout=open(os.path.join(current_app.root_path, '..', 'logs', 'hf_download.log'), 'a'),
+                stderr=subprocess.STDOUT
+            )
+            return jsonify({'message': f'已在后台执行下载: {model_name}，请稍后查看日志'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @api_bp.route('/ollama/models', methods=['GET'])
 def get_ollama_models():
     """获取本地 Ollama 或 vLLM 正在运行的模型列表"""
     try:
-        models_list = []
+        ollama_models_list = []
+        vllm_models_list = []
         
         # 1. 尝试获取 Ollama 模型
         try:
             response = requests.get(f"{Config.OLLAMA_BASE_URL}/api/tags", timeout=3)
             if response.status_code == 200:
                 models = response.json().get('models', [])
-                models_list.extend([m['name'] for m in models])
+                ollama_models_list.extend([m['name'] for m in models])
         except Exception as e:
             current_app.logger.warning(f"Ollama 服务未启动或连接失败: {e}")
             
@@ -295,17 +354,52 @@ def get_ollama_models():
             vllm_resp = requests.get(f"{vllm_base}/models", timeout=3)
             if vllm_resp.status_code == 200:
                 vllm_models = vllm_resp.json().get('data', [])
-                models_list.extend([f"vllm: {m['id']}" for m in vllm_models])
+                # OpenAI 兼容接口返回的格式是 {"id": "model_name", ...}
+                vllm_models_list.extend([f"vllm: {m['id']}" for m in vllm_models if 'id' in m])
         except Exception as e:
             current_app.logger.warning(f"vLLM 服务未启动或连接失败: {e}")
             
-        # 如果两者都失败，不抛出 500，而是返回空列表，让前端优雅降级
-        return jsonify({'models': models_list})
+        # 定义在线推荐模型列表，增加更多不同尺寸和架构的模型
+        online_models = [
+            # Qwen 系列
+            "Qwen/Qwen2.5-0.5B-Instruct",
+            "Qwen/Qwen2.5-1.5B-Instruct",
+            "Qwen/Qwen2.5-3B-Instruct",
+            "Qwen/Qwen2.5-7B-Instruct",
+            "Qwen/Qwen2.5-14B-Instruct",
+            "Qwen/Qwen2.5-32B-Instruct",
+            "Qwen/Qwen2.5-Coder-7B-Instruct",
+            # DeepSeek 系列
+            "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct",
+            "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
+            "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+            "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+            # Llama 3 / 3.1 / 3.2 系列
+            "meta-llama/Meta-Llama-3-8B-Instruct",
+            "meta-llama/Llama-3.1-8B-Instruct",
+            "meta-llama/Llama-3.2-1B-Instruct",
+            "meta-llama/Llama-3.2-3B-Instruct",
+            # GLM 系列
+            "THUDM/chatglm3-6b",
+            "THUDM/glm-4-9b-chat",
+            # 其它流行架构
+            "google/gemma-2-2b-it",
+            "google/gemma-2-9b-it",
+            "01-ai/Yi-1.5-6B-Chat",
+            "01-ai/Yi-1.5-9B-Chat"
+        ]
+        
+        return jsonify({
+            'models': ollama_models_list + vllm_models_list, # 兼容老接口
+            'ollama_models': ollama_models_list,
+            'vllm_models': vllm_models_list,
+            'online_models': online_models
+        })
         
     except Exception as e:
         current_app.logger.error(f'Error fetching models: {str(e)}')
         # 依然返回 200 和空列表，避免前端报错弹窗
-        return jsonify({'models': []})
+        return jsonify({'models': [], 'ollama_models': [], 'vllm_models': [], 'online_models': []})
 
 @api_bp.route('/ollama/models', methods=['DELETE'])
 def delete_ollama_model():
@@ -749,8 +843,21 @@ def start_finetune():
             
             # LLaMA-Factory 底层使用 transformers，不支持带冒号的 Ollama 内部模型名 (如 qwen3:0.6b 或 qwen3:8b)
             # 这里实现真正的工业级解决方案：如果检测到是 Ollama 模型，直接在后台自动通过 `ollama export` 提取真实的无量化/或原始模型文件
+            
+            # 清理 vllm: 前缀
+            is_vllm = False
+            if base_model.startswith('vllm: '):
+                base_model = base_model.replace('vllm: ', '')
+                is_vllm = True
+                
             hf_model_path = base_model
-            if ":" in base_model:
+            
+            # 如果是 vllm 模型，优先去本地 finetuned_models 目录下找
+            if is_vllm:
+                potential_path = os.path.join(root_path, '..', 'finetuned_models', base_model)
+                if os.path.exists(potential_path):
+                    hf_model_path = potential_path
+            elif ":" in base_model and not "/" in base_model:
                 yield f"data: > [INFO] 检测到 Ollama 格式的模型名 '{base_model}'。\n\n"
                 
                 # 创建专门的存放导出基座模型的目录
