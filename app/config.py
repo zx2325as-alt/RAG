@@ -74,9 +74,9 @@ class ProductionConfig(BaseConfig):
     TENSORBOARD_HOST = '0.0.0.0'
     
     # 线上版模型路径配置 (线上容器或服务器中的绝对路径)
-    EMBEDDING_MODEL_PATH = os.getenv('EMBEDDING_MODEL_PATH', '/root/project/RAG/model/bge-large-zh')
-    RERANKER_MODEL_PATH = os.getenv('RERANKER_MODEL_PATH', '/root/project/RAG/model/bge-reranker-large')
-    QWEN_LOCAL_MODEL_PATH = os.getenv('QWEN_LOCAL_MODEL_PATH', '/root/project/RAG/model/Qwen-7B-Chat')
+    EMBEDDING_MODEL_PATH = os.getenv('EMBEDDING_MODEL_PATH', '/root/autodl-tmp/RAG/model/bge-large-zh')
+    RERANKER_MODEL_PATH = os.getenv('RERANKER_MODEL_PATH', '/root/autodl-tmp/RAG/model/bge-reranker-large')
+    QWEN_LOCAL_MODEL_PATH = os.getenv('QWEN_LOCAL_MODEL_PATH', '/root/autodl-tmp/RAG/model/Qwen-7B-Chat')
 
     # 线上版 API URLs
     QWEN_API_URL = os.getenv('QWEN_API_URL', 'http://qwen-server:8000/v1/chat/completions')
