@@ -39,6 +39,10 @@ def get_qa_service():
         current_app.qa_service = QAService()
     return current_app.qa_service
 
+def get_kb_service():
+    # 统一使用 qa_service 内部的 kb_service，保证内存中的 FAISS/BM25 索引单例同步更新
+    return get_qa_service().kb_service
+
 @api_bp.route('/')
 def index():
     return render_template('index.html')
@@ -222,8 +226,7 @@ def delete_document(doc_id):
             os.remove(filepath)
             
         # 触发重建索引
-        from app.services.knowledge_base_service import KnowledgeBaseService
-        kb = KnowledgeBaseService()
+        kb = get_kb_service()
         kb.build_index(db_name)
         
         return jsonify({'message': 'Document deleted successfully'})
@@ -252,8 +255,7 @@ def clear_all_documents():
         db.session.commit()
         
         # 触发重建(清空)索引
-        from app.services.knowledge_base_service import KnowledgeBaseService
-        kb = KnowledgeBaseService()
+        kb = get_kb_service()
         for db_name in db_names:
             kb.build_index(db_name)
         # 确保默认库也被清空
@@ -434,38 +436,55 @@ def get_ollama_models():
             'models': ollama_models_list + vllm_models_list, # 兼容老接口
             'ollama_models': ollama_models_list,
             'vllm_models': vllm_models_list,
-            'online_models': online_models
+            'online_models': online_models,
+            'query_online_models': Config.ONLINE_QUERY_MODELS
         })
         
     except Exception as e:
         current_app.logger.error(f'Error fetching models: {str(e)}')
         # 依然返回 200 和空列表，避免前端报错弹窗
-        return jsonify({'models': [], 'ollama_models': [], 'vllm_models': [], 'online_models': []})
+        return jsonify({'models': [], 'ollama_models': [], 'vllm_models': [], 'online_models': [], 'query_online_models': Config.ONLINE_QUERY_MODELS})
 
 @api_bp.route('/ollama/models', methods=['DELETE'])
 def delete_ollama_model():
-    """删除本地 Ollama 模型"""
+    """删除本地 Ollama 或 vLLM 模型"""
     data = request.json
     model_name = data.get('model_name')
+    model_type = data.get('model_type', 'ollama')
+    
     if not model_name:
         return jsonify({'error': '未提供模型名称'}), 400
         
     try:
         import subprocess
-        # 调用 ollama rm 命令删除模型
-        process = subprocess.Popen(
-            ["ollama", "rm", model_name],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        stdout, stderr = process.communicate()
-        if process.returncode == 0:
-            return jsonify({'message': f'模型 {model_name} 已成功删除'})
+        import shutil
+        
+        if model_type == 'vllm':
+            # 尝试删除本地 finetuned_models 目录下的模型
+            real_model_name = model_name.replace('vllm: ', '') if model_name.startswith('vllm:') else model_name
+            models_dir = os.path.join(current_app.root_path, '..', 'finetuned_models')
+            target_dir = os.path.join(models_dir, real_model_name)
+            
+            if os.path.exists(target_dir) and os.path.isdir(target_dir):
+                shutil.rmtree(target_dir)
+                return jsonify({'message': f'模型目录 {real_model_name} 已成功删除'})
+            else:
+                return jsonify({'error': '未找到对应的本地模型目录，无法删除 API 模型'}), 404
         else:
-            return jsonify({'error': f'删除失败: {stderr}'}), 500
+            # 调用 ollama rm 命令删除模型
+            process = subprocess.Popen(
+                ["ollama", "rm", model_name],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            stdout, stderr = process.communicate()
+            if process.returncode == 0:
+                return jsonify({'message': f'模型 {model_name} 已成功删除'})
+            else:
+                return jsonify({'error': f'删除失败: {stderr}'}), 500
     except Exception as e:
-        current_app.logger.error(f'Error deleting Ollama model: {str(e)}')
+        current_app.logger.error(f'Error deleting model: {str(e)}')
         return jsonify({'error': '执行删除命令时出错'}), 500
 
 @api_bp.route('/llm/set_model', methods=['POST'])
@@ -479,7 +498,12 @@ def set_llm_model():
         return jsonify({'error': 'No llm_type provided'}), 400
         
     try:
-        Config.ACTIVE_LLM = llm_type
+        if llm_type == 'online':
+            # 在线模型时，llm_type 为 model_name
+            Config.ACTIVE_LLM = model_name
+        else:
+            Config.ACTIVE_LLM = llm_type
+            
         if llm_type == 'ollama' and model_name:
             Config.OLLAMA_MODEL_NAME = model_name
         elif llm_type == 'vllm' and model_name:
@@ -493,11 +517,11 @@ def set_llm_model():
         
         current_model = f"Ollama ({model_name})" if llm_type == 'ollama' else (
             f"vLLM ({Config.VLLM_MODEL_NAME})" if llm_type == 'vllm' else (
-                f"DeepSeek ({Config.DEEPSEEK_MODEL_NAME})" if llm_type == 'deepseek' else f"Qwen ({Config.QWEN_MODEL_NAME})"
+                next((m['name'] for m in Config.ONLINE_QUERY_MODELS if m['id'] == Config.ACTIVE_LLM), Config.ACTIVE_LLM)
             )
         )
         return jsonify({
-            'message': f'Successfully switched to {llm_type}',
+            'message': f'Successfully switched',
             'current_model': current_model
         })
     except Exception as e:
@@ -508,14 +532,22 @@ def set_llm_model():
 def get_current_llm():
     """获取当前正在使用的大模型配置"""
     llm_type = Config.ACTIVE_LLM
-    current_model = f"Ollama ({Config.OLLAMA_MODEL_NAME})" if llm_type == 'ollama' else (
-        f"vLLM ({Config.VLLM_MODEL_NAME})" if llm_type == 'vllm' else (
-            f"DeepSeek ({Config.DEEPSEEK_MODEL_NAME})" if llm_type == 'deepseek' else f"Qwen ({Config.QWEN_MODEL_NAME})"
-        )
-    )
+    # 判断当前是 ollama, vllm 还是 online
+    category = 'online'
+    if llm_type == 'ollama':
+        category = 'ollama'
+        current_model = f"Ollama ({Config.OLLAMA_MODEL_NAME})"
+    elif llm_type == 'vllm':
+        category = 'vllm'
+        current_model = f"vLLM ({Config.VLLM_MODEL_NAME})"
+    else:
+        # online
+        current_model = next((m['name'] for m in Config.ONLINE_QUERY_MODELS if m['id'] == llm_type), llm_type)
+        
     return jsonify({
-        'llm_type': llm_type,
-        'current_model': current_model
+        'llm_type': category,
+        'current_model': current_model,
+        'actual_id': llm_type
     })
 
 @api_bp.route('/query', methods=['POST'])
@@ -883,36 +915,49 @@ def start_finetune():
         # 为了在生成器中能够访问 current_app，我们需要提取出它需要的值
         root_path = current_app.root_path
         
-        def generate_finetune_logs():
+        def generate_finetune_logs(base_model_name):
             import time
             import subprocess
             import json
             
             yield f"data: > 接收到真实微调任务请求，准备初始化环境...\n\n"
             time.sleep(1)
-            yield f"data: > 基座模型: [{base_model}], 目标模型: [{new_model}]\n\n"
+            yield f"data: > 基座模型: [{base_model_name}], 目标模型: [{new_model}]\n\n"
             
             # LLaMA-Factory 底层使用 transformers，不支持带冒号的 Ollama 内部模型名 (如 qwen3:0.6b 或 qwen3:8b)
             # 这里实现真正的工业级解决方案：如果检测到是 Ollama 模型，直接在后台自动通过 `ollama export` 提取真实的无量化/或原始模型文件
             
             # 清理 vllm: 前缀
             is_vllm = False
-            if base_model.startswith('vllm: '):
-                base_model = base_model.replace('vllm: ', '')
+            if base_model_name.startswith('vllm: '):
+                base_model_name = base_model_name.replace('vllm: ', '')
                 is_vllm = True
                 
-            hf_model_path = base_model
+            hf_model_path = base_model_name
             
             # 如果是 vllm 模型，优先去本地 finetuned_models 目录下找
             if is_vllm:
-                potential_path = os.path.join(root_path, '..', 'finetuned_models', base_model)
-                if os.path.exists(potential_path):
+                potential_path = os.path.join(root_path, '..', 'finetuned_models', base_model_name)
+                # vLLM 模型有可能放在其他地方，需要检查有没有 config.json
+                if os.path.exists(os.path.join(potential_path, "config.json")):
                     hf_model_path = potential_path
-            elif ":" in base_model and not "/" in base_model:
-                yield f"data: > [INFO] 检测到 Ollama 格式的模型名 '{base_model}'。\n\n"
+                else:
+                    # 补充一个针对 vLLM 模型如果是来源于 ollama / 在线镜像的回退机制
+                    model_lower = base_model_name.lower()
+                    if "qwen2.5:0.5b" in model_lower or "qwen:0.5b" in model_lower or "qwen3:0.6b" in model_lower or "qwen3_0.6b" in model_lower:
+                        hf_model_path = "Qwen/Qwen2.5-0.5B-Instruct"
+                    elif "qwen2.5:1.5b" in model_lower or "qwen:1.5b" in model_lower:
+                        hf_model_path = "Qwen/Qwen2.5-1.5B-Instruct"
+                    elif "qwen2.5:7b" in model_lower or "qwen:7b" in model_lower or "qwen3:8b" in model_lower:
+                        hf_model_path = "Qwen/Qwen2.5-7B-Instruct"
+                    else:
+                        hf_model_path = "Qwen/Qwen1.5-0.5B-Chat"
+                    yield f"data: > [TIP] vLLM 本地模型路径缺少 config.json 权重配置文件，已自动映射回 HuggingFace 官方镜像基座: {hf_model_path}，确保微调正常进行。\n\n"
+            elif ":" in base_model_name and not "/" in base_model_name:
+                yield f"data: > [INFO] 检测到 Ollama 格式的模型名 '{base_model_name}'。\n\n"
                 
                 # 创建专门的存放导出基座模型的目录
-                ollama_export_dir = os.path.join(root_path, '..', 'finetuned_models', 'base_models', base_model.replace(":", "_"))
+                ollama_export_dir = os.path.join(root_path, '..', 'finetuned_models', 'base_models', base_model_name.replace(":", "_"))
                 os.makedirs(ollama_export_dir, exist_ok=True)
                 
                 # 检查是否之前已经导出过了，避免重复耗时操作
@@ -922,10 +967,10 @@ def start_finetune():
                      # 由于 ollama 目前版本可能并未完全提供内置的 "ollama export" 命令（它通常存在于开发版或者某些特定分支），
                      # 我们采取折中/兜底的自动化策略：我们告诉用户系统正在处理，但因为 LLaMA-Factory 的要求，如果失败，退回智能镜像下载。
                      # 在未来的版本中如果 ollama export 稳定可用，可以直接在这里 subprocess 调用：
-                     # subprocess.run(["ollama", "export", base_model, "-o", ollama_export_dir])
+                     # subprocess.run(["ollama", "export", base_model_name, "-o", ollama_export_dir])
                      
                      # 智能映射兜底：
-                     model_lower = base_model.lower()
+                     model_lower = base_model_name.lower()
                      if "qwen2.5:0.5b" in model_lower or "qwen:0.5b" in model_lower or "qwen3:0.6b" in model_lower:
                          hf_model_path = "Qwen/Qwen2.5-0.5B-Instruct"
                      elif "qwen2.5:1.5b" in model_lower or "qwen:1.5b" in model_lower:
@@ -999,30 +1044,30 @@ def start_finetune():
                 "dataset_dir": dataset_dir,
                 "template": "default",
                 "finetuning_type": "lora",
-                "lora_target": lora_target if lora_target and lora_target != 'all' else "all",
-                "lora_rank": int(lora_rank) if lora_rank else 8,
-                "lora_alpha": int(lora_alpha) if lora_alpha else 16,
-                "lora_dropout": float(lora_dropout) if lora_dropout else 0.1,
+                "lora_target": lora_target if lora_target and lora_target != 'all' and lora_target != 'undefined' else "all",
+                "lora_rank": int(lora_rank) if lora_rank and lora_rank != 'undefined' else 8,
+                "lora_alpha": int(lora_alpha) if lora_alpha and lora_alpha != 'undefined' else 16,
+                "lora_dropout": float(lora_dropout) if lora_dropout and lora_dropout != 'undefined' else 0.1,
                 "output_dir": output_dir,
                 "logging_dir": logging_dir, # 显式指定日志目录，确保 TensorBoard 能集中读取
                 "overwrite_cache": True,
                 "overwrite_output_dir": True, # 强制覆盖输出目录，防止自动从旧的 checkpoint 恢复
-                "per_device_train_batch_size": int(batch_size) if batch_size else 4,
-                "gradient_accumulation_steps": int(grad_acc) if grad_acc else 4,
-                "optim": optimizer if optimizer else "adamw_torch",
-                "lr_scheduler_type": lr_scheduler if lr_scheduler else "cosine",
-                "logging_steps": int(logging_steps) if logging_steps else 10,
-                "warmup_steps": int(warmup_steps) if warmup_steps else 0,
-                "warmup_ratio": float(warmup_ratio) if warmup_ratio else 0.1,
-                "save_steps": int(save_steps) if save_steps else 1000,
-                "eval_steps": int(eval_steps) if eval_steps else 50,
+                "per_device_train_batch_size": int(batch_size) if batch_size and batch_size != 'undefined' else 4,
+                "gradient_accumulation_steps": int(grad_acc) if grad_acc and grad_acc != 'undefined' else 4,
+                "optim": optimizer if optimizer and optimizer != 'undefined' else "adamw_torch",
+                "lr_scheduler_type": lr_scheduler if lr_scheduler and lr_scheduler != 'undefined' else "cosine",
+                "logging_steps": int(logging_steps) if logging_steps and logging_steps != 'undefined' else 10,
+                "warmup_steps": int(warmup_steps) if warmup_steps and warmup_steps != 'undefined' else 0,
+                "warmup_ratio": float(warmup_ratio) if warmup_ratio and warmup_ratio != 'undefined' else 0.1,
+                "save_steps": int(save_steps) if save_steps and save_steps != 'undefined' else 1000,
+                "eval_steps": int(eval_steps) if eval_steps and eval_steps != 'undefined' else 50,
                 "evaluation_strategy": "steps", # 修改为 steps 以便在 TensorBoard 中看到验证集指标
-                "learning_rate": float(learning_rate) if learning_rate else 2e-4,
-                "num_train_epochs": float(epochs) if epochs else 3.0,
-                "max_length": int(max_length) if max_length else 2048,
-                "weight_decay": float(weight_decay) if weight_decay else 0.0,
-                "max_grad_norm": float(max_grad_norm) if max_grad_norm else 1.0,
-                "seed": int(seed) if seed else 42,
+                "learning_rate": float(learning_rate) if learning_rate and learning_rate != 'undefined' else 2e-4,
+                "num_train_epochs": float(epochs) if epochs and epochs != 'undefined' else 3.0,
+                "max_length": int(max_length) if max_length and max_length != 'undefined' else 2048,
+                "weight_decay": float(weight_decay) if weight_decay and weight_decay != 'undefined' else 0.0,
+                "max_grad_norm": float(max_grad_norm) if max_grad_norm and max_grad_norm != 'undefined' else 1.0,
+                "seed": int(seed) if seed and seed != 'undefined' else 42,
                 "plot_loss": True,
                 "report_to": "tensorboard", # 启用 TensorBoard 记录
                 # 下面的两个参数告诉 LLaMA-Factory 使用内置的计算指标回调，从而把 F1, 准确率等写入 TensorBoard
@@ -1249,7 +1294,7 @@ def start_finetune():
             yield f"data: [DONE]\n\n"
 
         from flask import Response
-        return Response(generate_finetune_logs(), mimetype='text/event-stream')
+        return Response(generate_finetune_logs(base_model), mimetype='text/event-stream')
         
     except Exception as e:
         current_app.logger.error(f"Finetune error: {str(e)}")

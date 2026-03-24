@@ -119,16 +119,15 @@
                         <hr class="my-2">
                         <h6 class="mb-1" style="font-size: 0.85rem;">模型切换 (当前: <span id="currentModelBadge" class="badge bg-info text-wrap" style="font-size: 0.75rem;"></span>)</h6>
                         <div class="input-group input-group-sm mb-2">
-                            <select class="form-select" id="llmTypeSelect">
-                                <option value="qwen">Qwen-7B (本地部署)</option>
-                                <option value="deepseek">DeepSeek (官方 API)</option>
-                                <option value="ollama">Ollama (本地模型)</option>
-                                <option value="vllm">vLLM (本地通用引擎)</option>
+                            <select class="form-select" id="llmCategorySelect">
+                                <option value="online" selected>在线模型</option>
+                                <option value="ollama">本地模型 (Ollama)</option>
+                                <option value="vllm">本地模型 (vLLM)</option>
                             </select>
                         </div>
-                        <div class="input-group mb-2" id="ollamaModelGroup" style="display: none;">
-                            <select class="form-select form-select-sm" id="ollamaModelSelect">
-                                <option value="" selected>加载 Ollama 模型中...</option>
+                        <div class="input-group mb-2" id="llmModelGroup">
+                            <select class="form-select form-select-sm" id="llmModelSelect">
+                                <option value="">加载中...</option>
                             </select>
                         </div>
                         <button class="btn btn-sm btn-outline-primary w-100" type="button" id="switchModelBtn">应用切换</button>

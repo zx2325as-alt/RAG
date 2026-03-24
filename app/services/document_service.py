@@ -56,8 +56,14 @@ class DocumentService:
             
             # 解析完成后，进行增量向量索引更新，避免每次都全量重建（极大提升速度）
             if chunks:
-                from app.services.knowledge_base_service import KnowledgeBaseService
-                kb = KnowledgeBaseService()
+                from flask import current_app
+                if hasattr(current_app, 'qa_service'):
+                    kb = current_app.qa_service.kb_service
+                else:
+                    # 如果还没有初始化，手动初始化一次，保证全局单例
+                    from app.services.qa_service import QAService
+                    current_app.qa_service = QAService()
+                    kb = current_app.qa_service.kb_service
                 kb.add_documents(chunks, db_name=db_name)
                 
         except Exception as e:

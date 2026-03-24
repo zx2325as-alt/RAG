@@ -65,12 +65,9 @@ $(document).ready(function() {
     });
 
     // 监听 LLM 类型下拉框变化
-    $('#llmTypeSelect').change(function() {
-        if ($(this).val() === 'ollama') {
-            $('#ollamaModelGroup').show();
-        } else {
-            $('#ollamaModelGroup').hide();
-        }
+    $('#llmCategorySelect').change(function() {
+        var category = $(this).val();
+        updateLLMModelOptions(category);
     });
 
     // 删除文件
@@ -162,11 +159,11 @@ $(document).ready(function() {
 
     // 切换模型 (支持全模型)
     $('#switchModelBtn').click(function() {
-        var llmType = $('#llmTypeSelect').val();
-        var modelName = $('#ollamaModelSelect').val();
+        var llmType = $('#llmCategorySelect').val();
+        var modelName = $('#llmModelSelect').val();
         
-        if (llmType === 'ollama' && !modelName) {
-            alert("请选择具体的 Ollama 模型");
+        if (!modelName) {
+            alert("请选择具体的模型");
             return;
         }
         
@@ -193,16 +190,65 @@ $(document).ready(function() {
     });
 });
 
+let cachedModelsData = {
+    ollama_models: [],
+    vllm_models: [],
+    query_online_models: []
+};
+
+function updateLLMModelOptions(category) {
+    var select = $('#llmModelSelect');
+    select.empty();
+    
+    var models = [];
+    if (category === 'ollama') {
+        models = cachedModelsData.ollama_models;
+    } else if (category === 'vllm') {
+        models = cachedModelsData.vllm_models;
+    } else if (category === 'online') {
+        models = cachedModelsData.query_online_models;
+    }
+    
+    if (models && models.length > 0) {
+        models.forEach(function(model) {
+            if (typeof model === 'object') {
+                select.append(`<option value="${model.id}">${model.name}</option>`);
+            } else {
+                select.append(`<option value="${model}">${model}</option>`);
+            }
+        });
+    } else {
+        select.append('<option value="">暂无可用模型</option>');
+    }
+}
+
 function loadCurrentLLM() {
     $.ajax({
         url: '/llm/current',
         type: 'GET',
         success: function(res) {
             $('#currentModelBadge').text(res.current_model);
-            $('#llmTypeSelect').val(res.llm_type).trigger('change');
-            if (res.llm_type === 'ollama') {
-                setTimeout(() => { $('#ollamaModelSelect').val(res.current_model); }, 500);
+            var category = res.llm_type;
+            // 兼容以前的配置，如果不是 ollama/vllm，则认为是 online
+            if (category !== 'ollama' && category !== 'vllm') {
+                category = 'online';
             }
+            $('#llmCategorySelect').val(category);
+            
+            // 需要等模型列表加载完成后再选中
+            setTimeout(() => {
+                updateLLMModelOptions(category);
+                if (category === 'online') {
+                    $('#llmModelSelect').val(res.actual_id);
+                } else if (category === 'ollama') {
+                    var modelName = res.current_model.match(/\(([^)]+)\)/)[1];
+                    $('#llmModelSelect').val(modelName);
+                } else if (category === 'vllm') {
+                    var modelName = res.current_model.match(/\(([^)]+)\)/)[1];
+                    // vllm options in dropdown have 'vllm: ' prefix usually
+                    $('#llmModelSelect').val('vllm: ' + modelName);
+                }
+            }, 600);
         }
     });
 }
@@ -212,20 +258,15 @@ function loadOllamaModels() {
         url: '/ollama/models',
         type: 'GET',
         success: function(response) {
-            var select = $('#ollamaModelSelect');
-            select.empty();
-            if (response.models && response.models.length > 0) {
-                response.models.forEach(function(model) {
-                    select.append(`<option value="${model}">${model}</option>`);
-                });
-            } else {
-                select.append('<option value="">未发现本地模型</option>');
-            }
+            cachedModelsData.ollama_models = response.ollama_models || [];
+            cachedModelsData.vllm_models = response.vllm_models || [];
+            cachedModelsData.query_online_models = response.query_online_models || [];
+            
+            var currentCategory = $('#llmCategorySelect').val();
+            updateLLMModelOptions(currentCategory);
         },
         error: function() {
-            var select = $('#ollamaModelSelect');
-            select.empty();
-            select.append('<option value="">Ollama 服务未启动</option>');
+            console.error('获取模型列表失败');
         }
     });
 }

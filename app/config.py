@@ -11,6 +11,13 @@ class BaseConfig:
     # --- 大模型切换配置 ---
     # 可选值: 'qwen' (本地vLLM部署), 'deepseek' (官方API), 'ollama', 或 'vllm' (本地vLLM通用引擎)
     ACTIVE_LLM = os.getenv('ACTIVE_LLM', 'deepseek') 
+    
+    # 允许的在线模型列表 (可在此配置新增)
+    ONLINE_QUERY_MODELS = [
+        {"id": "deepseek", "name": "DeepSeek (官方 API)"},
+        {"id": "chatgpt", "name": "ChatGPT (OpenAI API)"},
+        {"id": "qwen", "name": "Qwen (通义千问)"}
+    ]
 
     # 1. Qwen 本地服务配置
     QWEN_API_KEY = os.getenv('QWEN_API_KEY', 'EMPTY')
@@ -57,7 +64,8 @@ class LocalConfig(BaseConfig):
 class ProductionConfig(BaseConfig):
     DEBUG = False
     # 线上版数据库通常为 MySQL/PostgreSQL，这里通过环境变量覆盖，默认给出示例
-    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'mysql+pymysql://user:password@localhost/rag_db')
+    # SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'mysql+pymysql://user:password@localhost/rag_db')
+    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'sqlite:///rag.db')
     REDIS_URL = os.getenv('REDIS_URL', 'redis://redis-server:6379/0')
     FAISS_INDEX_PATH = os.getenv('FAISS_INDEX_PATH', '/data/faiss_index')
     
@@ -66,9 +74,9 @@ class ProductionConfig(BaseConfig):
     TENSORBOARD_HOST = '0.0.0.0'
     
     # 线上版模型路径配置 (线上容器或服务器中的绝对路径)
-    EMBEDDING_MODEL_PATH = os.getenv('EMBEDDING_MODEL_PATH', '/app/model/bge-large-zh')
-    RERANKER_MODEL_PATH = os.getenv('RERANKER_MODEL_PATH', '/app/model/bge-reranker-large')
-    QWEN_LOCAL_MODEL_PATH = os.getenv('QWEN_LOCAL_MODEL_PATH', '/app/model/Qwen-7B-Chat')
+    EMBEDDING_MODEL_PATH = os.getenv('EMBEDDING_MODEL_PATH', '/root/project/RAG/model/bge-large-zh')
+    RERANKER_MODEL_PATH = os.getenv('RERANKER_MODEL_PATH', '/root/project/RAG/model/bge-reranker-large')
+    QWEN_LOCAL_MODEL_PATH = os.getenv('QWEN_LOCAL_MODEL_PATH', '/root/project/RAG/model/Qwen-7B-Chat')
 
     # 线上版 API URLs
     QWEN_API_URL = os.getenv('QWEN_API_URL', 'http://qwen-server:8000/v1/chat/completions')

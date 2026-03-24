@@ -42,12 +42,17 @@
                     </div>
                     <div class="card-body">
                         <div class="mb-3">
-                            <label for="baseModelSelect" class="form-label">选择基座模型 (本地及在线支持)：</label>
+                            <label class="form-label">选择基座模型：</label>
+                            <select class="form-select mb-2" id="modelCategorySelect">
+                                <option value="ollama">本地模型 (Ollama)</option>
+                                <option value="vllm">本地模型 (vLLM)</option>
+                                <option value="online">在线模型 (支持下载)</option>
+                            </select>
                             <div class="input-group mb-2">
                                 <select class="form-select" id="baseModelSelect">
                                     <option value="">加载中...</option>
                                 </select>
-                                <button class="btn btn-outline-primary" type="button" id="downloadModelBtn" title="下载选中的在线模型">
+                                <button class="btn btn-outline-primary" type="button" id="downloadModelBtn" title="下载选中的在线模型" style="display:none;">
                                     ⬇️ 下载
                                 </button>
                                 <button class="btn btn-outline-danger" type="button" id="deleteModelBtn" title="删除选中的本地模型">
@@ -317,54 +322,56 @@
                 $('#tbIframe').attr('src', '');
             });
             
+            // 缓存模型数据
+            let cachedFinetuneModels = {
+                ollama: [],
+                vllm: [],
+                online: []
+            };
+
+            function updateBaseModelOptions() {
+                var category = $('#modelCategorySelect').val();
+                var select = $('#baseModelSelect');
+                select.empty();
+                
+                var models = cachedFinetuneModels[category] || [];
+                if (models.length > 0) {
+                    models.forEach(function(model) {
+                        select.append(`<option value="${model}">${model}</option>`);
+                    });
+                } else {
+                    select.append('<option value="">无可用模型</option>');
+                }
+                
+                // 根据类别显示/隐藏按钮
+                if (category === 'online') {
+                    $('#downloadModelBtn').show();
+                    $('#deleteModelBtn').hide();
+                } else {
+                    $('#downloadModelBtn').hide();
+                    $('#deleteModelBtn').show();
+                }
+            }
+
+            $('#modelCategorySelect').change(function() {
+                updateBaseModelOptions();
+            });
+
             function loadModels() {
                 $.ajax({
                     url: '/ollama/models',
                     type: 'GET',
                     success: function(response) {
-                        var select = $('#baseModelSelect');
-                        select.empty();
-                        
-                        var ollamaModels = response.ollama_models || [];
-                        var vllmModels = response.vllm_models || [];
-                        var onlineModels = response.online_models || [];
-                        
-                        var hasLocal = false;
-                        
-                        if (ollamaModels.length > 0) {
-                            hasLocal = true;
-                            var optgroupOllama = $('<optgroup label="本地模型 (Ollama)"></optgroup>');
-                            ollamaModels.forEach(function(model) {
-                                optgroupOllama.append(`<option value="${model}">${model}</option>`);
-                            });
-                            select.append(optgroupOllama);
-                        }
-                        
-                        if (vllmModels.length > 0) {
-                            hasLocal = true;
-                            var optgroupVllm = $('<optgroup label="本地模型 (vLLM)"></optgroup>');
-                            vllmModels.forEach(function(model) {
-                                optgroupVllm.append(`<option value="${model}">${model}</option>`);
-                            });
-                            select.append(optgroupVllm);
-                        }
-                        
-                        if (!hasLocal) {
-                            select.append('<option value="">未发现本地模型 (请确保 Ollama 或 vLLM 已启动)</option>');
-                        }
-                        
-                        if (onlineModels.length > 0) {
-                            var optgroupOnline = $('<optgroup label="在线模型 (支持直接微调/下载)"></optgroup>');
-                            onlineModels.forEach(function(model) {
-                                optgroupOnline.append(`<option value="${model}">${model}</option>`);
-                            });
-                            select.append(optgroupOnline);
-                        }
+                        cachedFinetuneModels.ollama = response.ollama_models || [];
+                        cachedFinetuneModels.vllm = response.vllm_models || [];
+                        cachedFinetuneModels.online = response.online_models || [];
+                        updateBaseModelOptions();
                     },
                     error: function() {
-                        var select = $('#baseModelSelect');
-                        select.empty();
-                        select.append('<option value="">未发现本地模型 (获取失败)</option>');
+                        cachedFinetuneModels.ollama = [];
+                        cachedFinetuneModels.vllm = [];
+                        cachedFinetuneModels.online = [];
+                        updateBaseModelOptions();
                     }
                 });
             }
@@ -375,29 +382,34 @@
             // 删除模型绑定
             $('#deleteModelBtn').click(function() {
                 var selectedModel = $('#baseModelSelect').val();
+                var category = $('#modelCategorySelect').val();
                 if (!selectedModel) {
                     alert('请先选择要删除的模型！');
                     return;
                 }
-                if (confirm(`确定要删除本地 Ollama 模型 [${selectedModel}] 吗？\n注意：此操作不可逆！`)) {
-                    var btn = $(this);
-                    btn.prop('disabled', true);
-                    $.ajax({
-                        url: '/ollama/models',
-                        type: 'DELETE',
-                        contentType: 'application/json',
-                        data: JSON.stringify({ model_name: selectedModel }),
-                        success: function(res) {
-                            alert(res.message || '删除成功');
-                            loadModels(); // 重新加载列表
-                        },
-                        error: function(err) {
-                            alert('删除失败: ' + (err.responseJSON ? err.responseJSON.error : '未知错误'));
-                        },
-                        complete: function() {
-                            btn.prop('disabled', false);
-                        }
-                    });
+                
+                if (category === 'ollama' || category === 'vllm') {
+                    var modelLabel = category === 'ollama' ? 'Ollama' : 'vLLM';
+                    if (confirm(`确定要删除本地 ${modelLabel} 模型 [${selectedModel}] 吗？\n注意：此操作不可逆！`)) {
+                        var btn = $(this);
+                        btn.prop('disabled', true);
+                        $.ajax({
+                            url: '/ollama/models',
+                            type: 'DELETE',
+                            contentType: 'application/json',
+                            data: JSON.stringify({ model_name: selectedModel, model_type: category }),
+                            success: function(res) {
+                                alert(res.message || '删除成功');
+                                loadModels(); // 重新加载列表
+                            },
+                            error: function(err) {
+                                alert('删除失败: ' + (err.responseJSON ? err.responseJSON.error : '未知错误'));
+                            },
+                            complete: function() {
+                                btn.prop('disabled', false);
+                            }
+                        });
+                    }
                 }
             });
         });

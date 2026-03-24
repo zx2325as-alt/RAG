@@ -81,6 +81,12 @@ class QAService:
                 model=Config.DEEPSEEK_MODEL_NAME,
                 temperature=0.3 # 适当提高温度以增加全面性和发散性
             )
+        elif active_llm == 'chatgpt':
+            self.llm = ChatOpenAI(
+                api_key=os.getenv('OPENAI_API_KEY', 'EMPTY'),
+                model='gpt-3.5-turbo',
+                temperature=0.3
+            )
         elif active_llm == 'ollama':
             from langchain_community.chat_models import ChatOllama
             self.llm = ChatOllama(

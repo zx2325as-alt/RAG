@@ -120,10 +120,17 @@ class KnowledgeBaseService:
         chunks = Chunk.query.join(Document).filter(Document.db_name == db_name).all()
         if not chunks:
             print(f"No chunks to index for '{db_name}'.")
-            # 如果该库被清空了，清理内存中的实例
+            # 如果该库被清空了，清理内存中的实例并删除磁盘上的旧索引文件
             if db_name in self.vector_stores:
                 del self.vector_stores[db_name]
             self.bm25_stores[db_name] = {"bm25": None, "chunk_map": {}}
+            db_index_path = self.get_index_path(db_name)
+            faiss_file = os.path.join(db_index_path, "index.faiss")
+            pkl_file = os.path.join(db_index_path, "index.pkl")
+            if os.path.exists(faiss_file):
+                os.remove(faiss_file)
+            if os.path.exists(pkl_file):
+                os.remove(pkl_file)
             return
 
         documents = []
