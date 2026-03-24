@@ -1,7 +1,0 @@
-adapter_name_or_path: e:\python\conda\RAG\app\..\finetuned_models\qwen3_0.6b_v1
-export_dir: e:\python\conda\RAG\app\..\finetuned_models\qwen3_0.6b_v1_merged
-export_legacy_format: false
-export_size: 2
-finetuning_type: lora
-model_name_or_path: Qwen/Qwen2.5-0.5B-Instruct
-template: default
