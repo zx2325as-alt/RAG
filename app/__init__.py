@@ -9,6 +9,30 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
+    # 在系统启动时自动检查并创建所有必需的运行时目录，避免在新环境中因目录缺失而报错
+    required_directories = [
+        'logs',
+        app.config.get('UPLOAD_FOLDER', 'uploads'),
+        'data',
+        'data/db',
+        'data/chroma',
+        'finetuned_models',
+        'finetuned_models/base_models',
+        'finetuned_models/runs',
+        'finetune_configs'
+    ]
+    
+    # 获取项目根目录 (假设 app 目录和根目录同级，这里我们计算出根目录路径)
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
+    for directory in required_directories:
+        dir_path = os.path.join(root_dir, directory)
+        if not os.path.exists(dir_path):
+            try:
+                os.makedirs(dir_path, exist_ok=True)
+            except Exception as e:
+                print(f"Warning: Could not create directory {dir_path}: {e}")
+
     # 设置详细的日志格式
     if not os.path.exists('logs'):
         os.mkdir('logs')
