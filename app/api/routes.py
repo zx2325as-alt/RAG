@@ -546,6 +546,8 @@ def query():
                 
         return Response(stream_with_context(safe_stream()), mimetype='application/x-ndjson')
     except Exception as e:
+        import traceback
+        current_app.logger.error(f"[/query] Error occurred: {str(e)}\n{traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
 @api_bp.route('/feedback', methods=['POST'])
@@ -577,9 +579,12 @@ def feedback():
 
         try:
             from flask import Response
+            qa_service = get_qa_service()
             # 触发重新分析流式响应
             return Response(qa_service.stream_reanalyze_question(question, answer, score, user_id=user_id), mimetype='application/x-ndjson')
         except Exception as e:
+            import traceback
+            current_app.logger.error(f"[/feedback] Error occurred: {str(e)}\n{traceback.format_exc()}")
             return jsonify({'error': str(e)}), 500
             
     return jsonify({'message': 'Thanks for your feedback!'})
