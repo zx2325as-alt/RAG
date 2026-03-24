@@ -1,6 +1,9 @@
 import os
 from dotenv import load_dotenv
 
+# 获取项目根目录 (app/config.py 的上级目录的上级目录)
+BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+
 # 加载 .env 文件（如果存在）
 load_dotenv()
 
@@ -9,7 +12,7 @@ class BaseConfig:
     UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
     
     # --- 大模型切换配置 ---
-    # 可选值: 'qwen' (本地vLLM部署), 'deepseek' (官方API), 'ollama', 或 'vllm' (本地vLLM通用引擎)
+    # 可选值: 'qwen' (本地vLLM部署), 'deepseek' (官方API), 'ollama', 或 'vllm' (本地vLLM通用引擎), 'hf' (HuggingFace本地模型)
     ACTIVE_LLM = os.getenv('ACTIVE_LLM', 'deepseek') 
     
     # 允许的在线模型列表 (可在此配置新增)
@@ -39,6 +42,9 @@ class BaseConfig:
     # 4. vLLM 本地通用服务配置
     VLLM_API_KEY = os.getenv('VLLM_API_KEY', 'EMPTY')
     VLLM_MODEL_NAME = os.getenv('VLLM_MODEL_NAME', 'qwen_v1')
+    
+    # Hugging Face 模型下载与存放目录
+    HF_MODEL_DIR = os.getenv('HF_MODEL_DIR', os.path.join(BASE_DIR, 'hugface'))
 
 class LocalConfig(BaseConfig):
     DEBUG = True
@@ -50,10 +56,10 @@ class LocalConfig(BaseConfig):
     WEBUI_HOST = '127.0.0.1'
     TENSORBOARD_HOST = '127.0.0.1'
     
-    # 本地版模型路径配置
-    EMBEDDING_MODEL_PATH = os.getenv('EMBEDDING_MODEL_PATH', r"e:\python\conda\RAG\model\bge-large-zh")
-    RERANKER_MODEL_PATH = os.getenv('RERANKER_MODEL_PATH', r"e:\python\conda\RAG\model\bge-reranker-large")
-    QWEN_LOCAL_MODEL_PATH = os.getenv('QWEN_LOCAL_MODEL_PATH', r"e:\python\conda\RAG\model\Qwen-7B-Chat")
+    # 本地版模型路径配置 (相对路径)
+    EMBEDDING_MODEL_PATH = os.getenv('EMBEDDING_MODEL_PATH', os.path.join(BASE_DIR, 'model', 'bge-large-zh'))
+    RERANKER_MODEL_PATH = os.getenv('RERANKER_MODEL_PATH', os.path.join(BASE_DIR, 'model', 'bge-reranker-large'))
+    QWEN_LOCAL_MODEL_PATH = os.getenv('QWEN_LOCAL_MODEL_PATH', os.path.join(BASE_DIR, 'model', 'Qwen-7B-Chat'))
     
     # 本地版 API URLs
     QWEN_API_URL = os.getenv('QWEN_API_URL', 'http://localhost:8000/v1/chat/completions')
@@ -73,10 +79,10 @@ class ProductionConfig(BaseConfig):
     WEBUI_HOST = '0.0.0.0'
     TENSORBOARD_HOST = '0.0.0.0'
     
-    # 线上版模型路径配置 (线上容器或服务器中的绝对路径)
-    EMBEDDING_MODEL_PATH = os.getenv('EMBEDDING_MODEL_PATH', '/root/autodl-tmp/RAG/model/bge-large-zh')
-    RERANKER_MODEL_PATH = os.getenv('RERANKER_MODEL_PATH', '/root/autodl-tmp/RAG/model/bge-reranker-large')
-    QWEN_LOCAL_MODEL_PATH = os.getenv('QWEN_LOCAL_MODEL_PATH', '/root/autodl-tmp/RAG/model/Qwen-7B-Chat')
+    # 线上版模型路径配置 (相对路径)
+    EMBEDDING_MODEL_PATH = os.getenv('EMBEDDING_MODEL_PATH', os.path.join(BASE_DIR, 'model', 'bge-large-zh'))
+    RERANKER_MODEL_PATH = os.getenv('RERANKER_MODEL_PATH', os.path.join(BASE_DIR, 'model', 'bge-reranker-large'))
+    QWEN_LOCAL_MODEL_PATH = os.getenv('QWEN_LOCAL_MODEL_PATH', os.path.join(BASE_DIR, 'model', 'Qwen-7B-Chat'))
 
     # 线上版 API URLs
     QWEN_API_URL = os.getenv('QWEN_API_URL', 'http://qwen-server:8000/v1/chat/completions')

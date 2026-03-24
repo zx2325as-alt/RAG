@@ -315,27 +315,51 @@ def download_model():
         
     try:
         import subprocess
+        import requests
+        
         if ":" in model_name and not "/" in model_name:
             # 认为是 Ollama 模型
             subprocess.Popen(["ollama", "pull", model_name], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
             return jsonify({'message': f'已在后台执行: ollama pull {model_name}'})
         else:
             # 认为是 HuggingFace 模型，调用 huggingface-cli
+            # 校验模型是否存在于 HuggingFace 镜像源
+            try:
+                # 使用镜像源进行简单校验，请求头设置适当超时时间
+                hf_mirror_url = f"https://hf-mirror.com/api/models/{model_name}"
+                check_response = requests.get(hf_mirror_url, timeout=5)
+                if check_response.status_code != 200:
+                    return jsonify({'error': f'校验失败：在 hf-mirror.com 上未找到模型 [{model_name}]，请检查 ID 是否正确。状态码: {check_response.status_code}'}), 404
+            except requests.exceptions.RequestException as e:
+                # 网络问题或其他请求异常
+                return jsonify({'error': f'校验失败：无法连接到 hf-mirror.com，请检查网络。({str(e)})'}), 500
+                
+            # 使用 Config.HF_MODEL_DIR 作为本地缓存目录，按模型名分子目录存放
+            # 完整保留模型名结构，替换 / 为 _，或者作为子目录。这里选择作为子目录，替换掉 / 防止路径穿越问题
+            safe_model_name = model_name.replace('/', '--') 
+            local_dir = os.path.join(Config.HF_MODEL_DIR, safe_model_name)
+            os.makedirs(local_dir, exist_ok=True)
+            
+            env = os.environ.copy()
+            env["HF_ENDPOINT"] = "https://hf-mirror.com"
+            
             subprocess.Popen(
-                ["huggingface-cli", "download", model_name], 
+                ["huggingface-cli", "download", model_name, "--local-dir", local_dir], 
                 stdout=open(os.path.join(current_app.root_path, '..', 'logs', 'hf_download.log'), 'a'),
-                stderr=subprocess.STDOUT
+                stderr=subprocess.STDOUT,
+                env=env
             )
-            return jsonify({'message': f'已在后台执行下载: {model_name}，请稍后查看日志'})
+            return jsonify({'message': f'✅ 校验通过！已在后台执行下载: {model_name}\n目标目录: {local_dir}\n请稍后查看日志并刷新列表'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @api_bp.route('/ollama/models', methods=['GET'])
 def get_ollama_models():
-    """获取本地 Ollama 或 vLLM 正在运行的模型列表"""
+    """获取本地 Ollama 或 vLLM 或 HuggingFace 正在运行/缓存的模型列表"""
     try:
         ollama_models_list = []
         vllm_models_list = []
+        hf_models_list = []
         
         # 1. 尝试获取 Ollama 模型
         try:
@@ -381,6 +405,19 @@ def get_ollama_models():
                             vllm_models_list.append(vllm_tag)
         except Exception as e:
             current_app.logger.debug(f"扫描本地离线 vLLM 目录失败: {e}")
+            
+        # 4. 扫描本地 Hugging Face 模型缓存目录
+        try:
+            hf_dir = Config.HF_MODEL_DIR
+            if os.path.exists(hf_dir):
+                for d in os.listdir(hf_dir):
+                    model_path = os.path.join(hf_dir, d)
+                    if os.path.isdir(model_path):
+                        # 检查是否包含常见模型文件（如 config.json, .safetensors 等）
+                        # 简单点的话，只要是目录就当作模型，或者是显式下载的模型
+                        hf_models_list.append(d)
+        except Exception as e:
+            current_app.logger.debug(f"扫描本地 HF 目录失败: {e}")
             
         # 定义在线推荐模型列表，大幅度扩充涵盖主流架构和尺寸
         online_models = [
@@ -433,9 +470,10 @@ def get_ollama_models():
         ]
         
         return jsonify({
-            'models': ollama_models_list + vllm_models_list, # 兼容老接口
+            'models': ollama_models_list + vllm_models_list + hf_models_list, # 兼容老接口
             'ollama_models': ollama_models_list,
             'vllm_models': vllm_models_list,
+            'hf_models': hf_models_list,
             'online_models': online_models,
             'query_online_models': Config.ONLINE_QUERY_MODELS
         })
@@ -443,11 +481,11 @@ def get_ollama_models():
     except Exception as e:
         current_app.logger.error(f'Error fetching models: {str(e)}')
         # 依然返回 200 和空列表，避免前端报错弹窗
-        return jsonify({'models': [], 'ollama_models': [], 'vllm_models': [], 'online_models': [], 'query_online_models': Config.ONLINE_QUERY_MODELS})
+        return jsonify({'models': [], 'ollama_models': [], 'vllm_models': [], 'hf_models': [], 'online_models': [], 'query_online_models': Config.ONLINE_QUERY_MODELS})
 
 @api_bp.route('/ollama/models', methods=['DELETE'])
 def delete_ollama_model():
-    """删除本地 Ollama 或 vLLM 模型"""
+    """删除本地 Ollama 或 vLLM 或 HuggingFace 模型"""
     data = request.json
     model_name = data.get('model_name')
     model_type = data.get('model_type', 'ollama')
@@ -470,6 +508,21 @@ def delete_ollama_model():
                 return jsonify({'message': f'模型目录 {real_model_name} 已成功删除'})
             else:
                 return jsonify({'error': '未找到对应的本地模型目录，无法删除 API 模型'}), 404
+        elif model_type == 'hf':
+            # 尝试删除本地 Hugging Face 缓存目录下的模型
+            # 由于可能带后缀或替换了 /，需要尝试匹配真实的目录名
+            safe_model_name = model_name.replace('/', '--')
+            target_dir = os.path.join(Config.HF_MODEL_DIR, safe_model_name)
+            
+            # 兼容老逻辑：如果是以前通过 id 查找到的文件夹名，直接用原名
+            if not os.path.exists(target_dir):
+                target_dir = os.path.join(Config.HF_MODEL_DIR, model_name)
+                
+            if os.path.exists(target_dir) and os.path.isdir(target_dir):
+                shutil.rmtree(target_dir)
+                return jsonify({'message': f'Hugging Face 模型缓存 {model_name} 已成功删除'})
+            else:
+                return jsonify({'error': '未找到对应的本地模型目录，无法删除该 Hugging Face 模型'}), 404
         else:
             # 调用 ollama rm 命令删除模型
             process = subprocess.Popen(
@@ -934,6 +987,12 @@ def start_finetune():
                 is_vllm = True
                 
             hf_model_path = base_model_name
+            
+            # 检查是否为本地下载的 HF 模型
+            local_hf_path = os.path.join(Config.HF_MODEL_DIR, base_model_name)
+            if os.path.exists(local_hf_path) and os.path.isdir(local_hf_path):
+                hf_model_path = local_hf_path
+                yield f"data: > [INFO] 发现本地 Hugging Face 模型缓存，直接使用绝对路径: {hf_model_path}\n\n"
             
             # 如果是 vllm 模型，优先去本地 finetuned_models 目录下找
             if is_vllm:

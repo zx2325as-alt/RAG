@@ -46,14 +46,18 @@
                             <select class="form-select mb-2" id="modelCategorySelect">
                                 <option value="ollama">本地模型 (Ollama)</option>
                                 <option value="vllm">本地模型 (vLLM)</option>
+                                <option value="hf">本地模型 (Hugging Face)</option>
                                 <option value="online">在线模型 (支持下载)</option>
                             </select>
                             <div class="input-group mb-2">
-                                <select class="form-select" id="baseModelSelect">
-                                    <option value="">加载中...</option>
-                                </select>
-                                <button class="btn btn-outline-primary" type="button" id="downloadModelBtn" title="下载选中的在线模型" style="display:none;">
+                                <input type="text" class="form-control" id="baseModelSelect" list="baseModelDatalist" placeholder="请选择或输入模型ID...">
+                                <datalist id="baseModelDatalist">
+                                </datalist>
+                                <button class="btn btn-outline-primary" type="button" id="downloadModelBtn" title="下载选中的模型" style="display:none;">
                                     ⬇️ 下载
+                                </button>
+                                <button class="btn btn-outline-secondary" type="button" id="refreshModelBtn" title="刷新本地缓存" onclick="loadModels()">
+                                    🔄 刷新
                                 </button>
                                 <button class="btn btn-outline-danger" type="button" id="deleteModelBtn" title="删除选中的本地模型">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
@@ -326,27 +330,54 @@
             let cachedFinetuneModels = {
                 ollama: [],
                 vllm: [],
+                hf: [],
                 online: []
             };
+            
+            // 预设的 Hugging Face 常用模型示例
+            const defaultHfModels = [
+                "Qwen/Qwen2.5-0.5B-Instruct",
+                "Qwen/Qwen2.5-1.5B-Instruct",
+                "Qwen/Qwen2.5-7B-Instruct",
+                "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct",
+                "THUDM/glm-4-9b-chat"
+            ];
 
             function updateBaseModelOptions() {
                 var category = $('#modelCategorySelect').val();
-                var select = $('#baseModelSelect');
-                select.empty();
+                var datalist = $('#baseModelDatalist');
+                var input = $('#baseModelSelect');
+                datalist.empty();
                 
                 var models = cachedFinetuneModels[category] || [];
-                if (models.length > 0) {
-                    models.forEach(function(model) {
-                        select.append(`<option value="${model}">${model}</option>`);
+                
+                // 如果是 hf 类别，把本地已有的和预设的合并，方便用户选择或直接下载
+                if (category === 'hf') {
+                    let combinedHfModels = [...new Set([...models, ...defaultHfModels])];
+                    combinedHfModels.forEach(function(model) {
+                        let label = models.includes(model) ? `${model} (已缓存)` : `${model} (未下载)`;
+                        datalist.append(`<option value="${model}">${label}</option>`);
                     });
+                    input.attr('placeholder', '请选择或输入Hugging Face模型ID...');
+                } else if (models.length > 0) {
+                    models.forEach(function(model) {
+                        datalist.append(`<option value="${model}">${model}</option>`);
+                    });
+                    input.attr('placeholder', '请选择或输入模型ID...');
                 } else {
-                    select.append('<option value="">无可用模型</option>');
+                    input.attr('placeholder', '无可用模型，可手动输入...');
                 }
+                
+                // 清空当前输入值，除非用户想保留
+                input.val('');
                 
                 // 根据类别显示/隐藏按钮
                 if (category === 'online') {
                     $('#downloadModelBtn').show();
                     $('#deleteModelBtn').hide();
+                } else if (category === 'hf') {
+                    $('#downloadModelBtn').show(); // 允许对 hf 类别进行下载，按输入的ID下载
+                    $('#deleteModelBtn').show(); // 允许删除本地 HF 模型
                 } else {
                     $('#downloadModelBtn').hide();
                     $('#deleteModelBtn').show();
@@ -357,27 +388,36 @@
                 updateBaseModelOptions();
             });
 
-            function loadModels() {
+            window.loadModels = function() {
+                var refreshBtn = $('#refreshModelBtn');
+                var originalRefreshText = refreshBtn.html();
+                refreshBtn.prop('disabled', true).html('...');
+                
                 $.ajax({
                     url: '/ollama/models',
                     type: 'GET',
                     success: function(response) {
                         cachedFinetuneModels.ollama = response.ollama_models || [];
                         cachedFinetuneModels.vllm = response.vllm_models || [];
+                        cachedFinetuneModels.hf = response.hf_models || [];
                         cachedFinetuneModels.online = response.online_models || [];
                         updateBaseModelOptions();
                     },
                     error: function() {
                         cachedFinetuneModels.ollama = [];
                         cachedFinetuneModels.vllm = [];
+                        cachedFinetuneModels.hf = [];
                         cachedFinetuneModels.online = [];
                         updateBaseModelOptions();
+                    },
+                    complete: function() {
+                        refreshBtn.prop('disabled', false).html(originalRefreshText);
                     }
                 });
             }
             
             // 初始加载
-            loadModels();
+            window.loadModels();
             
             // 删除模型绑定
             $('#deleteModelBtn').click(function() {
@@ -388,8 +428,8 @@
                     return;
                 }
                 
-                if (category === 'ollama' || category === 'vllm') {
-                    var modelLabel = category === 'ollama' ? 'Ollama' : 'vLLM';
+                if (category === 'ollama' || category === 'vllm' || category === 'hf') {
+                    var modelLabel = category === 'ollama' ? 'Ollama' : (category === 'vllm' ? 'vLLM' : 'Hugging Face');
                     if (confirm(`确定要删除本地 ${modelLabel} 模型 [${selectedModel}] 吗？\n注意：此操作不可逆！`)) {
                         var btn = $(this);
                         btn.prop('disabled', true);
@@ -400,7 +440,7 @@
                             data: JSON.stringify({ model_name: selectedModel, model_type: category }),
                             success: function(res) {
                                 alert(res.message || '删除成功');
-                                loadModels(); // 重新加载列表
+                                window.loadModels(); // 重新加载列表
                             },
                             error: function(err) {
                                 alert('删除失败: ' + (err.responseJSON ? err.responseJSON.error : '未知错误'));
