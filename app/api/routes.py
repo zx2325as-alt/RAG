@@ -759,6 +759,9 @@ def start_finetune():
         max_length = request.form.get('maxLength')
         precision = request.form.get('precision')
         quantization = request.form.get('quantization')
+        flash_attn = request.form.get('flashAttn')
+        packing = request.form.get('packing')
+        rope_scaling = request.form.get('ropeScaling')
         grad_acc = request.form.get('gradAcc')
         save_steps = request.form.get('saveSteps')
         eval_steps = request.form.get('evalSteps')
@@ -767,6 +770,8 @@ def start_finetune():
         weight_decay = request.form.get('weightDecay')
         max_grad_norm = request.form.get('maxGradNorm')
         seed = request.form.get('seed')
+        warmup_steps = request.form.get('warmupSteps')
+        warmup_ratio = request.form.get('warmupRatio')
         
         # 获取上传的数据集文件
         dataset_file = request.files.get('datasetFile')
@@ -961,7 +966,8 @@ def start_finetune():
                 "optim": optimizer if optimizer else "adamw_torch",
                 "lr_scheduler_type": lr_scheduler if lr_scheduler else "cosine",
                 "logging_steps": int(logging_steps) if logging_steps else 10,
-                "warmup_steps": int(warmup_steps) if warmup_steps else 100,
+                "warmup_steps": int(warmup_steps) if warmup_steps else 0,
+                "warmup_ratio": float(warmup_ratio) if warmup_ratio else 0.1,
                 "save_steps": int(save_steps) if save_steps else 1000,
                 "eval_steps": int(eval_steps) if eval_steps else 50,
                 "evaluation_strategy": "steps", # 修改为 steps 以便在 TensorBoard 中看到验证集指标
@@ -983,12 +989,29 @@ def start_finetune():
                 train_config["fp16"] = True
             elif precision == "bf16":
                 train_config["bf16"] = True
+            else: # fp32
+                train_config["pure_bf16"] = False
+                train_config["fp16"] = False
+                train_config["bf16"] = False
                 
             # 量化设置
-            if quantization == "4bit":
-                train_config["quantization_bit"] = 4
-            elif quantization == "8bit":
-                train_config["quantization_bit"] = 8
+            if quantization and quantization != 'none':
+                train_config["quantization_bit"] = int(quantization)
+                
+            # Flash Attention
+            if flash_attn and flash_attn != 'auto':
+                if flash_attn == 'none':
+                    train_config['flash_attn'] = "disable"
+                else:
+                    train_config['flash_attn'] = flash_attn
+                    
+            # 序列打包 Packing
+            if packing == 'true':
+                train_config['packing'] = True
+                
+            # RoPE Scaling
+            if rope_scaling and rope_scaling != 'none':
+                train_config['rope_scaling'] = rope_scaling
                 
             # 分布式训练支持 (DeepSpeed)
             if deepspeed and deepspeed != 'none':
