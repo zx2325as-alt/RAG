@@ -337,12 +337,15 @@ def get_ollama_models():
         
         # 1. 尝试获取 Ollama 模型
         try:
-            response = requests.get(f"{Config.OLLAMA_BASE_URL}/api/tags", timeout=3)
+            response = requests.get(f"{Config.OLLAMA_BASE_URL}/api/tags", timeout=1)
             if response.status_code == 200:
                 models = response.json().get('models', [])
                 ollama_models_list.extend([m['name'] for m in models])
+        except requests.exceptions.RequestException:
+            # Ollama 未启动是常态，静默处理
+            pass
         except Exception as e:
-            current_app.logger.warning(f"Ollama 服务未启动或连接失败: {e}")
+            current_app.logger.debug(f"Ollama 模型列表解析异常: {e}")
             
         # 2. 尝试获取 vLLM (OpenAI 兼容接口) 模型列表
         try:
@@ -351,42 +354,80 @@ def get_ollama_models():
             if not vllm_base.endswith('/v1'):
                 vllm_base = vllm_base.rstrip('/') + '/v1'
                 
-            vllm_resp = requests.get(f"{vllm_base}/models", timeout=3)
+            vllm_resp = requests.get(f"{vllm_base}/models", timeout=1) # 缩短超时时间，避免前端卡顿
             if vllm_resp.status_code == 200:
                 vllm_models = vllm_resp.json().get('data', [])
                 # OpenAI 兼容接口返回的格式是 {"id": "model_name", ...}
                 vllm_models_list.extend([f"vllm: {m['id']}" for m in vllm_models if 'id' in m])
+        except requests.exceptions.RequestException:
+            # vLLM 端口未启动，进入离线兜底模式
+            pass
         except Exception as e:
-            current_app.logger.warning(f"vLLM 服务未启动或连接失败: {e}")
+            current_app.logger.debug(f"vLLM 模型列表解析异常: {e}")
             
-        # 定义在线推荐模型列表，增加更多不同尺寸和架构的模型
+        # 3. 离线兜底：扫描本地 finetuned_models 目录，找出潜在的 vLLM 兼容模型（合并后的目录）
+        # 即使 8000 端口没起，也要让用户能在下拉框选到它们并点击“启动”
+        try:
+            models_dir = os.path.join(current_app.root_path, '..', 'finetuned_models')
+            if os.path.exists(models_dir):
+                for d in os.listdir(models_dir):
+                    # 通常我们合并后的模型带 _merged，或者是一个标准的 huggingface 目录
+                    if os.path.isdir(os.path.join(models_dir, d)) and d not in ['base_models', 'runs']:
+                        # 为了避免重复，只添加那些不在已有列表里的
+                        vllm_tag = f"vllm: {d}"
+                        if vllm_tag not in vllm_models_list:
+                            vllm_models_list.append(vllm_tag)
+        except Exception as e:
+            current_app.logger.debug(f"扫描本地离线 vLLM 目录失败: {e}")
+            
+        # 定义在线推荐模型列表，大幅度扩充涵盖主流架构和尺寸
         online_models = [
-            # Qwen 系列
+            # ==== Qwen 系列 ====
             "Qwen/Qwen2.5-0.5B-Instruct",
             "Qwen/Qwen2.5-1.5B-Instruct",
             "Qwen/Qwen2.5-3B-Instruct",
             "Qwen/Qwen2.5-7B-Instruct",
             "Qwen/Qwen2.5-14B-Instruct",
             "Qwen/Qwen2.5-32B-Instruct",
+            "Qwen/Qwen2.5-72B-Instruct",
+            "Qwen/Qwen2.5-Coder-1.5B-Instruct",
             "Qwen/Qwen2.5-Coder-7B-Instruct",
-            # DeepSeek 系列
-            "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct",
+            "Qwen/Qwen2.5-Coder-32B-Instruct",
+            "Qwen/Qwen2.5-Math-1.5B-Instruct",
+            "Qwen/Qwen2.5-Math-7B-Instruct",
+            
+            # ==== DeepSeek 系列 ====
             "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
             "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+            "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B",
+            "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
             "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
-            # Llama 3 / 3.1 / 3.2 系列
-            "meta-llama/Meta-Llama-3-8B-Instruct",
-            "meta-llama/Llama-3.1-8B-Instruct",
+            "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct",
+            "deepseek-ai/deepseek-llm-7b-chat",
+            
+            # ==== Llama 3 / 3.1 / 3.2 系列 ====
             "meta-llama/Llama-3.2-1B-Instruct",
             "meta-llama/Llama-3.2-3B-Instruct",
-            # GLM 系列
-            "THUDM/chatglm3-6b",
+            "meta-llama/Meta-Llama-3.1-8B-Instruct",
+            "meta-llama/Meta-Llama-3-8B-Instruct",
+            
+            # ==== GLM 系列 ====
             "THUDM/glm-4-9b-chat",
-            # 其它流行架构
+            "THUDM/chatglm3-6b",
+            
+            # ==== Mistral & Gemma 系列 ====
+            "mistralai/Mistral-7B-Instruct-v0.3",
+            "mistralai/Mistral-Nemo-Instruct-2407",
             "google/gemma-2-2b-it",
             "google/gemma-2-9b-it",
+            "google/gemma-2-27b-it",
+            
+            # ==== Yi & Baichuan 系列 ====
             "01-ai/Yi-1.5-6B-Chat",
-            "01-ai/Yi-1.5-9B-Chat"
+            "01-ai/Yi-1.5-9B-Chat",
+            "01-ai/Yi-1.5-34B-Chat",
+            "baichuan-inc/Baichuan2-7B-Chat",
+            "baichuan-inc/Baichuan2-13B-Chat"
         ]
         
         return jsonify({
