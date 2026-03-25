@@ -37,6 +37,8 @@
             </div>
         </div>
 
+        <div id="alertContainer" class="d-none mb-4"></div>
+
         <div id="reportContainer" style="display: none;">
             <!-- 核心指标 -->
             <div class="row mb-4">
@@ -170,6 +172,15 @@
                 
                 $.get('/api/eval_data?model_name=' + modelName, function(data) {
                     btn.prop('disabled', false).text('生成报告');
+                    
+                    if (data.metrics && data.metrics.status) {
+                        $('#alertContainer').removeClass('d-none').html('<div class="alert alert-warning">' + data.metrics.status + '</div>');
+                        $('#reportContainer').hide();
+                        return; // 结束渲染
+                    } else {
+                        $('#alertContainer').addClass('d-none');
+                    }
+                    
                     $('#reportContainer').fadeIn();
                     
                     // 填充核心指标
@@ -308,7 +319,8 @@
                     }
                 }).fail(function() {
                     btn.prop('disabled', false).text('生成报告');
-                    alert('获取评估数据失败，可能是该模型尚未完成评估或目录不存在。');
+                    $('#alertContainer').removeClass('d-none').html('<div class="alert alert-danger">获取评估数据失败，可能是该模型尚未完成评估或目录不存在。</div>');
+                    $('#reportContainer').hide();
                 });
             });
         });

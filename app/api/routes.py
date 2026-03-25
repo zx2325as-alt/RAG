@@ -4,6 +4,7 @@ from app.db import db
 from app.services.document_service import DocumentService
 from app.services.qa_service import QAService
 from app.config import Config
+from werkzeug.utils import secure_filename
 import os
 import sys
 from datetime import datetime
@@ -163,7 +164,8 @@ def upload_document():
             current_app.logger.info(f'Document {doc.doc_name} uploaded successfully with id {doc.doc_id}')
             
             # 启动后台线程进行异步处理，避免阻塞 Web 响应
-            filepath = os.path.join(document_service.upload_folder, db_name, secure_filename(file.filename))
+            # 使用 document_service 里面处理过的安全文件名，因为 doc.doc_name 已经是保留中文的安全文件名了
+            filepath = os.path.join(document_service.upload_folder, db_name, doc.doc_name)
             thread = threading.Thread(
                 target=process_document_background, 
                 args=(current_app._get_current_object(), doc.doc_id, filepath, db_name)
@@ -202,9 +204,21 @@ def delete_document(doc_id):
     try:
         doc = Document.query.get(doc_id)
         if not doc:
-            return jsonify({'error': 'Document not found'}), 404
+            # 即使数据库里没有找到，可能只是状态不一致，返回 404
+            return jsonify({'error': 'Document not found in database'}), 404
             
         db_name = getattr(doc, 'db_name', 'default')
+        
+        # 尝试删除物理文件 (使用 try-except 防止因为文件不存在导致整个删除流程中断)
+        try:
+            document_service = get_document_service()
+            filepath = os.path.join(document_service.upload_folder, db_name, doc.doc_name)
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            else:
+                current_app.logger.warning(f"File {filepath} not found on disk, proceeding with DB deletion.")
+        except Exception as file_e:
+            current_app.logger.warning(f"Failed to delete physical file: {file_e}")
         
         # 从数据库中删除相关的 chunks
         Chunk.query.filter_by(doc_id=doc_id).delete()
@@ -212,16 +226,13 @@ def delete_document(doc_id):
         # 删除文档记录
         db.session.delete(doc)
         db.session.commit()
-        
-        # 尝试删除物理文件
-        document_service = get_document_service()
-        filepath = os.path.join(document_service.upload_folder, db_name, doc.doc_name)
-        if os.path.exists(filepath):
-            os.remove(filepath)
             
         # 触发重建索引
-        kb = get_kb_service()
-        kb.build_index(db_name)
+        try:
+            kb = get_kb_service()
+            kb.build_index(db_name)
+        except Exception as kb_e:
+            current_app.logger.warning(f"Failed to rebuild index after deletion: {kb_e}")
         
         return jsonify({'message': 'Document deleted successfully'})
     except Exception as e:
@@ -652,18 +663,43 @@ def feedback():
         return jsonify({'error': 'Missing parameters'}), 400
         
     if int(score) < 4:
-        # 自动构建 DPO/SFT 数据集
+        # 自动构建 DPO/SFT 数据集，增加待审核机制与 LLM 裁判清洗
         if correct_answer:
-            dpo_file = os.path.join(current_app.root_path, '..', 'data', 'dpo_dataset.jsonl')
-            os.makedirs(os.path.dirname(dpo_file), exist_ok=True)
-            dpo_entry = {
-                "instruction": question,
-                "input": "",
-                "output": correct_answer,
-                "rejected": answer
-            }
-            with open(dpo_file, 'a', encoding='utf-8') as f:
-                f.write(json.dumps(dpo_entry, ensure_ascii=False) + '\n')
+            try:
+                qa_service = get_qa_service()
+                # 使用 LLM 清洗用户的纠正数据，将其格式化为标准的运维手册口吻
+                clean_prompt = f"""
+请将以下用户的纠正建议重新组织为标准、专业、步骤清晰的运维操作手册格式。
+去除任何口语化、情绪化的表达。
+如果建议本身不合理或无意义，请仅返回"INVALID"。
+
+用户原问题: {question}
+用户纠正建议: {correct_answer}
+"""
+                from langchain_core.messages import HumanMessage
+                clean_response = qa_service.llm.invoke([HumanMessage(content=clean_prompt)])
+                cleaned_output = clean_response.content.strip()
+                
+                if cleaned_output != "INVALID":
+                    # 将清洗后的数据写入 pending 目录，等待人工审核
+                    pending_dir = os.path.join(current_app.root_path, '..', 'data', 'pending_datasets')
+                    os.makedirs(pending_dir, exist_ok=True)
+                    pending_file = os.path.join(pending_dir, 'pending_dpo.jsonl')
+                    
+                    dpo_entry = {
+                        "instruction": question,
+                        "input": "",
+                        "output": cleaned_output,
+                        "rejected": answer,
+                        "raw_feedback": correct_answer,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    with open(pending_file, 'a', encoding='utf-8') as f:
+                        f.write(json.dumps(dpo_entry, ensure_ascii=False) + '\n')
+                        
+                    current_app.logger.info("Feedback processed and sent to pending pool for review.")
+            except Exception as e:
+                current_app.logger.error(f"Error in processing feedback via LLM judge: {e}")
 
         try:
             from flask import Response
@@ -736,7 +772,7 @@ def get_eval_data():
     trainer_state_file = os.path.join(model_dir, 'trainer_state.json')
     
     if not os.path.exists(model_dir):
-        return jsonify({'error': '找不到该模型的微调记录'}), 404
+        return jsonify({'metrics': {'status': '获取评估数据失败，可能是该模型尚未完成评估或目录不存在。'}})
         
     # 如果根目录没有 trainer_state.json，尝试去最新的 checkpoint 目录里找
     if not os.path.exists(trainer_state_file):
@@ -825,7 +861,12 @@ def get_eval_data():
             
     # 如果没有 metrics 也没有 loss 历史，说明目录为空或训练还没开始
     if not response_data.get('metrics') and not has_loss_data:
-        return jsonify({'error': '获取评估数据失败，可能是该模型尚未产生训练日志或目录不存在。'}), 404
+        # 尝试检查模型目录是否存在，如果存在但没有日志，可能仅仅是没有 eval 或者 LLaMA-Factory 配置不输出日志
+        if os.path.exists(model_dir):
+            response_data['metrics'] = {'status': '模型目录存在，但尚未产生标准的训练或评估日志文件。'}
+            return jsonify(response_data)
+        else:
+            return jsonify({'metrics': {'status': '获取评估数据失败，可能是该模型尚未产生训练日志或目录不存在。'}})
         
     # 尝试获取真实生成的样例比对结果 (通常由 LLaMA-Factory 的 predict 产生)
     predict_file = os.path.join(model_dir, 'generated_predictions.jsonl')

@@ -182,14 +182,44 @@ class QAService:
             except Exception as e:
                 print(f"Rewrite Query Error: {e}")
 
-        # 2. Agent 路由：Text2SQL (运维数据库查询拦截)
-        # 简单模拟 Function Calling 路由：如果检测到特定的运维数据库查询意图，直接返回SQL及结果
-        if "告警次数" in search_query or "数据库查询" in search_query:
+        # 2. Agent 路由：扩展更多的 Function Calling (模拟)
+        # 简单模拟 Function Calling 路由：根据关键字触发不同的运维 API 插件
+        if any(kw in search_query for kw in ["告警次数", "数据库查询"]):
+            # Text2SQL 插件
             sql_query = "SELECT count(*) FROM alerts WHERE date = DATE('now', '-1 day') AND status = 'unresolved';"
             simulated_result = "经查询 Zabbix/Prometheus 数据库，昨日新增未恢复告警共计 **15** 条。"
             agent_msg = f"*(已触发 Text2SQL 运维插件)*\n\n**执行SQL:**\n```sql\n{sql_query}\n```\n\n**查询结果:**\n{simulated_result}"
             yield json.dumps({"type": "chunk", "content": agent_msg}) + "\n"
-            yield json.dumps({"type": "sources", "sources": [{"content": "Zabbix DB", "score": 1.0}]}) + "\n"
+            yield json.dumps({"type": "sources", "sources": [{"content": "运维告警数据库", "doc_name": "Text2SQL 插件", "score": 1.0}]}) + "\n"
+            return
+            
+        elif any(kw in search_query.lower() for kw in ["zabbix状态", "zabbix api", "主机状态"]):
+            # Zabbix API 插件模拟
+            simulated_result = """
+通过调用 `Zabbix API (host.get)` 获取到的实时状态：
+- **Web-Server-01** (192.168.1.10): CPU 使用率 85% (Warning), 内存剩余 2GB
+- **DB-Server-01** (192.168.1.11): CPU 使用率 20% (OK), 内存剩余 16GB
+"""
+            agent_msg = f"*(已触发 Zabbix API 实时查询插件)*\n\n**API 响应:**\n{simulated_result}"
+            yield json.dumps({"type": "chunk", "content": agent_msg}) + "\n"
+            yield json.dumps({"type": "sources", "sources": [{"content": "Zabbix 监控系统", "doc_name": "Zabbix API", "score": 1.0}]}) + "\n"
+            return
+            
+        elif any(kw in search_query.lower() for kw in ["k8s", "kubernetes", "pod状态", "集群状态"]):
+            # K8s API 插件模拟
+            simulated_result = """
+通过执行 `kubectl get pods -n kube-system` 获取到的实时状态：
+```text
+NAME                                      READY   STATUS             RESTARTS   AGE
+coredns-5d78c9869d-7j9v2                  1/1     Running            0          12d
+kube-proxy-7d9cb856b4-v8m9x               0/1     CrashLoopBackOff   12         2d
+metrics-server-v7p8x                      1/1     Running            0          12d
+```
+> **诊断结论**: 发现 `kube-proxy` 组件处于 `CrashLoopBackOff` 状态，建议立即检查网络插件 (如 Calico/Flannel) 的日志。
+"""
+            agent_msg = f"*(已触发 Kubernetes API 实时诊断插件)*\n\n**集群诊断报告:**\n{simulated_result}"
+            yield json.dumps({"type": "chunk", "content": agent_msg}) + "\n"
+            yield json.dumps({"type": "sources", "sources": [{"content": "K8s API Server", "doc_name": "Kubernetes API", "score": 1.0}]}) + "\n"
             return
 
         # 3. Retrieval 使用改写后的完整问题进行检索，支持多库
@@ -296,9 +326,15 @@ class QAService:
         
         # 2. 动态调整 Prompt (根据分数不同，优化策略不同)
         if int(score) <= 2:
-            strategy_prompt = "用户对上一次回答非常不满意。请彻底抛弃之前的思路，从提供的参考资料中寻找更底层的原理或更全面的排查步骤，务必给出极其详细和基础的解释。"
+            strategy_prompt = """
+用户指出上一轮回答存在严重错误或未能解决问题。
+请进行自我反思与交叉验证：仔细核对以下所有提供的参考资料。
+1. 如果发现资料之间存在冲突，请明确指出。
+2. 如果提供的资料中完全没有任何与问题相关的解决办法或线索，请坦诚告知“当前知识库中未找到相关排障文档”，并建议用户检查实时监控系统（如 Zabbix/Kubernetes）。
+3. 绝对不要猜测或编造解决方案。
+"""
         else:
-            strategy_prompt = "用户认为上一次回答不够完美。请在参考资料的基础上，补充更多细节，重点说明各个方案的优缺点和适用场景。"
+            strategy_prompt = "用户认为上一次回答不够完美。请在参考资料的基础上，补充更多细节，重点说明各个方案的优缺点和适用场景，并确保证明依据充分。"
             
         reanalyze_prompt = ChatPromptTemplate.from_messages([
             ("system", f"""你是一位专家级的故障诊断顾问。

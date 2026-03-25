@@ -14,6 +14,10 @@ from app.db import db
 from app.db.models import Chunk, VectorIndex, Document
 from datetime import datetime
 from rank_bm25 import BM25Okapi
+try:
+    from neo4j import GraphDatabase
+except ImportError:
+    GraphDatabase = None
 
 class KnowledgeBaseService:
     def __init__(self):
@@ -47,6 +51,18 @@ class KnowledgeBaseService:
         self.vector_stores = {}
         # 结构: {"db_name": {"bm25": bm25_instance, "chunk_map": {}}}
         self.bm25_stores = {}
+        
+        # Initialize Neo4j Driver for Graph RAG if configured
+        self.neo4j_driver = None
+        if GraphDatabase and Config.NEO4J_URI:
+            try:
+                self.neo4j_driver = GraphDatabase.driver(
+                    Config.NEO4J_URI, 
+                    auth=(Config.NEO4J_USER, Config.NEO4J_PASSWORD)
+                )
+                print("Neo4j driver initialized successfully for Graph RAG.")
+            except Exception as e:
+                print(f"Failed to initialize Neo4j driver: {e}")
         
         self.load_all_indexes()
 
@@ -221,13 +237,66 @@ class KnowledgeBaseService:
         
         self.build_bm25_index(db_name)
 
+    def _extract_entities_from_query(self, query):
+        """简单模拟从 query 中抽取实体（在生产环境中可使用 LLM 抽取）"""
+        entities = []
+        # 常见运维实体模拟抽取
+        keywords = ["服务器", "数据库", "Zabbix", "Nginx", "MySQL", "网络", "Redis", "宕机"]
+        for kw in keywords:
+            if kw.lower() in query.lower():
+                entities.append(kw)
+        return entities
+
+    def graph_search(self, query):
+        """执行图数据库检索 (Graph RAG)"""
+        if not self.neo4j_driver:
+            return []
+            
+        entities = self._extract_entities_from_query(query)
+        if not entities:
+            return []
+            
+        graph_results = []
+        try:
+            with self.neo4j_driver.session() as session:
+                for entity in entities:
+                    # 查询该实体相关的 1 级和 2 级关联节点，用于发现牵一发而动全身的问题
+                    cypher_query = """
+                    MATCH (n)-[r*1..2]-(m)
+                    WHERE n.name CONTAINS $entity OR n.ip CONTAINS $entity
+                    RETURN n.name as source, type(r[-1]) as relation, m.name as target, m.ip as target_ip
+                    LIMIT 5
+                    """
+                    result = session.run(cypher_query, entity=entity)
+                    for record in result:
+                        target_info = f"{record['target']} ({record['target_ip']})" if record['target_ip'] else record['target']
+                        relation_desc = f"图谱关联: [{record['source']}] --({record['relation']})--> [{target_info}]"
+                        # 包装成与 Vector/BM25 相同的结构
+                        doc = LangchainDocument(
+                            page_content=relation_desc,
+                            metadata={
+                                "doc_id": "graph_db",
+                                "doc_name": "运维拓扑图谱",
+                                "db_name": "neo4j",
+                                "chunk_id": "graph_node"
+                            }
+                        )
+                        graph_results.append((doc, 0.95)) # 赋予图谱结果一个较高的初始信任分数
+        except Exception as e:
+            print(f"Graph search error: {e}")
+            
+        return graph_results
+
     def search(self, query, top_k=5, db_names=['default']):
-        """Hybrid Search: Vector + BM25 across multiple databases."""
+        """Hybrid Search: Vector + BM25 + Graph RAG across multiple databases."""
         if not isinstance(db_names, list):
             db_names = [db_names]
             
         all_vector_results = []
         all_bm25_results = []
+        
+        # 1. Graph RAG 检索
+        graph_results = self.graph_search(query)
         
         for db_name in db_names:
             vs = self.vector_stores.get(db_name)
@@ -312,6 +381,9 @@ class KnowledgeBaseService:
         # 取融合后的Top-50进入重排序阶段
         top_50_fused = [item["doc"] for item in sorted_results[:50]]
         
+        # 将图谱结果无条件置顶混入，不经过重排序（因为其具有高确定性）
+        graph_docs = [item[0] for item in graph_results]
+        
         # 4. Rerank (重排序)
         reranked_results = []
         if top_50_fused:
@@ -349,8 +421,11 @@ class KnowledgeBaseService:
                 
             # 按重排序得分降序
             reranked_results.sort(key=lambda x: x[1], reverse=True)
-            final_results = reranked_results[:top_k]
+            
+            # 将图谱结果前置
+            final_results = graph_results + reranked_results
+            final_results = final_results[:top_k]
         else:
-            final_results = []
+            final_results = graph_results[:top_k]
         
         return final_results

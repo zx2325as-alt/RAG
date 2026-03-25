@@ -21,18 +21,23 @@ class DocumentService:
         return hash_md5.hexdigest()
 
     def upload_document(self, file, db_name='default'):
-        filename = secure_filename(file.filename)
+        # 修正：werkzeug 的 secure_filename 会过滤掉中文，导致 "97_人工智能.pdf" 变成 "97_.pdf"
+        # 针对中文文件，我们可以将非 ASCII 字符保留，或者直接用原名但替换掉危险字符
+        original_filename = file.filename
+        # 简单安全处理：替换掉路径遍历符号，保留中文
+        safe_filename = original_filename.replace('/', '_').replace('\\', '_').replace('..', '_')
+        
         # 为不同数据库创建子目录
         db_folder = os.path.join(self.upload_folder, db_name)
         if not os.path.exists(db_folder):
             os.makedirs(db_folder)
             
-        filepath = os.path.join(db_folder, filename)
+        filepath = os.path.join(db_folder, safe_filename)
         file.save(filepath)
         
         # Deduplication Check
         file_md5 = self.calculate_md5(filepath)
-        existing_doc = Document.query.filter_by(doc_name=filename, db_name=db_name).first() 
+        existing_doc = Document.query.filter_by(doc_name=safe_filename, db_name=db_name).first() 
         # Note: In real production, we should add an md5 column to Document table and query by that.
         # For now, we check by filename as a simple proxy, or we can assume content deduplication is enough.
         # Let's stick to filename for simplicity unless we migrate schema.
@@ -40,12 +45,12 @@ class DocumentService:
         if existing_doc:
             # Check if status is completed, if so, maybe return existing
             if existing_doc.status == 'completed':
-                print(f"Document {filename} already exists in {db_name}. Skipping processing.")
+                print(f"Document {safe_filename} already exists in {db_name}. Skipping processing.")
                 os.remove(filepath) # Remove duplicate file
                 return existing_doc
         
         # Create DB record
-        new_doc = Document(doc_name=filename, doc_type=filename.split('.')[-1], status='pending', db_name=db_name)
+        new_doc = Document(doc_name=safe_filename, doc_type=safe_filename.split('.')[-1], status='pending', db_name=db_name)
         db.session.add(new_doc)
         db.session.commit()
         
