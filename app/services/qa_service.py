@@ -79,13 +79,17 @@ class QAService:
                 base_url=Config.DEEPSEEK_API_URL.replace('/chat/completions', ''), 
                 api_key=Config.DEEPSEEK_API_KEY,
                 model=Config.DEEPSEEK_MODEL_NAME,
-                temperature=0.3 # 适当提高温度以增加全面性和发散性
+                temperature=0.3,
+                max_retries=1,
+                timeout=60
             )
         elif active_llm == 'chatgpt':
             self.llm = ChatOpenAI(
                 api_key=os.getenv('OPENAI_API_KEY', 'EMPTY'),
                 model='gpt-3.5-turbo',
-                temperature=0.3
+                temperature=0.3,
+                max_retries=1,
+                timeout=60
             )
         elif active_llm == 'ollama':
             from langchain_community.chat_models import ChatOllama
@@ -104,15 +108,33 @@ class QAService:
                 base_url=base_url, 
                 api_key=Config.VLLM_API_KEY,
                 model=Config.VLLM_MODEL_NAME,
-                temperature=0.3
+                temperature=0.3,
+                max_retries=1,
+                timeout=60
             )
-        else: # 默认使用 qwen
-            self.llm = ChatOpenAI(
-                base_url=Config.QWEN_API_URL.replace('/chat/completions', ''), 
-                api_key=Config.QWEN_API_KEY,
-                model=Config.QWEN_MODEL_NAME,
-                temperature=0.3
-            )
+        else: # 默认使用 qwen 或者其它在线模型（动态传入的名字）
+            # 检查是否是在线模型列表中的模型
+            is_online = any(m['id'] == active_llm for m in Config.ONLINE_QUERY_MODELS)
+            
+            if is_online and active_llm == 'qwen':
+                # 专门处理通义千问官方API (阿里云百炼)
+                self.llm = ChatOpenAI(
+                    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1", 
+                    api_key=os.getenv('DASHSCOPE_API_KEY', Config.QWEN_API_KEY),
+                    model="qwen-plus", # 默认使用 qwen-plus
+                    temperature=0.3,
+                    max_retries=1,
+                    timeout=60
+                )
+            else:
+                self.llm = ChatOpenAI(
+                    base_url=Config.QWEN_API_URL.replace('/chat/completions', ''), 
+                    api_key=Config.QWEN_API_KEY,
+                    model=Config.QWEN_MODEL_NAME,
+                    temperature=0.3,
+                    max_retries=1,
+                    timeout=60
+                )
 
     def get_cache_key(self, question):
         return hashlib.md5(question.encode('utf-8')).hexdigest()

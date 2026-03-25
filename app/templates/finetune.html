@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>模型微调 (Ollama) - 湖北移动运维知识助手</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/vendor/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
@@ -232,7 +232,7 @@
                 <div class="modal-header bg-light" id="tbModalHeader" style="cursor: move;">
                     <h5 class="modal-title" id="tensorboardModalLabel">📈 TensorBoard 实时训练监控 (可拖动/缩放)</h5>
                     <div class="ms-auto">
-                        <a href="http://127.0.0.1:6006" target="_blank" class="btn btn-sm btn-outline-primary me-2">新窗口打开全屏</a>
+                        <a href="javascript:void(0);" onclick="window.open('http://' + window.location.hostname + ':6006')" class="btn btn-sm btn-outline-primary me-2">新窗口打开全屏</a>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                 </div>
@@ -245,10 +245,10 @@
     </div>
 
     <!-- 引入 jQuery UI 以支持拖拽 -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
-    <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/vendor/js/jquery-3.6.0.min.js"></script>
+    <script src="/static/vendor/js/jquery-ui.min.js"></script>
+    <link rel="stylesheet" href="/static/vendor/css/jquery-ui.css">
+    <script src="/static/vendor/js/bootstrap.bundle.min.js"></script>
     <script>
         $(document).ready(function() {
             // 启用拖拽功能，将 handle 设置为 modal-header

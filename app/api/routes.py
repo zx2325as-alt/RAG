@@ -74,9 +74,9 @@ def start_tensorboard():
         log_dir = os.path.join(current_app.root_path, '..', 'finetuned_models', 'runs')
         os.makedirs(log_dir, exist_ok=True)
         
-        # 使用 Popen 后台拉起 TensorBoard，增加 --reload_interval 1 以实现秒级实时刷新
+        # 使用 Popen 后台拉起 TensorBoard，增加 --reload_interval 1 以实现秒级实时刷新，并增加 --bind_all 允许外部访问
         tensorboard_process = subprocess.Popen(
-            [sys.executable, "-m", "tensorboard.main", "--logdir", log_dir, "--host", Config.TENSORBOARD_HOST, "--port", str(Config.TENSORBOARD_PORT), "--reload_interval", "1"],
+            [sys.executable, "-m", "tensorboard.main", "--logdir", log_dir, "--host", "0.0.0.0", "--bind_all", "--port", str(Config.TENSORBOARD_PORT), "--reload_interval", "1"],
             stdout=open(os.path.join(current_app.root_path, '..', 'logs', 'tensorboard_stdout.log'), 'w'),
             stderr=subprocess.STDOUT
         )
@@ -947,19 +947,19 @@ def start_finetune():
                 import json
                 valid_lines = []
                 with open(source_dataset_path, 'r', encoding='utf-8') as f:
-                    # 尝试读取整个文件，判断是否为纯 JSON 数组 (例如整个文件是一个大列表 [...])
-                    # 这对于从网上直接下载的 .json 改名而来的文件非常关键
-                    try:
-                        f.seek(0)
-                        content = f.read()
-                        parsed_content = json.loads(content)
-                        if isinstance(parsed_content, list):
-                            items = parsed_content
-                        else:
-                            items = [parsed_content]
-                    except json.JSONDecodeError:
-                        # 如果不是整个 JSON 数组，回退到按行读取 JSONL 模式
-                        f.seek(0)
+                    # 检查是否为纯 JSON 数组（以 [ 开头）
+                    first_char = f.read(1)
+                    f.seek(0)
+                    if first_char == '[':
+                        try:
+                            # 如果是数组，直接加载
+                            items = json.load(f)
+                            if not isinstance(items, list):
+                                items = [items]
+                        except json.JSONDecodeError:
+                            items = []
+                    else:
+                        # 按行读取 JSONL 模式，避免将超大文件一次性读入内存
                         items = []
                         for line_idx, line in enumerate(f):
                             line = line.strip()
@@ -1165,6 +1165,7 @@ def start_finetune():
                 "save_steps": int(save_steps) if save_steps and save_steps != 'undefined' else 1000,
                 "eval_steps": int(eval_steps) if eval_steps and eval_steps != 'undefined' else 50,
                 "eval_strategy": "steps", # 修改为 steps 以便在 TensorBoard 中看到验证集指标
+                "per_device_eval_batch_size": 1, # 强制降低评估批次大小，防止大型测试集导致 OOM
                 "learning_rate": float(learning_rate) if learning_rate and learning_rate != 'undefined' else 2e-4,
                 "num_train_epochs": float(epochs) if epochs and epochs != 'undefined' else 3.0,
                 "max_length": int(max_length) if max_length and max_length != 'undefined' else 1024, # 降低默认最大长度防 OOM
