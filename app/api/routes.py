@@ -1147,7 +1147,7 @@ def start_finetune():
                 "warmup_ratio": float(warmup_ratio) if warmup_ratio and warmup_ratio != 'undefined' else 0.1,
                 "save_steps": int(save_steps) if save_steps and save_steps != 'undefined' else 1000,
                 "eval_steps": int(eval_steps) if eval_steps and eval_steps != 'undefined' else 50,
-                "evaluation_strategy": "steps", # 修改为 steps 以便在 TensorBoard 中看到验证集指标
+                "eval_strategy": "steps", # 修改为 steps 以便在 TensorBoard 中看到验证集指标
                 "learning_rate": float(learning_rate) if learning_rate and learning_rate != 'undefined' else 2e-4,
                 "num_train_epochs": float(epochs) if epochs and epochs != 'undefined' else 3.0,
                 "max_length": int(max_length) if max_length and max_length != 'undefined' else 2048,
