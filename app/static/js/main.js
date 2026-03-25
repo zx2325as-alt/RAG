@@ -1,6 +1,14 @@
 // 全局变量用于存储待上传的文件列表，避免页面切换或多次选择丢失
 let pendingFiles = [];
 
+// 配置 marked.js 支持 markdown
+if (typeof marked !== 'undefined') {
+    marked.setOptions({
+        breaks: true,
+        gfm: true
+    });
+}
+
 // 将 File 对象列表渲染到前端
 function renderPendingFiles() {
     var listContainer = $('#selectedFilesList');
@@ -273,6 +281,15 @@ function loadOllamaModels() {
 
 // 全局变量用于存储当前的请求控制器
 let currentAbortController = null;
+let currentChatSessionId = null;
+
+// 配置 marked.js
+if (typeof marked !== 'undefined') {
+    marked.setOptions({
+        breaks: true,
+        gfm: true
+    });
+}
 
 function sendMessage() {
     var query = $('#queryInput').val().trim();
@@ -362,10 +379,6 @@ function sendMessage() {
         $('#stopBtn').addClass('d-none');
         currentAbortController = null;
 
-        // 流结束时，解析内联引用
-        var textElem = $(`#${botMsgId}-text`);
-        textElem.html(formatCitations(textElem.html()));
-
         // 渲染打分组件
         appendRatingToMessage(botMsgId, query);
     });
@@ -383,8 +396,8 @@ $(document).ready(function() {
 function appendEmptyBotMessage(msgId) {
     var html = `
         <div class="d-flex flex-row justify-content-start mb-3" id="${msgId}-container">
-            <div class="chat-bubble bot" style="position: relative;">
-                <p class="mb-0" id="${msgId}-text"></p>
+            <div class="chat-bubble bot markdown-body" style="position: relative;">
+                <div class="mb-0 message-content" id="${msgId}-text"></div>
                 <div id="${msgId}-sources"></div>
                 <div id="${msgId}-rating" class="mt-2 text-end" style="font-size: 0.85rem; border-top: 1px dashed #dee2e6; padding-top: 5px;"></div>
             </div>
@@ -538,9 +551,54 @@ function executeAutoScript(scriptName) {
 
 function appendChunkToMessage(msgId, textChunk) {
     var textElem = $(`#${msgId}-text`);
-    // 将 \n 转换为 <br> 但要防止 XSS，这里简单处理
-    var safeChunk = textChunk.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
-    textElem.append(safeChunk);
+    var rawText = textElem.data('raw') || '';
+    rawText += textChunk;
+    textElem.data('raw', rawText);
+    
+    try {
+        // Format citations before parsing markdown
+        var formattedText = formatCitations(rawText);
+        
+        var parsedHtml = formattedText;
+        if (typeof marked !== 'undefined') {
+            if (typeof marked.parse === 'function') {
+                parsedHtml = marked.parse(formattedText);
+            } else if (typeof marked === 'function') {
+                parsedHtml = marked(formattedText);
+            } else {
+                parsedHtml = formattedText.replace(/\n/g, '<br>');
+            }
+        } else {
+            parsedHtml = formattedText.replace(/\n/g, '<br>');
+        }
+        textElem.html(parsedHtml);
+        
+        // Render math formulas if KaTeX is available
+        if (typeof renderMathInElement === 'function') {
+            renderMathInElement(textElem[0], {
+                delimiters: [
+                    {left: '$$', right: '$$', display: true},
+                    {left: '$', right: '$', display: false},
+                    {left: '\\(', right: '\\)', display: false},
+                    {left: '\\[', right: '\\]', display: true}
+                ],
+                throwOnError: false
+            });
+        }
+        
+        // Apply syntax highlighting
+        textElem.find('pre code').each(function(i, block) {
+            if (typeof hljs !== 'undefined') {
+                hljs.highlightElement(block);
+            }
+        });
+    } catch (err) {
+        console.error("Error rendering message chunk:", err);
+        // Fallback: display raw text
+        var safeChunk = rawText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+        textElem.html(safeChunk);
+    }
+    
     scrollToBottom();
 }
 
@@ -563,21 +621,62 @@ function appendMessage(sender, text, sources) {
     var bubbleClass = sender === 'user' ? 'user' : 'bot';
     var alignClass = sender === 'user' ? 'justify-content-end' : 'justify-content-start';
     
-    var displayContent = text.replace(/\n/g, '<br>');
+    var displayContent = text;
     if (sender !== 'user') {
-        displayContent = formatCitations(displayContent);
+        try {
+            var formattedText = formatCitations(text);
+            if (typeof marked !== 'undefined') {
+                if (typeof marked.parse === 'function') {
+                    displayContent = marked.parse(formattedText);
+                } else if (typeof marked === 'function') {
+                    displayContent = marked(formattedText);
+                } else {
+                    displayContent = formattedText.replace(/\n/g, '<br>');
+                }
+            } else {
+                displayContent = formattedText.replace(/\n/g, '<br>');
+            }
+        } catch (err) {
+            console.error("Error formatting message:", err);
+            displayContent = text.replace(/\n/g, '<br>');
+        }
+    } else {
+        displayContent = text.replace(/\n/g, '<br>');
     }
     
     var html = `
         <div class="d-flex flex-row ${alignClass} mb-3">
-            <div class="chat-bubble ${bubbleClass}">
-                <p class="mb-0">${displayContent}</p>
+            <div class="chat-bubble ${bubbleClass} markdown-body">
+                <div class="mb-0 message-content">${displayContent}</div>
                 ${renderSources(sources)}
             </div>
         </div>
     `;
     
-    $('#chatHistory').append(html);
+    var newElem = $(html);
+    $('#chatHistory').append(newElem);
+    
+    // Apply KaTeX and highlight.js for bot messages
+    if (sender !== 'user') {
+        var contentElem = newElem.find('.message-content')[0];
+        if (typeof renderMathInElement === 'function') {
+            renderMathInElement(contentElem, {
+                delimiters: [
+                    {left: '$$', right: '$$', display: true},
+                    {left: '$', right: '$', display: false},
+                    {left: '\\(', right: '\\)', display: false},
+                    {left: '\\[', right: '\\]', display: true}
+                ],
+                throwOnError: false
+            });
+        }
+        if (typeof hljs !== 'undefined') {
+            newElem.find('pre code').each(function(i, block) {
+                hljs.highlightElement(block);
+            });
+        }
+    }
+    
     scrollToBottom();
 }
 

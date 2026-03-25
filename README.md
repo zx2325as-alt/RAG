@@ -46,7 +46,7 @@
 
 系统采用**前后端分离**、**读写分离**以及**微服务化解耦**的设计理念。
 
-```Markdown
+```JSON
 graph TD
     subgraph Frontend [前端展示层 (HTML/JS/Bootstrap)]
         UI_QA[智能问答对话 UI]
@@ -188,6 +188,7 @@ RAG/
 ## 7. 部署与快速启动指南
 
 ### 7.1 环境准备
+
 1. **操作系统**: 推荐 Ubuntu 22.04 / CentOS 7+ / Windows 10+ (需支持 WSL2 或直接 Python 环境)。
 2. **硬件要求**:
    - **CPU/内存**: 至少 8核 16GB RAM（仅运行 RAG 检索）。
@@ -216,13 +217,16 @@ pip install paddlepaddle-gpu paddleocr -i https://pypi.tuna.tsinghua.edu.cn/simp
 ```
 
 ### 7.3 模型下载与放置
+
 请从 Hugging Face 或 ModelScope 下载以下两个核心基础模型，并放置于项目根目录的 `model/` 文件夹下：
+
 1. `bge-large-zh` (Embedding模型) -> `RAG/model/bge-large-zh/`
 2. `bge-reranker-large` (重排模型) -> `RAG/model/bge-reranker-large/`
 
-*(注：系统 `config.py` 默认读取此相对路径，若路径不同，请在 `.env` 中覆盖配置)*
+*(注：系统* *`config.py`* *默认读取此相对路径，若路径不同，请在* *`.env`* *中覆盖配置)*
 
 ### 7.4 配置文件设置
+
 在项目根目录创建或修改 `.env` 文件：
 
 ```ini
@@ -244,6 +248,7 @@ DEEPSEEK_API_KEY=sk-your-api-key-here
 # 确保在 RAG 项目根目录下执行
 python app/main.py
 ```
+
 服务启动后，默认可通过浏览器访问：`http://127.0.0.1:6008`。
 
 ***
@@ -253,6 +258,7 @@ python app/main.py
 平台前后端通过标准的 RESTful API 和 SSE 进行通信，以下为部分核心接口说明：
 
 ### 8.1 文档上传与知识库构建
+
 - **URL**: `/upload`
 - **Method**: `POST`
 - **Content-Type**: `multipart/form-data`
@@ -262,17 +268,19 @@ python app/main.py
 - **返回值**: 立即返回 `200 OK`，包含 `{"message": "All files uploaded successfully"}`。实际的解析、向量化过程通过 Python 后台线程异步执行，不阻塞当前请求。
 
 ### 8.2 知识检索与流式生成
+
 - **URL**: `/query`
 - **Method**: `POST`
 - **Content-Type**: `application/json`
 - **参数**:
   - `question`: (String) 用户提问。
-  - `db_names`: (Array[String]) 需要检索的知识库范围。
+  - `db_names`: (Array\[String]) 需要检索的知识库范围。
 - **返回值**: `text/event-stream` (SSE 流)。
   - `{"type": "chunk", "content": "..."}`: 增量生成的回答 Token。
   - `{"type": "sources", "sources": [{"doc_name": "...", "content": "...", "score": 0.98}]}`: 最终返回的被采纳的参考文献元数据。
 
 ### 8.3 触发模型微调
+
 - **URL**: `/api/finetune/start`
 - **Method**: `POST`
 - **Content-Type**: `application/json`
@@ -285,21 +293,25 @@ python app/main.py
 
 **Q1: 为什么上传大型 PDF 文件时速度极慢，甚至导致服务器内存/显存耗尽？**
 **A**:
+
 - 检查该 PDF 是否为全扫描件（无文本层）。若是，系统会自动回退使用 `PaddleOCR` 逐页识别图片，这是一个非常耗时的深度学习推理过程。
 - **解决方案**: 我们已在代码 (`file_processor.py`) 中限制了单文档的最大 OCR 页数 (`max_ocr_pages = 5`)。若仍卡顿，可尝试在部署环境中彻底卸载 `paddleocr`，系统将优雅降级，跳过图片识别。
 
-**Q2: 提问时终端报错 `sqlalchemy.orm.exc.DetachedInstanceError` 导致回答中断。**
+**Q2: 提问时终端报错** **`sqlalchemy.orm.exc.DetachedInstanceError`** **导致回答中断。**
 **A**:
+
 - **原因**: 发生在 SSE 流式响应阶段。因为流式生成器在 `yield` 时，原本的 Flask Request Context 可能已结束，数据库 Session 被回收。此时访问惰性加载的属性（如 `chunk.document.doc_name`）会引发此异常。
 - **解决方案**: 该问题已在最新版本中修复。我们在 `KnowledgeBaseService` 的检索方法中捕获了该异常，并使用 `with current_app.app_context():` 重新发起短连接查询，确保流式输出的绝对稳定。
 
 **Q3: 为什么有时候大模型回答很好，但底部的“参考资料”却显示“抱歉，知识库中没有相关信息”？**
 **A**:
+
 - **原因**: 用户的提问触发了代码内置的 **Agentic 路由拦截**（例如：包含“告警次数”或“数据库查询”等字眼）。此时系统模拟了 Text2SQL 插件行为直接返回了设定好的数据库结果，跳过了 FAISS 检索。
 - **调整**: 若需修改或禁用此类硬编码的 Agent 拦截，请查阅 `qa_service.py` 中的 `Agent 路由` 相关代码段。
 
-**Q4: 微调启动失败，提示 `DatasetGenerationError: Please pass features or at least one example`。**
+**Q4: 微调启动失败，提示** **`DatasetGenerationError: Please pass features or at least one example`。**
 **A**:
+
 - **原因**: 提交的微调数据集为空，或者 JSONL 格式不合法导致 LLaMA-Factory 无法加载。
 - **解决方案**: 我们在 `/api/finetune/start` 接口中加入了严格的数据集落盘校验，如果体积为 0 将直接在前端报错拦截。请确保在网页端配置数据集时，至少包含一条有效的 Instruction/Output 记录。
 

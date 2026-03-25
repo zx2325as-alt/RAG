@@ -149,24 +149,21 @@ class KnowledgeBaseService:
                 os.remove(pkl_file)
             return
 
+        from app.db import db
+        from app.db.models import Document
+        
+        # 预先获取文档映射，避免在循环中触发 N+1 查询或 DetachedInstanceError
+        doc_ids = list(set([chunk.doc_id for chunk in chunks if chunk.doc_id]))
+        doc_map = {}
+        try:
+            docs = db.session.query(Document).filter(Document.doc_id.in_(doc_ids)).all()
+            doc_map = {doc.doc_id: doc.doc_name for doc in docs}
+        except Exception as e:
+            print(f"Warning: Failed to fetch document map for indexing: {e}")
+
         documents = []
         for chunk in chunks:
-            # 尝试获取 doc_name，防止 DetachedInstanceError
-            doc_name = "Unknown"
-            try:
-                if hasattr(chunk, 'document') and chunk.document:
-                    doc_name = chunk.document.doc_name
-            except Exception:
-                from app.db import db
-                from app.db.models import Document
-                from flask import current_app
-                try:
-                    with current_app.app_context():
-                        doc = db.session.query(Document).filter_by(doc_id=chunk.doc_id).first()
-                        if doc:
-                            doc_name = doc.doc_name
-                except Exception:
-                    pass
+            doc_name = doc_map.get(chunk.doc_id, "Unknown")
 
             meta = {
                 "chunk_id": chunk.chunk_id,
@@ -201,24 +198,21 @@ class KnowledgeBaseService:
             self.build_index(db_name)
             return
 
+        from app.db import db
+        from app.db.models import Document
+        
+        # 预先获取文档映射，避免在循环中触发 N+1 查询或 DetachedInstanceError
+        doc_ids = list(set([chunk.doc_id for chunk in chunks if chunk.doc_id]))
+        doc_map = {}
+        try:
+            docs = db.session.query(Document).filter(Document.doc_id.in_(doc_ids)).all()
+            doc_map = {doc.doc_id: doc.doc_name for doc in docs}
+        except Exception as e:
+            print(f"Warning: Failed to fetch document map for adding documents: {e}")
+
         documents = []
         for chunk in chunks:
-            # 尝试获取 doc_name，防止 DetachedInstanceError
-            doc_name = "Unknown"
-            try:
-                if hasattr(chunk, 'document') and chunk.document:
-                    doc_name = chunk.document.doc_name
-            except Exception:
-                from app.db import db
-                from app.db.models import Document
-                from flask import current_app
-                try:
-                    with current_app.app_context():
-                        doc = db.session.query(Document).filter_by(doc_id=chunk.doc_id).first()
-                        if doc:
-                            doc_name = doc.doc_name
-                except Exception:
-                    pass
+            doc_name = doc_map.get(chunk.doc_id, "Unknown")
                     
             meta = {
                 "chunk_id": chunk.chunk_id,

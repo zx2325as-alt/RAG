@@ -237,6 +237,22 @@ metrics-server-v7p8x                      1/1     Running            0          
             # 将序号一并编入 Context 供 LLM 参考
             context_parts.append(f"资料 [{i+1}]:\n{doc.page_content}")
             doc_name = doc.metadata.get("doc_name", "Unknown")
+            
+            # 如果元数据里是 Unknown，尝试从数据库里查一次
+            if doc_name == "Unknown":
+                try:
+                    from app.db import db
+                    from app.db.models import Document
+                    from flask import current_app
+                    with current_app.app_context():
+                        doc_id = doc.metadata.get("doc_id")
+                        if doc_id:
+                            db_doc = db.session.query(Document).filter_by(doc_id=doc_id).first()
+                            if db_doc:
+                                doc_name = db_doc.doc_name
+                except Exception:
+                    pass
+
             sources.append({
                 "content": doc.page_content[:100] + "...",
                 "doc_id": doc.metadata.get("doc_id"),
@@ -312,14 +328,29 @@ metrics-server-v7p8x                      1/1     Running            0          
         
         context_parts = []
         sources = []
-        for i, (doc, s) in enumerate(results):
+        for i, (doc, score) in enumerate(results):
             context_parts.append(f"资料 [{i+1}]:\n{doc.page_content}")
             doc_name = doc.metadata.get("doc_name", "Unknown")
+            
+            if doc_name == "Unknown":
+                try:
+                    from app.db import db
+                    from app.db.models import Document
+                    from flask import current_app
+                    with current_app.app_context():
+                        doc_id = doc.metadata.get("doc_id")
+                        if doc_id:
+                            db_doc = db.session.query(Document).filter_by(doc_id=doc_id).first()
+                            if db_doc:
+                                doc_name = db_doc.doc_name
+                except Exception:
+                    pass
+                    
             sources.append({
                 "content": doc.page_content[:100] + "...",
                 "doc_id": doc.metadata.get("doc_id"),
                 "doc_name": doc_name,
-                "score": float(s)
+                "score": float(score)
             })
             
         context = "\n\n".join(context_parts)

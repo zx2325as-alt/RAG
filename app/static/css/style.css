@@ -41,3 +41,48 @@ body {
     margin-top: 5px;
     display: none;
 }
+
+/* Markdown 样式增强 */
+.markdown-body pre {
+    background-color: #f6f8fa;
+    border-radius: 6px;
+    padding: 12px;
+    overflow: auto;
+    font-size: 85%;
+    line-height: 1.45;
+}
+
+.markdown-body code {
+    background-color: rgba(175, 184, 193, 0.2);
+    border-radius: 6px;
+    padding: 0.2em 0.4em;
+    font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+}
+
+.markdown-body pre code {
+    background-color: transparent;
+    padding: 0;
+}
+
+.markdown-body p {
+    margin-bottom: 10px;
+}
+
+.markdown-body p:last-child {
+    margin-bottom: 0;
+}
+
+.markdown-body table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 1rem;
+}
+
+.markdown-body table th, .markdown-body table td {
+    border: 1px solid #dee2e6;
+    padding: 0.3rem;
+}
+
+.markdown-body table th {
+    background-color: #f8f9fa;
+}

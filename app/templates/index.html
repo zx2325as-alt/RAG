@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>湖北移动运维知识助手</title>
     <link href="/static/vendor/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/vendor/css/default.min.css" rel="stylesheet">
+    <link href="/static/vendor/css/katex.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
@@ -28,7 +30,7 @@
     </nav>
 
     <div class="container-fluid py-3" style="height: 100vh; display: flex; flex-direction: column;">
-        <h2 class="text-center mb-3">🛠️ 湖北移动知识库问答排障系统</h2>
+        <!-- <h2 class="text-center mb-3">🛠️ 湖北移动知识库问答排障系统</h2> -->
         <div class="row flex-grow-1 overflow-hidden">
             <!-- 左侧：知识库管理与状态 -->
             <div class="col-md-4 d-flex flex-column h-100 overflow-auto pr-2">
@@ -163,6 +165,10 @@
 
     <script src="/static/vendor/js/bootstrap.bundle.min.js"></script>
     <script src="/static/vendor/js/jquery-3.6.0.min.js"></script>
+    <script src="/static/vendor/js/marked.min.js"></script>
+    <script src="/static/vendor/js/highlight.min.js"></script>
+    <script src="/static/vendor/js/katex.min.js"></script>
+    <script src="/static/vendor/js/auto-render.min.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>
