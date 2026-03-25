@@ -883,7 +883,7 @@ def get_checkpoints():
 
 @api_bp.route('/api/get_datasets', methods=['GET'])
 def get_datasets():
-    """获取 uploads 目录下的所有 jsonl 数据集文件"""
+    """获取 uploads 目录下的所有  jsonl 数据集文件"""
     try:
         upload_dir = os.path.join(current_app.root_path, '..', Config.UPLOAD_FOLDER)
         if not os.path.exists(upload_dir):
