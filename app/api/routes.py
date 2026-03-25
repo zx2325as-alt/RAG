@@ -883,19 +883,20 @@ def get_checkpoints():
 
 @api_bp.route('/api/get_datasets', methods=['GET'])
 def get_datasets():
-    """获取 uploads 目录下的所有  jsonl 数据集文件"""
+    """获取 uploads/datasets/raw 目录下的所有 jsonl 数据集文件"""
     try:
-        upload_dir = os.path.join(current_app.root_path, '..', Config.UPLOAD_FOLDER)
-        if not os.path.exists(upload_dir):
+        raw_dataset_dir = os.path.join(current_app.root_path, '..', Config.UPLOAD_FOLDER, 'datasets', 'raw')
+        if not os.path.exists(raw_dataset_dir):
+            os.makedirs(raw_dataset_dir, exist_ok=True)
             return jsonify({'datasets': []})
             
         datasets = []
-        for file in os.listdir(upload_dir):
+        for file in os.listdir(raw_dataset_dir):
             if file.endswith('.jsonl') and not file.startswith('cleaned_'):
                 datasets.append(file)
                 
         # 按修改时间降序排序，最新上传的排在前面
-        datasets.sort(key=lambda x: os.path.getmtime(os.path.join(upload_dir, x)), reverse=True)
+        datasets.sort(key=lambda x: os.path.getmtime(os.path.join(raw_dataset_dir, x)), reverse=True)
         return jsonify({'datasets': datasets})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -975,13 +976,15 @@ def start_finetune():
             
         dataset_path = None
         if dataset_file_name:
-            # 构建源文件的绝对路径
-            source_dataset_path = os.path.join(current_app.root_path, '..', Config.UPLOAD_FOLDER, dataset_file_name)
+            # 构建源文件的绝对路径 (现在从 raw 目录读取)
+            source_dataset_path = os.path.join(current_app.root_path, '..', Config.UPLOAD_FOLDER, 'datasets', 'raw', dataset_file_name)
             if not os.path.exists(source_dataset_path):
                 return jsonify({'error': f'找不到数据集文件: {dataset_file_name}'}), 404
                 
-            # 我们将清洗后的文件依然存放在 uploads 目录下，加上一个 cleaned 前缀，避免重复清洗
-            dataset_path = os.path.join(current_app.root_path, '..', Config.UPLOAD_FOLDER, f"cleaned_{dataset_file_name}")
+            # 我们将清洗后的文件存放在 datasets/cleaned 目录下
+            cleaned_dir = os.path.join(current_app.root_path, '..', Config.UPLOAD_FOLDER, 'datasets', 'cleaned')
+            os.makedirs(cleaned_dir, exist_ok=True)
+            dataset_path = os.path.join(cleaned_dir, f"cleaned_{dataset_file_name}")
             
             # 读取并清洗 JSONL 文件，过滤掉有语法错误的行，同时统一下格式
             try:
