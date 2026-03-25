@@ -881,6 +881,25 @@ def get_checkpoints():
     checkpoints.sort(key=lambda x: int(x.split('-')[1]) if x.split('-')[1].isdigit() else 0, reverse=True)
     return jsonify({'checkpoints': checkpoints})
 
+@api_bp.route('/api/get_datasets', methods=['GET'])
+def get_datasets():
+    """获取 uploads 目录下的所有 jsonl 数据集文件"""
+    try:
+        upload_dir = os.path.join(current_app.root_path, '..', Config.UPLOAD_FOLDER)
+        if not os.path.exists(upload_dir):
+            return jsonify({'datasets': []})
+            
+        datasets = []
+        for file in os.listdir(upload_dir):
+            if file.endswith('.jsonl') and not file.startswith('cleaned_'):
+                datasets.append(file)
+                
+        # 按修改时间降序排序，最新上传的排在前面
+        datasets.sort(key=lambda x: os.path.getmtime(os.path.join(upload_dir, x)), reverse=True)
+        return jsonify({'datasets': datasets})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @api_bp.route('/finetune/start', methods=['POST'])
 def start_finetune():
     """接收前端传来的微调任务参数，开始微调"""
@@ -914,11 +933,14 @@ def start_finetune():
         warmup_steps = request.form.get('warmupSteps')
         warmup_ratio = request.form.get('warmupRatio')
         
-        # 获取上传的数据集文件
-        dataset_file = request.files.get('datasetFile')
+        # 获取选中的数据集文件名
+        dataset_file_name = request.form.get('datasetFileName')
         
         if not base_model:
             return jsonify({'error': 'Missing base model'}), 400
+            
+        if not dataset_file_name:
+            return jsonify({'error': '未选择数据集文件'}), 400
             
         # 自动生成版本号形式的 new_model
         base_name_clean = base_model
@@ -952,40 +974,43 @@ def start_finetune():
             version += 1
             
         dataset_path = None
-        if dataset_file and dataset_file.filename:
-            # 确保 uploads 目录存在
-            upload_dir = os.path.join(current_app.root_path, '..', Config.UPLOAD_FOLDER)
-            os.makedirs(upload_dir, exist_ok=True)
-            dataset_path = os.path.join(upload_dir, f"dataset_{datetime.now().strftime('%Y%m%d%H%M%S')}.jsonl")
+        if dataset_file_name:
+            # 构建源文件的绝对路径
+            source_dataset_path = os.path.join(current_app.root_path, '..', Config.UPLOAD_FOLDER, dataset_file_name)
+            if not os.path.exists(source_dataset_path):
+                return jsonify({'error': f'找不到数据集文件: {dataset_file_name}'}), 404
+                
+            # 我们将清洗后的文件依然存放在 uploads 目录下，加上一个 cleaned 前缀，避免重复清洗
+            dataset_path = os.path.join(current_app.root_path, '..', Config.UPLOAD_FOLDER, f"cleaned_{dataset_file_name}")
             
-            # 读取并清洗上传的 JSONL 文件，过滤掉有语法错误的行，同时统一下格式
+            # 读取并清洗 JSONL 文件，过滤掉有语法错误的行，同时统一下格式
             try:
                 import json
                 valid_lines = []
-                file_content = dataset_file.read().decode('utf-8')
-                for line_idx, line in enumerate(file_content.splitlines()):
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        # 尝试解析每一行，验证 JSON 格式是否正确
-                        item = json.loads(line)
-                        # 确保有必备字段 (这里做宽泛兼容，支持常见的 alpaca 或 sharegpt 变体)
-                        if isinstance(item, dict):
-                            # 清洗可能重复的字段 (比如日志里提到的 Column(/answer) was specified twice)
-                            cleaned_item = {k: v for k, v in item.items()}
+                with open(source_dataset_path, 'r', encoding='utf-8') as f:
+                    for line_idx, line in enumerate(f):
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            # 尝试解析每一行，验证 JSON 格式是否正确
+                            item = json.loads(line)
+                            # 确保有必备字段 (这里做宽泛兼容，支持常见的 alpaca 或 sharegpt 变体)
+                            if isinstance(item, dict):
+                                # 清洗可能重复的字段 (比如日志里提到的 Column(/answer) was specified twice)
+                                cleaned_item = {k: v for k, v in item.items()}
+                                
+                                # 统一映射到标准的 alpaca 格式：instruction, input, output
+                                final_item = {}
+                                final_item['instruction'] = cleaned_item.get('instruction') or cleaned_item.get('question') or cleaned_item.get('prompt') or ""
+                                final_item['input'] = cleaned_item.get('input') or ""
+                                final_item['output'] = cleaned_item.get('output') or cleaned_item.get('answer') or cleaned_item.get('response') or ""
+                                
+                                if final_item['instruction'] and final_item['output']:
+                                    valid_lines.append(json.dumps(final_item, ensure_ascii=False))
+                        except Exception as e:
+                            current_app.logger.warning(f"跳过包含语法错误的 JSONL 行: {line_idx}. Error: {e}")
                             
-                            # 统一映射到标准的 alpaca 格式：instruction, input, output
-                            final_item = {}
-                            final_item['instruction'] = cleaned_item.get('instruction') or cleaned_item.get('question') or cleaned_item.get('prompt') or ""
-                            final_item['input'] = cleaned_item.get('input') or ""
-                            final_item['output'] = cleaned_item.get('output') or cleaned_item.get('answer') or cleaned_item.get('response') or ""
-                            
-                            if final_item['instruction'] and final_item['output']:
-                                valid_lines.append(json.dumps(final_item, ensure_ascii=False))
-                    except Exception as e:
-                        current_app.logger.warning(f"跳过包含语法错误的 JSONL 行: {line_idx}. Error: {e}")
-                        
                 with open(dataset_path, 'w', encoding='utf-8') as f:
                     f.write('\n'.join(valid_lines))
                     
@@ -1077,11 +1102,11 @@ def start_finetune():
                 time.sleep(1)
             
             if not dataset_path:
-                yield f"data: > [ERROR] 必须提供有效的 JSONL 数据集文件！\n\n"
+                yield f"data: > [ERROR] 必须选择有效的 JSONL 数据集文件！\n\n"
                 yield f"data: [DONE]\n\n"
                 return
                 
-            yield f"data: > 成功加载数据集: {dataset_file.filename}\n\n"
+            yield f"data: > 成功加载数据集: {dataset_file_name}\n\n"
             
             # 为 LLaMA-Factory 动态生成 dataset_info.json 注册文件
             dataset_dir = os.path.dirname(dataset_path)
@@ -1153,6 +1178,8 @@ def start_finetune():
                 "max_length": int(max_length) if max_length and max_length != 'undefined' else 2048,
                 "weight_decay": float(weight_decay) if weight_decay and weight_decay != 'undefined' else 0.0,
                 "max_grad_norm": float(max_grad_norm) if max_grad_norm and max_grad_norm != 'undefined' else 1.0,
+                "dataloader_num_workers": 4, # 启用多进程数据加载，防止 CPU 成为瓶颈导致 GPU 空载等待
+                "dataloader_pin_memory": True, # 锁页内存，加速 CPU 到 GPU 的数据拷贝
                 "seed": int(seed) if seed and seed != 'undefined' else 42,
                 "plot_loss": True,
                 "report_to": "tensorboard", # 启用 TensorBoard 记录

@@ -73,12 +73,19 @@
 
                 <div class="card shadow-sm">
                     <div class="card-header bg-light">
-                        <h5 class="mb-0">2. 上传微调数据集</h5>
+                        <h5 class="mb-0">2. 选择微调数据集</h5>
                     </div>
                     <div class="card-body">
                         <div class="mb-3">
-                            <label class="form-label">支持格式：JSONL (问答对)</label>
-                            <input class="form-control" type="file" id="datasetFile" accept=".jsonl">
+                            <label class="form-label">从 uploads 目录选择 JSONL 数据集</label>
+                            <div class="input-group">
+                                <select class="form-select" id="datasetSelect">
+                                    <option value="">加载中...</option>
+                                </select>
+                                <button class="btn btn-outline-secondary" type="button" id="refreshDatasetBtn" title="刷新文件列表">
+                                    🔄 刷新
+                                </button>
+                            </div>
                         </div>
                         <div class="alert alert-info" style="font-size: 0.85rem;">
                             <strong>提示：</strong>由于 Ollama 官方主要用于模型推理，本界面的微调底层需要借助外部工具（如 unsloth 或 LLaMA-Factory）完成训练，再通过 Ollama Modelfile 导入。
@@ -377,6 +384,44 @@
             // 初始加载
             window.loadModels();
             
+            // 获取并加载 uploads 目录下的 JSONL 文件列表
+            function loadDatasets() {
+                var select = $('#datasetSelect');
+                var refreshBtn = $('#refreshDatasetBtn');
+                var originalRefreshText = refreshBtn.html();
+                refreshBtn.prop('disabled', true).html('...');
+                select.html('<option value="">加载中...</option>');
+                
+                $.ajax({
+                    url: '/api/get_datasets',
+                    type: 'GET',
+                    success: function(response) {
+                        select.empty();
+                        if (response.datasets && response.datasets.length > 0) {
+                            response.datasets.forEach(function(file) {
+                                select.append(`<option value="${file}">${file}</option>`);
+                            });
+                        } else {
+                            select.append('<option value="">uploads 目录下未找到 .jsonl 文件</option>');
+                        }
+                    },
+                    error: function() {
+                        select.html('<option value="">获取数据集列表失败</option>');
+                    },
+                    complete: function() {
+                        refreshBtn.prop('disabled', false).html(originalRefreshText);
+                    }
+                });
+            }
+            
+            // 绑定刷新数据集按钮事件
+            $('#refreshDatasetBtn').click(function() {
+                loadDatasets();
+            });
+            
+            // 初始加载数据集列表
+            loadDatasets();
+            
             // 删除模型绑定
             $('#deleteModelBtn').click(function() {
                 var selectedModel = $('#baseModelSelect').val();
@@ -422,11 +467,16 @@
                 return;
             }
             
-            var fileInput = document.getElementById('datasetFile');
+            var selectedDataset = $('#datasetSelect').val();
+            if (!selectedDataset) {
+                alert("请先选择或上传一个微调数据集！");
+                return;
+            }
             
             // 组装表单数据发送给后端
             var formData = new FormData();
             formData.append('baseModel', model);
+            formData.append('datasetFileName', selectedDataset); // 传递选中的文件名
             // newModelName 由后端自动生成版本号，前端不再传递
             formData.append('epochs', $('#epochsInput').val());
             formData.append('batchSize', $('#batchSizeInput').val());
@@ -454,10 +504,6 @@
             formData.append('weightDecay', $('#weightDecayInput').val());
             formData.append('maxGradNorm', $('#maxGradNormInput').val());
             formData.append('seed', $('#seedInput').val());
-            
-            if (fileInput.files.length > 0) {
-                formData.append('datasetFile', fileInput.files[0]);
-            }
             
             $('#startFinetuneBtn').prop('disabled', true).addClass('d-none');
             $('#stopFinetuneBtn').removeClass('d-none');
