@@ -1006,11 +1006,17 @@ def start_finetune():
                                 final_item['input'] = cleaned_item.get('input') or ""
                                 final_item['output'] = cleaned_item.get('output') or cleaned_item.get('answer') or cleaned_item.get('response') or ""
                                 
+                                # Hugging Face datasets 要求在写入时传入 features 或者至少保证有一个非空字段的样本
+                                # 如果解析出来的字典全是空字符串，可能会导致 SchemaInferenceError
                                 if final_item['instruction'] and final_item['output']:
                                     valid_lines.append(json.dumps(final_item, ensure_ascii=False))
                         except Exception as e:
                             current_app.logger.warning(f"跳过包含语法错误的 JSONL 行: {line_idx}. Error: {e}")
                             
+                # 检查是否成功提取到了有效数据
+                if not valid_lines:
+                    return jsonify({'error': '数据集清洗后为空！请确保 JSONL 文件中包含 instruction/question/prompt 和 output/answer/response 字段。'}), 400
+                    
                 with open(dataset_path, 'w', encoding='utf-8') as f:
                     f.write('\n'.join(valid_lines))
                     
@@ -1133,8 +1139,16 @@ def start_finetune():
                 }
             }
             
+            # 为了防止 DatasetGenerationError: Please pass features or at least one example when writing data
+            # 确保 dataset_info 写入磁盘
             with open(dataset_info_path, 'w', encoding='utf-8') as f:
                 json.dump(dataset_info, f, indent=2, ensure_ascii=False)
+                
+            # 二次确认文件是否为空（这在生成器上下文中很重要，如果为空提前终止）
+            if os.path.getsize(dataset_path) == 0:
+                yield f"data: > [ERROR] 数据集文件为空，无法继续训练！请检查数据格式。\n\n"
+                yield f"data: [DONE]\n\n"
+                return
                 
             yield f"data: > 数据集已成功注册到: dataset_info.json\n\n"
             
