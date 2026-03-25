@@ -50,28 +50,7 @@ class DocumentService:
         db.session.commit()
         
         # Trigger parsing immediately (for demo purposes)
-        try:
-            # 获取解析的 chunks 以便进行增量更新
-            chunks = self.parse_document(new_doc.doc_id, filepath)
-            
-            # 解析完成后，进行增量向量索引更新，避免每次都全量重建（极大提升速度）
-            if chunks:
-                from flask import current_app
-                if hasattr(current_app, 'qa_service'):
-                    kb = current_app.qa_service.kb_service
-                else:
-                    # 如果还没有初始化，手动初始化一次，保证全局单例
-                    from app.services.qa_service import QAService
-                    current_app.qa_service = QAService()
-                    kb = current_app.qa_service.kb_service
-                kb.add_documents(chunks, db_name=db_name)
-                
-        except Exception as e:
-            import traceback
-            print(f"Parsing failed: {e}\n{traceback.format_exc()}")
-            new_doc.status = 'failed'
-            db.session.commit()
-
+        # 已经在 API 层改为异步触发，这里只需返回创建好的文档记录即可
         return new_doc
 
     def parse_document(self, doc_id, filepath):
@@ -100,7 +79,7 @@ class DocumentService:
             text_chunks = chunk_text(cleaned_text, is_markdown=is_markdown)
             logger.info(f"[{doc.doc_name}] Text chunked successfully into {len(text_chunks)} segments.")
             
-            # 4. Save Chunks
+            # 4. Save Chunks using bulk_save_objects for performance
             db_chunks = []
             for i, content in enumerate(text_chunks):
                 chunk = Chunk(
@@ -108,13 +87,19 @@ class DocumentService:
                     content=content,
                     chunk_index=i
                 )
-                db.session.add(chunk)
                 db_chunks.append(chunk)
+                
+            if db_chunks:
+                db.session.bulk_save_objects(db_chunks)
             
             doc.status = 'completed'
             db.session.commit()
-            logger.info(f"[{doc.doc_name}] Processing and database insertion completed.")
-            return db_chunks
+            
+            # Since bulk_save_objects doesn't populate chunk_id automatically, we need to query them back
+            saved_chunks = Chunk.query.filter_by(doc_id=doc.doc_id).order_by(Chunk.chunk_index).all()
+            
+            logger.info(f"[{doc.doc_name}] Processing and database insertion completed. {len(saved_chunks)} chunks saved.")
+            return saved_chunks
             
         except Exception as e:
             doc.status = 'failed'

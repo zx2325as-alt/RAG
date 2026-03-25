@@ -39,6 +39,7 @@ class QAService:
 【排版要求】：
 - 结构化输出：对于故障排查或操作指南，请分步骤（如：1.现象分析；2.可能原因；3.排查步骤）进行条理清晰的解答。
 - 详尽专业：用运维领域的专业语言对资料进行归纳和总结。如果参考资料提供了多个方案，请全面列出并说明各自的适用场景。
+- 内联引用标记：在回答事实性内容或数据时，必须在句子末尾使用 [1], [2] 这种角标格式标注出对应的参考资料序号，以增强回答的可信度。
 
 <参考资料>
 {context}
@@ -202,11 +203,14 @@ class QAService:
         # 3. Prepare Context
         context_parts = []
         sources = []
-        for doc, score in results:
-            context_parts.append(doc.page_content)
+        for i, (doc, score) in enumerate(results):
+            # 将序号一并编入 Context 供 LLM 参考
+            context_parts.append(f"资料 [{i+1}]:\n{doc.page_content}")
+            doc_name = doc.metadata.get("doc_name", "Unknown")
             sources.append({
                 "content": doc.page_content[:100] + "...",
                 "doc_id": doc.metadata.get("doc_id"),
+                "doc_name": doc_name,
                 "score": float(score)
             })
             
@@ -278,11 +282,13 @@ class QAService:
         
         context_parts = []
         sources = []
-        for doc, s in results:
-            context_parts.append(doc.page_content)
+        for i, (doc, s) in enumerate(results):
+            context_parts.append(f"资料 [{i+1}]:\n{doc.page_content}")
+            doc_name = doc.metadata.get("doc_name", "Unknown")
             sources.append({
                 "content": doc.page_content[:100] + "...",
                 "doc_id": doc.metadata.get("doc_id"),
+                "doc_name": doc_name,
                 "score": float(s)
             })
             

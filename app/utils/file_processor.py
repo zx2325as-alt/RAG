@@ -55,27 +55,36 @@ def extract_text_from_pdf(file_path):
 
     # 2. 使用 PyMuPDF 提取普通文本或进行 OCR
     doc = fitz.open(file_path)
+    
+    # 限制 OCR 的最大页数，避免超大扫描件卡死服务器
+    max_ocr_pages = 5
+    ocr_count = 0
+    
     for page_num, page in enumerate(doc):
         text = page.get_text()
         
         # 如果提取出的文本过少，可能该页是扫描件或图片，则启用 OCR
-        if len(text.strip()) < 50 and ocr is not None:
-            # 渲染页面为图片
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2)) # 提高分辨率
-            # 将 pixmap 转换为 numpy 数组供 PaddleOCR 使用
-            img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.h, pix.w, pix.n)
-            # 如果是 RGBA，转为 RGB
-            if pix.n == 4:
-                import cv2
-                img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
-            elif pix.n == 1: # 灰度图
-                import cv2
-                img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-                
-            result = ocr.ocr(img)
-            if result and result[0]:
-                for line in result[0]:
-                    text += line[1][0] + "\n"
+        if len(text.strip()) < 50 and ocr is not None and ocr_count < max_ocr_pages:
+            try:
+                # 渲染页面为图片
+                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2)) # 提高分辨率
+                # 将 pixmap 转换为 numpy 数组供 PaddleOCR 使用
+                img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.h, pix.w, pix.n)
+                # 如果是 RGBA，转为 RGB
+                if pix.n == 4:
+                    import cv2
+                    img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
+                elif pix.n == 1: # 灰度图
+                    import cv2
+                    img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+                    
+                result = ocr.ocr(img)
+                if result and result[0]:
+                    for line in result[0]:
+                        text += line[1][0] + "\n"
+                ocr_count += 1
+            except Exception as e:
+                print(f"OCR failed on page {page_num}: {e}")
             
         full_text += text + "\n"
         
@@ -97,15 +106,35 @@ def extract_text_from_image(file_path):
 
 def extract_text_from_docx(file_path):
     """
-    Extract text from Word (.docx) files.
+    Extract text from Word (.docx) files, preserving tables as Markdown.
     """
     if DocxDocument is None:
         return "Error: python-docx not installed."
         
     doc = DocxDocument(file_path)
     full_text = []
-    for para in doc.paragraphs:
-        full_text.append(para.text)
+    
+    # Process elements in order (paragraphs and tables)
+    # doc.element.body contains all elements in order
+    for element in doc.element.body:
+        if element.tag.endswith('p'):
+            # This is a paragraph
+            from docx.text.paragraph import Paragraph
+            para = Paragraph(element, doc)
+            if para.text.strip():
+                full_text.append(para.text)
+        elif element.tag.endswith('tbl'):
+            # This is a table
+            from docx.table import Table
+            table = Table(element, doc)
+            
+            for i, row in enumerate(table.rows):
+                clean_row = [cell.text.replace('\n', ' ').strip() for cell in row.cells]
+                full_text.append("| " + " | ".join(clean_row) + " |")
+                if i == 0:
+                    full_text.append("|" + "|".join(["---"] * len(clean_row)) + "|")
+            full_text.append("") # Empty line after table
+
     return '\n'.join(full_text)
 
 def process_file(file_path):

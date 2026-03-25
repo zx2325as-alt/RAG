@@ -11,6 +11,10 @@ class BaseConfig:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
     
+    # --- 服务绑定配置 ---
+    APP_HOST = os.getenv('APP_HOST', '0.0.0.0')
+    APP_PORT = int(os.getenv('APP_PORT', 6008))
+    
     # --- 大模型切换配置 ---
     # 可选值: 'qwen' (本地vLLM部署), 'deepseek' (官方API), 'ollama', 或 'vllm' (本地vLLM通用引擎), 'hf' (HuggingFace本地模型)
     ACTIVE_LLM = os.getenv('ACTIVE_LLM', 'deepseek') 
@@ -53,8 +57,9 @@ class LocalConfig(BaseConfig):
     FAISS_INDEX_PATH = os.getenv('FAISS_INDEX_PATH', 'faiss_index')
     
     # 本地版服务绑定地址
-    WEBUI_HOST = '0.0.0.0'
-    TENSORBOARD_HOST = '0.0.0.0'
+    APP_HOST = '127.0.0.1'
+    WEBUI_HOST = '127.0.0.1'
+    TENSORBOARD_HOST = '127.0.0.1'
     
     # 本地版模型路径配置 (相对路径)
     EMBEDDING_MODEL_PATH = os.getenv('EMBEDDING_MODEL_PATH', os.path.join(BASE_DIR, 'model', 'bge-large-zh'))
@@ -76,6 +81,7 @@ class ProductionConfig(BaseConfig):
     FAISS_INDEX_PATH = os.getenv('FAISS_INDEX_PATH', '/data/faiss_index')
     
     # 线上版服务绑定地址 (通常需要 0.0.0.0 对外暴露，或由 Nginx 代理)
+    APP_HOST = '0.0.0.0'
     WEBUI_HOST = '0.0.0.0'
     TENSORBOARD_HOST = '0.0.0.0'
     

@@ -135,9 +135,27 @@ class KnowledgeBaseService:
 
         documents = []
         for chunk in chunks:
+            # 尝试获取 doc_name，防止 DetachedInstanceError
+            doc_name = "Unknown"
+            try:
+                if hasattr(chunk, 'document') and chunk.document:
+                    doc_name = chunk.document.doc_name
+            except Exception:
+                from app.db import db
+                from app.db.models import Document
+                from flask import current_app
+                try:
+                    with current_app.app_context():
+                        doc = db.session.query(Document).filter_by(doc_id=chunk.doc_id).first()
+                        if doc:
+                            doc_name = doc.doc_name
+                except Exception:
+                    pass
+
             meta = {
                 "chunk_id": chunk.chunk_id,
                 "doc_id": chunk.doc_id,
+                "doc_name": doc_name,
                 "chunk_index": chunk.chunk_index,
                 "db_name": db_name
             }
@@ -169,9 +187,27 @@ class KnowledgeBaseService:
 
         documents = []
         for chunk in chunks:
+            # 尝试获取 doc_name，防止 DetachedInstanceError
+            doc_name = "Unknown"
+            try:
+                if hasattr(chunk, 'document') and chunk.document:
+                    doc_name = chunk.document.doc_name
+            except Exception:
+                from app.db import db
+                from app.db.models import Document
+                from flask import current_app
+                try:
+                    with current_app.app_context():
+                        doc = db.session.query(Document).filter_by(doc_id=chunk.doc_id).first()
+                        if doc:
+                            doc_name = doc.doc_name
+                except Exception:
+                    pass
+                    
             meta = {
                 "chunk_id": chunk.chunk_id,
                 "doc_id": chunk.doc_id,
+                "doc_name": doc_name,
                 "chunk_index": chunk.chunk_index,
                 "db_name": db_name
             }
@@ -219,9 +255,30 @@ class KnowledgeBaseService:
                     if doc_scores[idx] > 0:
                         chunk_id = chunk_ids[idx]
                         chunk = chunk_map[chunk_id]
+                        
+                        # 尝试获取 doc_name，为了防止 DetachedInstanceError，增加 app_context() 和 session 检查
+                        doc_name = "Unknown"
+                        try:
+                            # 如果 chunk.document 已经被 eager load，直接获取
+                            if hasattr(chunk, 'document') and chunk.document:
+                                doc_name = chunk.document.doc_name
+                        except Exception:
+                            # 捕获 DetachedInstanceError 并使用备用查询
+                            from app.db import db
+                            from app.db.models import Document
+                            from flask import current_app
+                            try:
+                                with current_app.app_context():
+                                    doc = db.session.query(Document).filter_by(doc_id=chunk.doc_id).first()
+                                    if doc:
+                                        doc_name = doc.doc_name
+                            except Exception:
+                                pass
+                                
                         meta = {
                             "chunk_id": chunk.chunk_id,
                             "doc_id": chunk.doc_id,
+                            "doc_name": doc_name,
                             "chunk_index": chunk.chunk_index,
                             "db_name": db_name
                         }
@@ -265,6 +322,29 @@ class KnowledgeBaseService:
                 scores = self.reranker_model(**inputs, return_dict=True).logits.view(-1, ).float()
             
             for doc, score in zip(top_50_fused, scores):
+                # Apply Parent-Child Chunking expansion: 
+                # Instead of just returning the small chunk, we retrieve the surrounding chunks from DB
+                chunk_index = doc.metadata.get("chunk_index")
+                document_id = doc.metadata.get("doc_id")
+                
+                # Fetch surrounding chunks to provide broader context (Parent document simulation)
+                try:
+                    from app.db.models import Chunk
+                    from flask import current_app
+                    from app.db import db
+                    with current_app.app_context():
+                        surrounding_chunks = db.session.query(Chunk).filter(
+                            Chunk.doc_id == document_id,
+                            Chunk.chunk_index >= max(0, chunk_index - 1),
+                            Chunk.chunk_index <= chunk_index + 1
+                        ).order_by(Chunk.chunk_index).all()
+                        
+                        if surrounding_chunks:
+                            expanded_content = "\n...\n".join([c.content for c in surrounding_chunks])
+                            doc.page_content = expanded_content
+                except Exception as e:
+                    print(f"Parent-Child expansion failed: {e}")
+
                 reranked_results.append((doc, score.item()))
                 
             # 按重排序得分降序

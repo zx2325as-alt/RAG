@@ -12,4 +12,4 @@ from app.config import Config
 app = create_app()
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=6008, debug=Config.DEBUG)
+    app.run(host=Config.APP_HOST, port=Config.APP_PORT, debug=Config.DEBUG)

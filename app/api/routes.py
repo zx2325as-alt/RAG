@@ -3,6 +3,7 @@ from app.db.models import Document, Chunk, QueryLog
 from app.db import db
 from app.services.document_service import DocumentService
 from app.services.qa_service import QAService
+from app.config import Config
 import os
 import sys
 from datetime import datetime
@@ -49,7 +50,7 @@ def index():
 
 @api_bp.route('/finetune')
 def finetune():
-    return render_template('finetune.html')
+    return render_template('finetune.html', tensorboard_port=Config.TENSORBOARD_PORT)
 
 # 存储 webui 和 tensorboard 进程引用
 tensorboard_process = None
@@ -74,9 +75,19 @@ def start_tensorboard():
         log_dir = os.path.join(current_app.root_path, '..', 'finetuned_models', 'runs')
         os.makedirs(log_dir, exist_ok=True)
         
-        # 使用 Popen 后台拉起 TensorBoard，增加 --reload_interval 1 以实现秒级实时刷新，并增加 --bind_all 允许外部访问
+        tb_cmd = [
+            sys.executable, "-m", "tensorboard.main",
+            "--logdir", log_dir,
+            "--host", Config.TENSORBOARD_HOST,
+            "--port", str(Config.TENSORBOARD_PORT),
+            "--reload_interval", "1"
+        ]
+        if Config.TENSORBOARD_HOST == '0.0.0.0':
+            tb_cmd.append("--bind_all")
+            
+        # 使用 Popen 后台拉起 TensorBoard，增加 --reload_interval 1 以实现秒级实时刷新，动态增加 --bind_all 允许外部访问
         tensorboard_process = subprocess.Popen(
-            [sys.executable, "-m", "tensorboard.main", "--logdir", log_dir, "--host", "0.0.0.0", "--bind_all", "--port", str(Config.TENSORBOARD_PORT), "--reload_interval", "1"],
+            tb_cmd,
             stdout=open(os.path.join(current_app.root_path, '..', 'logs', 'tensorboard_stdout.log'), 'w'),
             stderr=subprocess.STDOUT
         )
@@ -104,6 +115,29 @@ def status():
         'chunk_count': chunk_count
     })
 
+import threading
+
+def process_document_background(app, doc_id, filepath, db_name):
+    """Background task for processing documents to avoid blocking the API."""
+    with app.app_context():
+        try:
+            document_service = get_document_service()
+            kb = get_kb_service()
+            
+            # 解析文档并分块 (现在内部已经使用了 bulk_save_objects 提升速度)
+            chunks = document_service.parse_document(doc_id, filepath)
+            
+            # 构建向量索引和 BM25 索引
+            if chunks:
+                kb.add_documents(chunks, db_name=db_name)
+        except Exception as e:
+            import traceback
+            app.logger.error(f"Background processing failed for doc {doc_id}: {e}\n{traceback.format_exc()}")
+            doc = Document.query.get(doc_id)
+            if doc:
+                doc.status = 'failed'
+                db.session.commit()
+
 @api_bp.route('/upload', methods=['POST'])
 def upload_document():
     if 'files[]' not in request.files:
@@ -127,6 +161,15 @@ def upload_document():
         try:
             doc = document_service.upload_document(file, db_name=db_name)
             current_app.logger.info(f'Document {doc.doc_name} uploaded successfully with id {doc.doc_id}')
+            
+            # 启动后台线程进行异步处理，避免阻塞 Web 响应
+            filepath = os.path.join(document_service.upload_folder, db_name, secure_filename(file.filename))
+            thread = threading.Thread(
+                target=process_document_background, 
+                args=(current_app._get_current_object(), doc.doc_id, filepath, db_name)
+            )
+            thread.start()
+            
             uploaded_files.append(doc.doc_name)
         except Exception as e:
             current_app.logger.error(f'Upload failed for {file.filename}: {str(e)}')
@@ -221,7 +264,6 @@ def clear_all_documents():
         return jsonify({'error': str(e)}), 500
 
 import requests
-from app.config import Config
 
 @api_bp.route('/api/start_service', methods=['POST'])
 def start_service():

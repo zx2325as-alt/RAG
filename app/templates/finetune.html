@@ -587,7 +587,7 @@
                         $.get('/api/check_tensorboard', function(checkRes) {
                             if (checkRes.running) {
                                 var host = window.location.hostname;
-                                $('#tbIframe').attr('src', 'http://' + host + ':6006');
+                                $('#tbIframe').attr('src', 'http://' + host + ':{{ tensorboard_port }}');
                                 var tbModal = new bootstrap.Modal(document.getElementById('tensorboardModal'));
                                 tbModal.show();
                                 btn.prop('disabled', false).html(originalText);

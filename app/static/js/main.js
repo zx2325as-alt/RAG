@@ -361,6 +361,11 @@ function sendMessage() {
         $('#sendBtn').removeClass('d-none');
         $('#stopBtn').addClass('d-none');
         currentAbortController = null;
+
+        // 流结束时，解析内联引用
+        var textElem = $(`#${botMsgId}-text`);
+        textElem.html(formatCitations(textElem.html()));
+
         // 渲染打分组件
         appendRatingToMessage(botMsgId, query);
     });
@@ -504,6 +509,10 @@ function triggerReanalyze(question, previous_answer, score) {
         $('#sendBtn').removeClass('d-none');
         $('#stopBtn').addClass('d-none');
         currentAbortController = null;
+
+        // 流结束时，解析内联引用
+        var textElem = $(`#${botMsgId}-text`);
+        textElem.html(formatCitations(textElem.html()));
     });
 }
 
@@ -541,14 +550,28 @@ function appendSourcesToMessage(msgId, sources) {
     scrollToBottom();
 }
 
+// Helper function to format citations like [1], [2] into clickable or styled elements
+function formatCitations(text) {
+    if (!text) return text;
+    // Replace [数字] with a styled span that stands out
+    return text.replace(/\[(\d+)\]/g, function(match, p1) {
+        return `<span class="badge bg-info text-dark citation-badge" style="cursor:help; margin-left:2px; font-size:0.75em; vertical-align:super;" title="参考来源 ${p1}">[${p1}]</span>`;
+    });
+}
+
 function appendMessage(sender, text, sources) {
     var bubbleClass = sender === 'user' ? 'user' : 'bot';
     var alignClass = sender === 'user' ? 'justify-content-end' : 'justify-content-start';
     
+    var displayContent = text.replace(/\n/g, '<br>');
+    if (sender !== 'user') {
+        displayContent = formatCitations(displayContent);
+    }
+    
     var html = `
         <div class="d-flex flex-row ${alignClass} mb-3">
             <div class="chat-bubble ${bubbleClass}">
-                <p class="mb-0">${text.replace(/\n/g, '<br>')}</p>
+                <p class="mb-0">${displayContent}</p>
                 ${renderSources(sources)}
             </div>
         </div>
@@ -570,7 +593,7 @@ function renderSources(sources) {
                 <span class="badge bg-secondary source-badge" onclick="toggleSource(this)">来源 ${index + 1}</span>
                 <div class="source-content">
                     ${src.content}
-                    <div class="mt-1 text-end"><small>DocID: ${src.doc_id || '-'}</small></div>
+                    <div class="mt-1 text-end"><small>DocName: ${src.doc_name || '-'} | DocID: ${src.doc_id || '-'}</small></div>
                 </div>
             </div>
         `;
