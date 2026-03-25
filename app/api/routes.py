@@ -343,8 +343,18 @@ def download_model():
             env = os.environ.copy()
             env["HF_ENDPOINT"] = "https://hf-mirror.com"
             
+            import shutil
+            import sys
+            
+            hf_cli_cmd = shutil.which("huggingface-cli")
+            if hf_cli_cmd:
+                cmd = [hf_cli_cmd, "download", model_name, "--local-dir", local_dir]
+            else:
+                # 如果环境变量中找不到 huggingface-cli，使用当前 python 解释器执行模块兜底
+                cmd = [sys.executable, "-m", "huggingface_hub.commands.huggingface_cli", "download", model_name, "--local-dir", local_dir]
+                
             subprocess.Popen(
-                ["huggingface-cli", "download", model_name, "--local-dir", local_dir], 
+                cmd, 
                 stdout=open(os.path.join(current_app.root_path, '..', 'logs', 'hf_download.log'), 'a'),
                 stderr=subprocess.STDOUT,
                 env=env
