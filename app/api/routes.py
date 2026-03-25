@@ -883,7 +883,7 @@ def get_checkpoints():
 
 @api_bp.route('/api/get_datasets', methods=['GET'])
 def get_datasets():
-    """获取 uploads 目录下的所有 jsonl 数据集文件"""
+    """获取 uploads 目录下的所有  jsonl 数据集文件"""
     try:
         upload_dir = os.path.join(current_app.root_path, '..', Config.UPLOAD_FOLDER)
         if not os.path.exists(upload_dir):
@@ -988,39 +988,58 @@ def start_finetune():
                 import json
                 valid_lines = []
                 with open(source_dataset_path, 'r', encoding='utf-8') as f:
-                    for line_idx, line in enumerate(f):
-                        line = line.strip()
-                        if not line:
-                            continue
-                        try:
-                            # 尝试解析每一行，验证 JSON 格式是否正确
-                            item = json.loads(line)
-                            # 确保有必备字段 (这里做宽泛兼容，支持常见的 alpaca 或 sharegpt 变体)
-                            if isinstance(item, dict):
-                                # 清洗可能重复的字段 (比如日志里提到的 Column(/answer) was specified twice)
-                                cleaned_item = {k: v for k, v in item.items()}
+                    # 尝试读取整个文件，判断是否为纯 JSON 数组 (例如整个文件是一个大列表 [...])
+                    # 这对于从网上直接下载的 .json 改名而来的文件非常关键
+                    try:
+                        f.seek(0)
+                        content = f.read()
+                        parsed_content = json.loads(content)
+                        if isinstance(parsed_content, list):
+                            items = parsed_content
+                        else:
+                            items = [parsed_content]
+                    except json.JSONDecodeError:
+                        # 如果不是整个 JSON 数组，回退到按行读取 JSONL 模式
+                        f.seek(0)
+                        items = []
+                        for line_idx, line in enumerate(f):
+                            line = line.strip()
+                            if not line: continue
+                            try:
+                                items.append(json.loads(line))
+                            except Exception as e:
+                                current_app.logger.warning(f"跳过包含语法错误的 JSONL 行: {line_idx}. Error: {e}")
                                 
-                                # 统一映射到标准的 alpaca 格式：instruction, input, output
-                                final_item = {}
-                                final_item['instruction'] = cleaned_item.get('instruction') or cleaned_item.get('question') or cleaned_item.get('prompt') or ""
-                                final_item['input'] = cleaned_item.get('input') or ""
-                                final_item['output'] = cleaned_item.get('output') or cleaned_item.get('answer') or cleaned_item.get('response') or ""
-                                
-                                # Hugging Face datasets 要求在写入时传入 features 或者至少保证有一个非空字段的样本
-                                # 如果解析出来的字典全是空字符串，可能会导致 SchemaInferenceError
-                                if final_item['instruction'] and final_item['output']:
-                                    valid_lines.append(json.dumps(final_item, ensure_ascii=False))
-                        except Exception as e:
-                            current_app.logger.warning(f"跳过包含语法错误的 JSONL 行: {line_idx}. Error: {e}")
+                for item in items:
+                    # 确保有必备字段 (这里做宽泛兼容，支持常见的 alpaca 或 sharegpt 变体)
+                    if isinstance(item, dict):
+                        # 清洗可能重复的字段 (比如日志里提到的 Column(/answer) was specified twice)
+                        cleaned_item = {k: v for k, v in item.items()}
+                        
+                        # 统一映射到标准的 alpaca 格式：instruction, input, output
+                        final_item = {}
+                        final_item['instruction'] = cleaned_item.get('instruction') or cleaned_item.get('question') or cleaned_item.get('prompt') or ""
+                        final_item['input'] = cleaned_item.get('input') or ""
+                        final_item['output'] = cleaned_item.get('output') or cleaned_item.get('answer') or cleaned_item.get('response') or ""
+                        
+                        # Hugging Face datasets 要求在写入时传入 features 或者至少保证有一个非空字段的样本
+                        # 如果解析出来的字典全是空字符串，可能会导致 SchemaInferenceError
+                        if final_item['instruction'] and final_item['output']:
+                            valid_lines.append(json.dumps(final_item, ensure_ascii=False))
                             
                 # 检查是否成功提取到了有效数据
                 if not valid_lines:
-                    return jsonify({'error': '数据集清洗后为空！请确保 JSONL 文件中包含 instruction/question/prompt 和 output/answer/response 字段。'}), 400
+                    # 如果为空，删除创建的空文件并返回错误
+                    if os.path.exists(dataset_path):
+                        os.remove(dataset_path)
+                    return jsonify({'error': '数据集清洗后为空！请确保 JSONL 文件中包含 instruction/question/prompt 和 output/answer/response 字段，并且格式正确。'}), 400
                     
                 with open(dataset_path, 'w', encoding='utf-8') as f:
                     f.write('\n'.join(valid_lines))
                     
             except Exception as e:
+                import traceback
+                current_app.logger.error(f"Failed to process dataset file: {str(e)}\n{traceback.format_exc()}")
                 return jsonify({'error': f'Failed to process dataset file: {str(e)}'}), 400
             
         # 为了在生成器中能够访问 current_app，我们需要提取出它需要的值
