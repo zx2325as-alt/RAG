@@ -1155,8 +1155,8 @@ def start_finetune():
                 "logging_dir": logging_dir, # 显式指定日志目录，确保 TensorBoard 能集中读取
                 "overwrite_cache": True,
                 "overwrite_output_dir": True, # 强制覆盖输出目录，防止自动从旧的 checkpoint 恢复
-                "per_device_train_batch_size": int(batch_size) if batch_size and batch_size != 'undefined' else 4,
-                "gradient_accumulation_steps": int(grad_acc) if grad_acc and grad_acc != 'undefined' else 4,
+                "per_device_train_batch_size": int(batch_size) if batch_size and batch_size != 'undefined' else 1, # 降低默认 batch_size 防 OOM
+                "gradient_accumulation_steps": int(grad_acc) if grad_acc and grad_acc != 'undefined' else 8,
                 "optim": optimizer if optimizer and optimizer != 'undefined' else "adamw_torch",
                 "lr_scheduler_type": lr_scheduler if lr_scheduler and lr_scheduler != 'undefined' else "cosine",
                 "logging_steps": int(logging_steps) if logging_steps and logging_steps != 'undefined' else 10,
@@ -1167,10 +1167,10 @@ def start_finetune():
                 "eval_strategy": "steps", # 修改为 steps 以便在 TensorBoard 中看到验证集指标
                 "learning_rate": float(learning_rate) if learning_rate and learning_rate != 'undefined' else 2e-4,
                 "num_train_epochs": float(epochs) if epochs and epochs != 'undefined' else 3.0,
-                "max_length": int(max_length) if max_length and max_length != 'undefined' else 2048,
+                "max_length": int(max_length) if max_length and max_length != 'undefined' else 1024, # 降低默认最大长度防 OOM
                 "weight_decay": float(weight_decay) if weight_decay and weight_decay != 'undefined' else 0.0,
                 "max_grad_norm": float(max_grad_norm) if max_grad_norm and max_grad_norm != 'undefined' else 1.0,
-                "dataloader_num_workers": 4, # 启用多进程数据加载，防止 CPU 成为瓶颈导致 GPU 空载等待
+                "dataloader_num_workers": 2, # 降低进程数，减少 CPU 内存向 GPU 转移时的峰值占用
                 "dataloader_pin_memory": True, # 锁页内存，加速 CPU 到 GPU 的数据拷贝
                 "seed": int(seed) if seed and seed != 'undefined' else 42,
                 "plot_loss": True,

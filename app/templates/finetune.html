@@ -108,15 +108,15 @@
                                 <input type="number" step="0.1" id="epochsInput" class="form-control form-control-sm" value="3.0">
                             </div>
                             <div class="col-2">
-                                <label class="form-label mb-0" title="每次处理的样本数量。推荐：2 或 4 (取决于显存)">批处理大小</label>
-                                <input type="number" id="batchSizeInput" class="form-control form-control-sm" value="2">
+                                <label class="form-label mb-0" title="每次处理的样本数量。推荐：1 或 2 (防止OOM)">批处理大小</label>
+                                <input type="number" id="batchSizeInput" class="form-control form-control-sm" value="1">
                             </div>
                             <div class="col-2">
-                                <label class="form-label mb-0" title="输入文本的最大 Token 长度。推荐：1024 或 2048">最大长度</label>
+                                <label class="form-label mb-0" title="输入文本的最大 Token 长度。推荐：1024 或更低">最大长度</label>
                                 <input type="number" id="maxLengthInput" class="form-control form-control-sm" value="1024">
                             </div>
                             <div class="col-2">
-                                <label class="form-label mb-0" title="更新梯度前累积的步数，用于变相增加Batch Size。推荐：4 或 8">梯度累积</label>
+                                <label class="form-label mb-0" title="更新梯度前累积的步数，用于变相增加Batch Size。推荐：8 或 16">梯度累积</label>
                                 <input type="number" id="gradAccInput" class="form-control form-control-sm" value="8">
                             </div>
                             <div class="col-2">
