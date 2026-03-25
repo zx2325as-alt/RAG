@@ -27,9 +27,9 @@ class BaseConfig:
     QWEN_MODEL_NAME = os.getenv('QWEN_MODEL_NAME', 'Qwen/Qwen-7B-Chat')
 
     # 微调看板服务配置
-    WEBUI_HOST = os.getenv('WEBUI_HOST', '127.0.0.1')
+    WEBUI_HOST = os.getenv('WEBUI_HOST', '0.0.0.0')
     WEBUI_PORT = int(os.getenv('WEBUI_PORT', 7860))
-    TENSORBOARD_HOST = os.getenv('TENSORBOARD_HOST', '127.0.0.1')
+    TENSORBOARD_HOST = os.getenv('TENSORBOARD_HOST', '0.0.0.0')
     TENSORBOARD_PORT = int(os.getenv('TENSORBOARD_PORT', 6006))
 
     # 2. DeepSeek 服务配置
@@ -53,8 +53,8 @@ class LocalConfig(BaseConfig):
     FAISS_INDEX_PATH = os.getenv('FAISS_INDEX_PATH', 'faiss_index')
     
     # 本地版服务绑定地址
-    WEBUI_HOST = '127.0.0.1'
-    TENSORBOARD_HOST = '127.0.0.1'
+    WEBUI_HOST = '0.0.0.0'
+    TENSORBOARD_HOST = '0.0.0.0'
     
     # 本地版模型路径配置 (相对路径)
     EMBEDDING_MODEL_PATH = os.getenv('EMBEDDING_MODEL_PATH', os.path.join(BASE_DIR, 'model', 'bge-large-zh'))

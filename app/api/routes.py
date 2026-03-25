@@ -51,59 +51,10 @@ def index():
 def finetune():
     return render_template('finetune.html')
 
-@api_bp.route('/finetune_board')
-def finetune_board():
-    return render_template('finetune_board.html')
-
 # 存储 webui 和 tensorboard 进程引用
-webui_process = None
 tensorboard_process = None
 
-@api_bp.route('/finetune_board/start_webui', methods=['POST'])
-def start_webui():
-    global webui_process
-    import subprocess
-    import socket
-    
-    # 检查端口是否被占用 (如果被占用说明已经运行)
-    def is_port_in_use(port):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            return s.connect_ex((Config.WEBUI_HOST, port)) == 0
-
-    if is_port_in_use(Config.WEBUI_PORT):
-        return jsonify({'status': 'already_running'})
-
-    try:
-        # 使用 Popen 后台拉起 LLaMA-Factory WebUI
-        # 必须设置环境变量，使其监听在 127.0.0.1:7860，且非阻塞
-        env = os.environ.copy()
-        env['GRADIO_SERVER_PORT'] = str(Config.WEBUI_PORT)
-        env['GRADIO_SERVER_NAME'] = Config.WEBUI_HOST # 强制绑定避免 localhost 检查失败
-        env['NO_PROXY'] = f'localhost,127.0.0.1,0.0.0.0,{Config.WEBUI_HOST}' # 避免被系统代理拦截
-        # 同时为了避免模型下载超时问题，加上国内镜像源
-        env['HF_ENDPOINT'] = 'https://hf-mirror.com'
-        
-        webui_process = subprocess.Popen(
-            [get_llamafactory_cli_path(), "webui"],
-            env=env,
-            # 将日志输出到文件，方便排查 WebUI 启动报错问题，而不是丢弃
-            stdout=open(os.path.join(current_app.root_path, '..', 'logs', 'webui_stdout.log'), 'w'),
-            stderr=subprocess.STDOUT
-        )
-        return jsonify({'status': 'ok'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@api_bp.route('/finetune_board/check_webui', methods=['GET'])
-def check_webui():
-    import socket
-    def is_port_in_use(port):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            return s.connect_ex((Config.WEBUI_HOST, port)) == 0
-            
-    return jsonify({'running': is_port_in_use(Config.WEBUI_PORT)})
-
-@api_bp.route('/finetune_board/start_tensorboard', methods=['POST'])
+@api_bp.route('/api/start_tensorboard', methods=['POST'])
 def start_tensorboard():
     global tensorboard_process
     import subprocess
@@ -133,7 +84,7 @@ def start_tensorboard():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@api_bp.route('/finetune_board/check_tensorboard', methods=['GET'])
+@api_bp.route('/api/check_tensorboard', methods=['GET'])
 def check_tensorboard():
     import socket
     def is_port_in_use(port):
@@ -725,18 +676,6 @@ def stop_finetune():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@api_bp.route('/finetune_board/logs', methods=['GET'])
-def get_webui_logs():
-    log_path = os.path.join(current_app.root_path, '..', 'logs', 'webui_stdout.log')
-    if os.path.exists(log_path):
-        try:
-            with open(log_path, 'r', encoding='utf-8') as f:
-                logs = f.read()
-            return jsonify({'logs': logs})
-        except Exception as e:
-            return jsonify({'logs': f"读取日志出错: {str(e)}"})
-    return jsonify({'logs': '暂无日志'})
-
 @api_bp.route('/eval_report')
 def eval_report():
     return render_template('eval_report.html')
@@ -751,11 +690,20 @@ def get_eval_data():
         
     model_dir = os.path.join(current_app.root_path, '..', 'finetuned_models', model_name)
     eval_file = os.path.join(model_dir, 'eval_results.json')
+    predict_file = os.path.join(model_dir, 'predict_results.json')
     trainer_state_file = os.path.join(model_dir, 'trainer_state.json')
     
     if not os.path.exists(model_dir):
         return jsonify({'error': '找不到该模型的微调记录'}), 404
         
+    # 如果根目录没有 trainer_state.json，尝试去最新的 checkpoint 目录里找
+    if not os.path.exists(trainer_state_file):
+        checkpoints = [d for d in os.listdir(model_dir) if d.startswith('checkpoint-') and os.path.isdir(os.path.join(model_dir, d))]
+        if checkpoints:
+            checkpoints.sort(key=lambda x: int(x.split('-')[1]) if x.split('-')[1].isdigit() else 0, reverse=True)
+            latest_ckpt = checkpoints[0]
+            trainer_state_file = os.path.join(model_dir, latest_ckpt, 'trainer_state.json')
+            
     # 构建空的数据结构，只返回真实数据
     response_data = {
         'model_name': model_name,
@@ -770,7 +718,15 @@ def get_eval_data():
     if os.path.exists(eval_file):
         try:
             with open(eval_file, 'r', encoding='utf-8') as f:
-                response_data['metrics'] = json.load(f)
+                response_data['metrics'].update(json.load(f))
+        except Exception:
+            pass
+            
+    # 尝试读取 predict_results.json 中的指标 (包含 ROUGE, BLEU 等)
+    if os.path.exists(predict_file):
+        try:
+            with open(predict_file, 'r', encoding='utf-8') as f:
+                response_data['metrics'].update(json.load(f))
         except Exception:
             pass
             

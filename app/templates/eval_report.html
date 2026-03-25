@@ -20,7 +20,6 @@
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item"><a class="nav-link" href="/">问答系统</a></li>
                     <li class="nav-item"><a class="nav-link" href="/finetune">模型微调(Ollama)</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/finetune_board">训练看板</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/eval_report">评估报告</a></li>
                 </ul>
             </div>
@@ -174,10 +173,15 @@
                     
                     // 填充核心指标
                     var m = data.metrics || {};
-                    $('#metricLoss').text(m.eval_loss ? parseFloat(m.eval_loss).toFixed(4) : 'N/A');
-                    $('#metricRouge').text(m.eval_rougeL ? parseFloat(m.eval_rougeL).toFixed(2) : 'N/A');
-                    $('#metricBleu').text(m.eval_bleu ? parseFloat(m.eval_bleu).toFixed(2) : 'N/A');
-                    $('#metricSpeed').text(m.eval_samples_per_second ? parseFloat(m.eval_samples_per_second).toFixed(2) : 'N/A');
+                    var loss = m.eval_loss || m.train_loss || m.predict_loss;
+                    var rouge = m.eval_rougeL || m.predict_rougeL || m.eval_rouge || m.predict_rouge;
+                    var bleu = m.eval_bleu || m.predict_bleu;
+                    var speed = m.eval_samples_per_second || m.predict_samples_per_second;
+                    
+                    $('#metricLoss').text(loss ? parseFloat(loss).toFixed(4) : 'N/A');
+                    $('#metricRouge').text(rouge ? parseFloat(rouge).toFixed(2) : 'N/A');
+                    $('#metricBleu').text(bleu ? parseFloat(bleu).toFixed(2) : 'N/A');
+                    $('#metricSpeed').text(speed ? parseFloat(speed).toFixed(2) : 'N/A');
                     
                     // 渲染系统生成的静态评估图片
                     if (data.images && Object.keys(data.images).length > 0) {

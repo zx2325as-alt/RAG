@@ -20,9 +20,6 @@
                         <a class="nav-link active" href="/finetune">模型微调(Ollama)</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/finetune_board">训练看板</a>
-                    </li>
-                    <li class="nav-item">
                         <a class="nav-link" href="/eval_report">评估报告</a>
                     </li>
                 </ul>
@@ -580,16 +577,17 @@
             btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 正在拉起...');
 
             // 请求后端拉起进程
-            $.post('/finetune_board/start_tensorboard', function(res) {
+            $.post('/api/start_tensorboard', function(res) {
                 if (res.status === 'ok' || res.status === 'already_running') {
-                    // 使用轮询检测端口是否真正可用，防止 127.0.0.1 拒绝连接
+                    // 使用轮询检测端口是否真正可用，防止拒绝连接
                     var maxRetries = 10;
                     var retries = 0;
                     
                     function checkTbReady() {
-                        $.get('/finetune_board/check_tensorboard', function(checkRes) {
+                        $.get('/api/check_tensorboard', function(checkRes) {
                             if (checkRes.running) {
-                                $('#tbIframe').attr('src', 'http://127.0.0.1:6006');
+                                var host = window.location.hostname;
+                                $('#tbIframe').attr('src', 'http://' + host + ':6006');
                                 var tbModal = new bootstrap.Modal(document.getElementById('tensorboardModal'));
                                 tbModal.show();
                                 btn.prop('disabled', false).html(originalText);
