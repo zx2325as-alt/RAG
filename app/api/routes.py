@@ -380,6 +380,8 @@ def get_ollama_models():
             response = requests.get(f"{Config.OLLAMA_BASE_URL}/api/tags", timeout=1)
             if response.status_code == 200:
                 models = response.json().get('models', [])
+                # 按照大小升序排序（最小的放前面）
+                models.sort(key=lambda x: x.get('size', 0))
                 ollama_models_list.extend([m['name'] for m in models])
         except requests.exceptions.RequestException:
             # Ollama 未启动是常态，静默处理
@@ -622,6 +624,7 @@ def query():
     data = request.json
     question = data.get('question')
     db_names = data.get('db_names', ['default'])
+    enable_tools = data.get('enable_tools', True)
     user_id = request.remote_addr # 简单用IP作为session_id
     if not question:
         return jsonify({'error': 'No question provided'}), 400
@@ -636,7 +639,7 @@ def query():
         # 其实我们应该在 kb_service 内部做优雅降级，这里包一层通用异常捕捉避免 stream 被中断报错
         def safe_stream():
             try:
-                for chunk in qa_service.stream_answer_question(question, user_id=user_id, db_names=db_names):
+                for chunk in qa_service.stream_answer_question(question, user_id=user_id, db_names=db_names, enable_tools=enable_tools):
                     yield chunk
             except Exception as inner_e:
                 import traceback

@@ -13,9 +13,6 @@ def create_app(config_class=Config):
     required_directories = [
         'logs',
         app.config.get('UPLOAD_FOLDER', 'uploads'),
-        'data',
-        'data/db',
-        'data/chroma',
         'finetuned_models',
         'finetuned_models/base_models',
         'finetuned_models/runs',

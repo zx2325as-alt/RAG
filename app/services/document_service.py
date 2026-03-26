@@ -97,6 +97,17 @@ class DocumentService:
             if db_chunks:
                 db.session.bulk_save_objects(db_chunks)
             
+            # 5. Extract and build Graph RAG (Intelligent Graph)
+            try:
+                from app.services.graph_service import GraphService
+                graph_service = GraphService()
+                logger.info(f"[{doc.doc_name}] Starting LLM-based Graph extraction...")
+                # We use the generated db_chunks (which have doc_id but maybe not chunk_id yet, but content is there)
+                graph_service.extract_and_store_graph(db_chunks, doc.doc_id)
+                logger.info(f"[{doc.doc_name}] Graph extraction completed.")
+            except Exception as e:
+                logger.error(f"[{doc.doc_name}] Graph extraction failed: {e}")
+            
             doc.status = 'completed'
             db.session.commit()
             

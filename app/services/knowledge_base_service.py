@@ -232,14 +232,20 @@ class KnowledgeBaseService:
         self.build_bm25_index(db_name)
 
     def _extract_entities_from_query(self, query):
-        """简单模拟从 query 中抽取实体（在生产环境中可使用 LLM 抽取）"""
-        entities = []
-        # 常见运维实体模拟抽取
-        keywords = ["服务器", "数据库", "Zabbix", "Nginx", "MySQL", "网络", "Redis", "宕机"]
-        for kw in keywords:
-            if kw.lower() in query.lower():
-                entities.append(kw)
-        return entities
+        """利用 LLM 动态提取查询中的实体，增强图谱检索召回率"""
+        try:
+            from app.services.graph_service import GraphService
+            graph_service = GraphService()
+            return graph_service.extract_entities_from_query(query)
+        except Exception as e:
+            print(f"Error using GraphService for entity extraction: {e}")
+            # 回退到基础关键字匹配
+            entities = []
+            keywords = ["服务器", "数据库", "Zabbix", "Nginx", "MySQL", "网络", "Redis", "宕机"]
+            for kw in keywords:
+                if kw.lower() in query.lower():
+                    entities.append(kw)
+            return entities
 
     def graph_search(self, query):
         """执行图数据库检索 (Graph RAG)"""
@@ -257,20 +263,20 @@ class KnowledgeBaseService:
                     # 查询该实体相关的 1 级和 2 级关联节点，用于发现牵一发而动全身的问题
                     cypher_query = """
                     MATCH (n)-[r*1..2]-(m)
-                    WHERE n.name CONTAINS $entity OR n.ip CONTAINS $entity
-                    RETURN n.name as source, type(r[-1]) as relation, m.name as target, m.ip as target_ip
+                    WHERE n.name CONTAINS $entity OR n.id CONTAINS $entity
+                    RETURN n.name as source, type(r[-1]) as relation, m.name as target
                     LIMIT 5
                     """
                     result = session.run(cypher_query, entity=entity)
                     for record in result:
-                        target_info = f"{record['target']} ({record['target_ip']})" if record['target_ip'] else record['target']
-                        relation_desc = f"图谱关联: [{record['source']}] --({record['relation']})--> [{target_info}]"
+                        target_info = record['target']
+                        relation_desc = f"图谱关联 (Graph RAG): [{record['source']}] --({record['relation']})--> [{target_info}]"
                         # 包装成与 Vector/BM25 相同的结构
                         doc = LangchainDocument(
                             page_content=relation_desc,
                             metadata={
                                 "doc_id": "graph_db",
-                                "doc_name": "运维拓扑图谱",
+                                "doc_name": "智能运维拓扑图谱",
                                 "db_name": "neo4j",
                                 "chunk_id": "graph_node"
                             }

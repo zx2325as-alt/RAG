@@ -30,23 +30,24 @@ class QAService:
         
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", """你是一位严谨的湖北移动智能运维专家。
-你的任务是**严格基于提供的参考资料**，为用户提供准确、专业的解答。
+你的任务是**优先基于提供的参考资料**，为用户提供准确、专业的解答。
 
 【回答核心原则 - 绝对遵守】：
-1. 绝对忠于检索内容：你只是一个资料整合者。你的所有回答必须且只能来源于 `<参考资料>` 中提供的信息。如果资料中没有提到，绝对禁止使用你的预训练知识进行发散、编造或猜测！
-2. 不知为不知：如果用户的问题在 `<参考资料>` 中完全找不到相关线索，你必须且只能回答：“根据当前知识库检索，未能找到与您问题相关的具体资料，请尝试修改提问或补充相关文档。” 绝不要强行作答！
+1. 工具结果最高优先级：如果 `<参考资料>` 中包含了【工具执行结果】，你必须直接提取该结果中的核心数据或状态向用户汇报，此时**绝对不要**再说“资料中未提及相关内容”，也**不要**输出【非基于文档回答】的标记。
+2. 忠于检索内容：在没有工具结果但有参考资料时，你是一个资料整合者，所有回答必须来源于 `<参考资料>`。
+3. 兜底机制：只有在既没有【工具执行结果】，也没有相关的 `<参考资料>` 时，才允许利用你的预训练知识给出兜底答案，且此时必须在显著位置注明“【非基于文档回答】”。
 
 【排版要求】：
 - 结构化输出：对于故障排查或操作指南，请分步骤（如：1.现象分析；2.可能原因；3.排查步骤）进行条理清晰的解答。
 - 详尽专业：用运维领域的专业语言对资料进行归纳和总结。如果参考资料提供了多个方案，请全面列出并说明各自的适用场景。
-- 内联引用标记：在回答事实性内容或数据时，必须在句子末尾使用 [1], [2] 这种角标格式标注出对应的参考资料序号，以增强回答的可信度。
+- 内联引用标记：在基于文档回答事实性内容或数据时，必须在句子末尾使用 [1], [2] 这种角标格式标注出对应的参考资料序号，以增强回答的可信度。
 
 <参考资料>
 {context}
 </参考资料>
 """),
             MessagesPlaceholder(variable_name="history"),
-            ("user", "我的问题是：{question}\n请务必只根据参考资料给出解答。")
+            ("user", "我的问题是：{question}\n优先根据参考资料给出解答。若资料中未提及相关内容，请提供兜底解答并标记为“非基于文档回答”。")
         ])
         
         # 构建带历史记录的对话 Chain
@@ -140,9 +141,9 @@ class QAService:
     def get_cache_key(self, question):
         return hashlib.md5(question.encode('utf-8')).hexdigest()
 
-    def stream_answer_question(self, question, user_id="anonymous", db_names=['default']):
+    def stream_answer_question(self, question, user_id="anonymous", db_names=['default'], enable_tools=True):
         start_time = datetime.utcnow()
-        cache_key = self.get_cache_key(question + "_" + "_".join(db_names))
+        cache_key = self.get_cache_key(question + "_" + "_".join(db_names) + "_" + str(enable_tools))
         
         # 1. Check Redis Cache
         if self.use_redis:
@@ -159,16 +160,19 @@ class QAService:
                 print(f"Redis get error: {e}")
 
         # 1.5 改写用户问题 (Standalone Question)
-        # 获取历史记录，如果历史记录存在，则利用大模型将当前带有代词的残缺问题改写为独立完整的问题
-        history_obj = self.get_session_history(user_id)
         search_query = question
+        yield json.dumps({"type": "chunk", "content": "> 🧠 **思考过程:**\n> - [x] 收到用户请求，正在解析意图...\n"}) + "\n"
         
-        if len(history_obj.messages) > 0:
-            try:
+        try:
+            history_obj = self.get_session_history(user_id)
+            if len(history_obj.messages) > 0:
+                yield json.dumps({"type": "chunk", "content": "> - [x] 检测到多轮对话，正在结合历史上下文重构问题...\n"}) + "\n"
                 from langchain_core.messages import SystemMessage, HumanMessage
-                history_text = "\n".join([f"{msg.type}: {msg.content}" for msg in history_obj.messages[-4:]]) # 取最近2轮
-                rewrite_prompt = f"""根据以下对话历史记录，将用户的最新问题改写为一个独立、完整的问题，补全所有指代和省略的内容，以便于直接用于数据库检索。如果问题已经很完整，无需改写，直接原样返回。
-注意：只返回改写后的问题文本，不要有任何其他解释词。
+                history_text = "\n".join([f"{msg.type}: {msg.content}" for msg in history_obj.messages[-4:]])
+                rewrite_prompt = f"""根据以下对话历史记录，将用户的最新问题改写为一个独立、完整的问题。
+如果用户的最新问题是一个明确的系统指令（例如：ping www.baidu.com，或者 df -h），请直接原样返回该指令，绝对不要把它改写成“是什么命令”这种询问定义的句子！
+如果是一个普通的残缺问句，请补全所有指代和省略的内容。
+注意：只返回最终的文本，不要有任何其他解释词。
 
 对话历史：
 {history_text}
@@ -178,61 +182,91 @@ class QAService:
                 rewrite_response = self.llm.invoke([HumanMessage(content=rewrite_prompt)])
                 search_query = rewrite_response.content.strip()
                 print(f"Original Query: {question} -> Rewritten Query: {search_query}")
-                yield json.dumps({"type": "chunk", "content": f"\n\n*(系统理解的完整问题：{search_query})*\n\n"}) + "\n"
-            except Exception as e:
-                print(f"Rewrite Query Error: {e}")
+                yield json.dumps({"type": "chunk", "content": f"> - [x] 问题重构完成: `{search_query}`\n"}) + "\n"
+            else:
+                yield json.dumps({"type": "chunk", "content": "> - [x] 独立问题，跳过重构步骤。\n"}) + "\n"
+        except Exception as e:
+            print(f"Rewrite Query Error: {e}")
+            error_str = str(e).lower()
+            if "connect" in error_str or "timeout" in error_str or "winerror" in error_str:
+                yield json.dumps({"type": "chunk", "content": "\n抱歉，连接大模型服务失败，请检查 LLM 服务或 Redis 状态。"}) + "\n"
+                return
+            yield json.dumps({"type": "chunk", "content": "> - [!] 问题重构失败，将使用原始问题继续。\n"}) + "\n"
 
-        # 2. Agent 路由：扩展更多的 Function Calling (模拟)
-        # 简单模拟 Function Calling 路由：根据关键字触发不同的运维 API 插件
-        if any(kw in search_query for kw in ["告警次数", "数据库查询"]):
-            # Text2SQL 插件
-            sql_query = "SELECT count(*) FROM alerts WHERE date = DATE('now', '-1 day') AND status = 'unresolved';"
-            simulated_result = "经查询 Zabbix/Prometheus 数据库，昨日新增未恢复告警共计 **15** 条。"
-            agent_msg = f"*(已触发 Text2SQL 运维插件)*\n\n**执行SQL:**\n```sql\n{sql_query}\n```\n\n**查询结果:**\n{simulated_result}"
-            yield json.dumps({"type": "chunk", "content": agent_msg}) + "\n"
-            yield json.dumps({"type": "sources", "sources": [{"content": "运维告警数据库", "doc_name": "Text2SQL 插件", "score": 1.0}]}) + "\n"
-            return
-            
-        elif any(kw in search_query.lower() for kw in ["zabbix状态", "zabbix api", "主机状态"]):
-            # Zabbix API 插件模拟
-            simulated_result = """
-通过调用 `Zabbix API (host.get)` 获取到的实时状态：
-- **Web-Server-01** (192.168.1.10): CPU 使用率 85% (Warning), 内存剩余 2GB
-- **DB-Server-01** (192.168.1.11): CPU 使用率 20% (OK), 内存剩余 16GB
-"""
-            agent_msg = f"*(已触发 Zabbix API 实时查询插件)*\n\n**API 响应:**\n{simulated_result}"
-            yield json.dumps({"type": "chunk", "content": agent_msg}) + "\n"
-            yield json.dumps({"type": "sources", "sources": [{"content": "Zabbix 监控系统", "doc_name": "Zabbix API", "score": 1.0}]}) + "\n"
-            return
-            
-        elif any(kw in search_query.lower() for kw in ["k8s", "kubernetes", "pod状态", "集群状态"]):
-            # K8s API 插件模拟
-            simulated_result = """
-通过执行 `kubectl get pods -n kube-system` 获取到的实时状态：
-```text
-NAME                                      READY   STATUS             RESTARTS   AGE
-coredns-5d78c9869d-7j9v2                  1/1     Running            0          12d
-kube-proxy-7d9cb856b4-v8m9x               0/1     CrashLoopBackOff   12         2d
-metrics-server-v7p8x                      1/1     Running            0          12d
-```
-> **诊断结论**: 发现 `kube-proxy` 组件处于 `CrashLoopBackOff` 状态，建议立即检查网络插件 (如 Calico/Flannel) 的日志。
-"""
-            agent_msg = f"*(已触发 Kubernetes API 实时诊断插件)*\n\n**集群诊断报告:**\n{simulated_result}"
-            yield json.dumps({"type": "chunk", "content": agent_msg}) + "\n"
-            yield json.dumps({"type": "sources", "sources": [{"content": "K8s API Server", "doc_name": "Kubernetes API", "score": 1.0}]}) + "\n"
-            return
+        # 增加思考过程展示：开始检索
+        yield json.dumps({"type": "chunk", "content": "> - [ ] 正在执行多路知识召回 (向量库检索 / 关键词 BM25 匹配 / 知识图谱遍历)...\n"}) + "\n"
 
         # 3. Retrieval 使用改写后的完整问题进行检索，支持多库
         results = self.kb_service.search(search_query, top_k=5, db_names=db_names)
         
-        if not results:
-            yield json.dumps({"type": "chunk", "content": "抱歉，知识库中没有相关信息。"}) + "\n"
-            yield json.dumps({"type": "sources", "sources": []}) + "\n"
-            return
+        # 增加思考过程展示：检索完成，评估工具
+        if enable_tools:
+            yield json.dumps({"type": "chunk", "content": f"> - [x] 检索完成，成功召回并融合重排了 {len(results)} 条相关知识片段。\n> - [ ] 正在评估是否需要调用外部工具获取实时状态...\n"}) + "\n"
+        else:
+            yield json.dumps({"type": "chunk", "content": f"> - [x] 检索完成，成功召回并融合重排了 {len(results)} 条相关知识片段。\n> - [ ] 外部工具调用已禁用，直接进入知识整合阶段...\n"}) + "\n"
+        
+        # 3.5 Agent 工具调用 (Function Calling)
+        # 判断大模型是否需要调用工具获取实时数据
+        tool_context = ""
+        if enable_tools:
+            try:
+                from app.services.agent_tools import get_tools_by_names, AVAILABLE_TOOLS
+                
+                # 从配置中动态加载工具列表
+                enabled_tool_names = getattr(Config, 'ENABLED_TOOLS', ['execute_shell_command', 'query_api_endpoint'])
+                tools = get_tools_by_names(enabled_tool_names)
+                
+                if tools:
+                    # 绑定工具到大模型
+                    llm_with_tools = self.llm.bind_tools(tools)
+                    # 强化 Prompt，明确如果问题是命令（如 ping）必须直接调用对应的执行工具
+                    tool_prompt = f"""分析以下用户的输入。如果它是一个系统命令（例如 'ping xxx'，'df -h' 等），或者需要获取实时的主机/系统状态、外部API数据，
+    你**必须**调用相应的工具去获取结果。可用的工具包括：{', '.join(enabled_tool_names)}。
+    如果只是普通的知识问答，不需要调用工具。
+    用户输入：{search_query}"""
+                    
+                    tool_msg = llm_with_tools.invoke([("system", "你是一个能够调用工具的智能助手。"), ("user", tool_prompt)])
+                    if tool_msg.tool_calls:
+                        yield json.dumps({"type": "chunk", "content": "> - [x] 问题涉及实时状态，触发外部工具调用逻辑。\n"}) + "\n"
+                        for tool_call in tool_msg.tool_calls:
+                            tool_name = tool_call["name"]
+                            tool_args = tool_call["args"]
+                            print(f"Calling tool: {tool_name} with args: {tool_args}")
+                            yield json.dumps({"type": "chunk", "content": f"> - [ ] 正在执行工具: `{tool_name}` ...\n"}) + "\n"
+                            
+                            # 动态调用对应工具
+                            if tool_name in AVAILABLE_TOOLS:
+                                tool_func = AVAILABLE_TOOLS[tool_name]
+                                res = tool_func.invoke(tool_args)
+                                tool_context += f"【{tool_name} 执行结果】:\n{res}\n\n"
+                                yield json.dumps({"type": "chunk", "content": f"> - [x] 工具 `{tool_name}` 执行成功，已获取实时数据。\n"}) + "\n"
+                                
+                        yield json.dumps({"type": "chunk", "content": "> - [x] 所有前置任务完成，开始整合上下文并生成最终分析报告...\n\n---\n\n"}) + "\n"
+                    else:
+                        yield json.dumps({"type": "chunk", "content": "> - [x] 评估完毕：无需调用外部工具。\n> - [x] 所有前置任务完成，开始整合知识生成最终分析报告...\n\n---\n\n"}) + "\n"
+                else:
+                    yield json.dumps({"type": "chunk", "content": "> - [x] 未配置外部工具，跳过评估。\n> - [x] 所有前置任务完成，开始整合知识生成最终分析报告...\n\n---\n\n"}) + "\n"
+            except Exception as e:
+                print(f"Tool Calling Error: {e}")
+                yield json.dumps({"type": "chunk", "content": "> - [!] 工具调用或评估时发生错误，已跳过。\n> - [x] 开始整合可用知识生成分析报告...\n\n---\n\n"}) + "\n"
+        else:
+            # 工具被禁用，直接输出完成信息
+            yield json.dumps({"type": "chunk", "content": "> - [x] 所有前置任务完成，开始整合知识生成最终分析报告...\n\n---\n\n"}) + "\n"
 
-        # 3. Prepare Context
+        # 4. Prepare Context
         context_parts = []
         sources = []
+        
+        # 优先将工具调用结果作为最强关联资料放入 context
+        if tool_context:
+            context_parts.append(f"【工具执行结果】（请优先根据此结果回答用户）:\n{tool_context}")
+            sources.append({
+                "content": tool_context[:100] + "...",
+                "doc_id": "tool_execution",
+                "doc_name": "系统实时执行结果",
+                "score": 1.0
+            })
+            
         for i, (doc, score) in enumerate(results):
             # 将序号一并编入 Context 供 LLM 参考
             context_parts.append(f"资料 [{i+1}]:\n{doc.page_content}")
@@ -279,12 +313,6 @@ metrics-server-v7p8x                      1/1     Running            0          
             error_msg = "抱歉，生成答案时出现错误。请检查LLM服务状态。"
             yield json.dumps({"type": "chunk", "content": error_msg}) + "\n"
             full_answer = error_msg
-            
-        # Agent 路由：自动化脚本执行 (Auto-Remediation)
-        # 如果大模型的回答中包含“重启”操作，则注入一个自动化执行脚本的按钮
-        if "重启" in full_answer and "服务" in full_answer:
-            action_html = "<div class='mt-2 p-2 bg-light border rounded text-danger'><strong><i class='bi bi-tools'></i> 运维操作建议</strong><br>检测到修复方案包含重启服务，是否立即执行？<br><button class='btn btn-sm btn-danger mt-2' onclick='executeAutoScript(\"restart_service\")'>立即执行重启脚本 (SSH/Ansible)</button></div>"
-            yield json.dumps({"type": "action", "content": action_html}) + "\n"
             
         # 发送引用来源
         yield json.dumps({"type": "sources", "sources": sources}) + "\n"
@@ -361,11 +389,10 @@ metrics-server-v7p8x                      1/1     Running            0          
 用户指出上一轮回答存在严重错误或未能解决问题。
 请进行自我反思与交叉验证：仔细核对以下所有提供的参考资料。
 1. 如果发现资料之间存在冲突，请明确指出。
-2. 如果提供的资料中完全没有任何与问题相关的解决办法或线索，请坦诚告知“当前知识库中未找到相关排障文档”，并建议用户检查实时监控系统（如 Zabbix/Kubernetes）。
-3. 绝对不要猜测或编造解决方案。
+2. 如果提供的资料中完全没有任何与问题相关的解决办法或线索（即目前资料中未提及相关内容），请利用你的预训练知识提供一个兜底的解答或排查方向，但**必须**做出明确标记为“【非基于文档回答】”，并建议用户结合实时监控系统进行检查。
 """
         else:
-            strategy_prompt = "用户认为上一次回答不够完美。请在参考资料的基础上，补充更多细节，重点说明各个方案的优缺点和适用场景，并确保证明依据充分。"
+            strategy_prompt = "用户认为上一次回答不够完美。请在参考资料的基础上，补充更多细节，重点说明各个方案的优缺点和适用场景，并确保证明依据充分。如果资料不足，可补充带有“【非基于文档回答】”标记的兜底解答。"
             
         reanalyze_prompt = ChatPromptTemplate.from_messages([
             ("system", f"""你是一位专家级的故障诊断顾问。

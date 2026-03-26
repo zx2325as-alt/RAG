@@ -43,7 +43,8 @@ $(document).ready(function() {
     // 延迟加载 Ollama 模型，提升首页打开速度
     setTimeout(loadOllamaModels, 2000);
     loadCurrentLLM();
-    renderPendingFiles(); // 初始化文件列表
+    // 初始化页面持久化聊天记录
+    loadChatHistory();
 
     // 监听文件选择变化，增量添加到全局文件列表
     $('#fileInput').on('change', function() {
@@ -301,6 +302,9 @@ function sendMessage() {
         selectedDbs.push($(this).val());
     });
     
+    // 获取工具开关状态
+    var enableTools = $('#enableToolsToggle').is(':checked');
+    
     if (selectedDbs.length === 0) {
         alert("请至少选择一个查询库！");
         return;
@@ -328,7 +332,8 @@ function sendMessage() {
         },
         body: JSON.stringify({
             question: query,
-            db_names: selectedDbs
+            db_names: selectedDbs,
+            enable_tools: enableTools
         }),
         signal: currentAbortController.signal
     }).then(async response => {
@@ -381,6 +386,12 @@ function sendMessage() {
 
         // 渲染打分组件
         appendRatingToMessage(botMsgId, query);
+        
+        // 渲染完成后稍微延迟一下再保存，确保 DOM 已经完全更新
+        setTimeout(() => {
+            scrollToBottom();
+            saveChatHistory();
+        }, 100);
     });
 }
 
@@ -396,9 +407,16 @@ $(document).ready(function() {
 function appendEmptyBotMessage(msgId) {
     var html = `
         <div class="d-flex flex-row justify-content-start mb-3" id="${msgId}-container">
-            <div class="chat-bubble bot markdown-body" style="position: relative;">
+            <div class="chat-bubble bot markdown-body" style="position: relative; width: 100%;">
+                <details class="mb-2" id="${msgId}-thinking-container" style="display: none; background-color: #f8f9fa; border-radius: 6px; padding: 5px 10px; border: 1px solid #e9ecef;">
+                    <summary style="cursor: pointer; color: #6c757d; font-size: 0.9em; font-weight: bold; user-select: none;">
+                        🧠 思考过程 <span class="spinner-border spinner-border-sm ms-1" role="status" aria-hidden="true" style="width: 0.8rem; height: 0.8rem; vertical-align: text-bottom;"></span>
+                    </summary>
+                    <div class="mt-2 text-muted" id="${msgId}-thinking-text" style="font-size: 0.85em; white-space: pre-wrap; max-height: 300px; overflow-y: auto;"></div>
+                    <div id="${msgId}-sources-thinking" class="mt-2"></div>
+                </details>
                 <div class="mb-0 message-content" id="${msgId}-text"></div>
-                <div id="${msgId}-sources"></div>
+                <div id="${msgId}-sources" style="display: none;"></div>
                 <div id="${msgId}-rating" class="mt-2 text-end" style="font-size: 0.85rem; border-top: 1px dashed #dee2e6; padding-top: 5px;"></div>
             </div>
         </div>
@@ -526,6 +544,12 @@ function triggerReanalyze(question, previous_answer, score) {
         // 流结束时，解析内联引用
         var textElem = $(`#${botMsgId}-text`);
         textElem.html(formatCitations(textElem.html()));
+        
+        // 渲染完成后稍微延迟一下再保存，确保 DOM 已经完全更新
+        setTimeout(() => {
+            scrollToBottom();
+            saveChatHistory();
+        }, 100);
     });
 }
 
@@ -551,6 +575,37 @@ function executeAutoScript(scriptName) {
 
 function appendChunkToMessage(msgId, textChunk) {
     var textElem = $(`#${msgId}-text`);
+    
+    // 判断是否为思考过程
+    if (textChunk.startsWith('> ') || textChunk.includes('思考过程')) {
+        var thinkingContainer = $(`#${msgId}-thinking-container`);
+        var thinkingText = $(`#${msgId}-thinking-text`);
+        
+        if (thinkingContainer.css('display') === 'none') {
+            thinkingContainer.show();
+            // 默认展开
+            thinkingContainer.prop('open', true);
+        }
+        
+        // 追加思考内容并渲染
+        var currentThinking = thinkingText.attr('data-raw') || '';
+        currentThinking += textChunk;
+        thinkingText.attr('data-raw', currentThinking);
+        thinkingText.html(marked.parse(currentThinking));
+        
+        // 思考过程结束的标志
+        if (textChunk.includes('开始整合知识生成最终分析报告') || textChunk.includes('开始整合上下文并生成最终分析报告')) {
+            // 移除 spinner
+            thinkingContainer.find('.spinner-border').remove();
+            // 思考结束后自动折叠
+            setTimeout(() => {
+                thinkingContainer.prop('open', false);
+            }, 1000);
+        }
+        scrollToBottom();
+        return;
+    }
+
     var rawText = textElem.data('raw') || '';
     rawText += textChunk;
     textElem.data('raw', rawText);
@@ -603,8 +658,18 @@ function appendChunkToMessage(msgId, textChunk) {
 }
 
 function appendSourcesToMessage(msgId, sources) {
-    var sourcesElem = $(`#${msgId}-sources`);
-    sourcesElem.html(renderSources(sources));
+    var sourcesHtml = renderSources(sources);
+    
+    // 如果有思考过程的容器，优先追加到思考过程里
+    var thinkingSourcesElem = $(`#${msgId}-sources-thinking`);
+    if (thinkingSourcesElem.length > 0) {
+        thinkingSourcesElem.html(sourcesHtml);
+    } else {
+        // 后备：附加到原来的位置
+        var sourcesElem = $(`#${msgId}-sources`);
+        sourcesElem.html(sourcesHtml).show();
+    }
+    
     scrollToBottom();
 }
 
@@ -646,8 +711,8 @@ function appendMessage(sender, text, sources) {
     
     var html = `
         <div class="d-flex flex-row ${alignClass} mb-3">
-            <div class="chat-bubble ${bubbleClass} markdown-body">
-                <div class="mb-0 message-content">${displayContent}</div>
+            <div class="chat-bubble ${bubbleClass} markdown-body" style="max-width: 80%;">
+                <div class="mb-0 message-content" data-raw="${text.replace(/"/g, '&quot;')}">${displayContent}</div>
                 ${renderSources(sources)}
             </div>
         </div>
@@ -678,27 +743,74 @@ function appendMessage(sender, text, sources) {
     }
     
     scrollToBottom();
+    saveChatHistory();
+}
+
+function saveChatHistory() {
+    var chatContent = $('#chatHistory').html();
+    localStorage.setItem('rag_chat_history', chatContent);
+}
+
+function loadChatHistory() {
+    var chatContent = localStorage.getItem('rag_chat_history');
+    if (chatContent) {
+        $('#chatHistory').html(chatContent);
+        // 恢复所有消息的 marked 渲染状态
+        $('#chatHistory .message-content').each(function() {
+            var rawText = $(this).attr('data-raw');
+            if (rawText) {
+                // 如果是用户消息或者没有被渲染过的内容，才重新渲染
+                // 实际上保存的时候已经是渲染好的 HTML 了，所以这一步可能不是必须的
+                // 但如果发现有未渲染的部分，可以在这里统一处理
+            }
+        });
+        
+        // 重新绑定思考过程的折叠事件（如果保存时被写死了）
+        $('#chatHistory details').each(function() {
+            var summary = $(this).find('summary');
+            // 确保 summary 存在且没有绑定过额外的自定义事件
+        });
+
+        // 重新渲染数学公式和代码高亮（因为 HTML 是静态存入的，可能丢失一些动态绑定的事件或样式类）
+        if (typeof renderMathInElement !== 'undefined') {
+            $('#chatHistory .message-content').each(function() {
+                renderMathInElement(this, {
+                    delimiters: [
+                        {left: "$$", right: "$$", display: true},
+                        {left: "\\[", right: "\\]", display: true},
+                        {left: "$", right: "$", display: false},
+                        {left: "\\(", right: "\\)", display: false}
+                    ]
+                });
+            });
+        }
+        
+        scrollToBottom();
+    } else {
+        clearChat(false); // 不触发 saveChatHistory
+    }
 }
 
 function renderSources(sources) {
     if (!sources || sources.length === 0) return '';
     
     var html = '<div class="mt-2 pt-2 border-top">';
-    html += '<small class="text-muted d-block mb-1">参考资料：</small>';
+    html += '<small class="text-muted d-block mb-2">参考资料：</small>';
+    html += '<div class="d-flex flex-wrap gap-2">'; // 横向排布容器
     
     sources.forEach(function(src, index) {
         html += `
-            <div class="mb-1">
-                <span class="badge bg-secondary source-badge" onclick="toggleSource(this)">来源 ${index + 1}</span>
-                <div class="source-content">
-                    ${src.content}
-                    <div class="mt-1 text-end"><small>DocName: ${src.doc_name || '-'} | DocID: ${src.doc_id || '-'}</small></div>
+            <div class="source-item position-relative">
+                <span class="badge bg-secondary source-badge" onclick="toggleSource(this)" style="cursor: pointer;">来源 ${index + 1}</span>
+                <div class="source-content position-absolute bg-white border rounded shadow p-2" style="display: none; z-index: 1000; width: 300px; max-height: 200px; overflow-y: auto; left: 0; top: 100%; margin-top: 5px;">
+                    <div class="mb-2" style="font-size: 0.85rem;">${src.content}</div>
+                    <div class="text-end text-muted" style="font-size: 0.75rem;">DocName: ${src.doc_name || '-'} | DocID: ${src.doc_id || '-'}</div>
                 </div>
             </div>
         `;
     });
     
-    html += '</div>';
+    html += '</div></div>';
     return html;
 }
 
@@ -728,10 +840,11 @@ function removeLoading(id) {
 
 function scrollToBottom() {
     var chatHistory = document.getElementById("chatHistory");
-    chatHistory.scrollTop = chatHistory.scrollHeight;
+    // 加一点冗余高度，确保如果有 margin 折叠也能滚到底
+    chatHistory.scrollTop = chatHistory.scrollHeight + 100;
 }
 
-function clearChat() {
+function clearChat(save = true) {
     $('#chatHistory').html(`
         <div class="d-flex flex-row justify-content-start mb-3">
             <div class="p-3 bg-white border rounded shadow-sm" style="max-width: 80%;">
@@ -739,6 +852,9 @@ function clearChat() {
             </div>
         </div>
     `);
+    if (save) {
+        saveChatHistory();
+    }
 }
 
 function checkSystemStatus() {
