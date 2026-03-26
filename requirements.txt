@@ -3,8 +3,7 @@ flask-sqlalchemy
 pymysql
 redis
 faiss-cpu
-paddlepaddle
-paddleocr
+rapidocr-onnxruntime
 requests
 numpy
 pandas

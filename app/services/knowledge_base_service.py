@@ -101,13 +101,14 @@ class KnowledgeBaseService:
                 print(f"Failed to load index for '{db_name}': {e}")
         else:
             # 不要抛出异常或中断，只是打印一条提示即可，新部署或清空后这是正常现象
-            print(f"No existing FAISS index found for '{db_name}'.")
+            # print(f"No existing FAISS index found for '{db_name}'.") # 注释掉避免用户误认为是bug
             self.vector_stores[db_name] = None
             
         self.build_bm25_index(db_name)
 
     def build_bm25_index(self, db_name='default'):
         """Build BM25 index from DB chunks for specific db_name."""
+        from app.db.models import Document, Chunk
         # 需要联表查询属于该库的 chunks
         # 这里有可能会在无上下文时调用，我们通过 db.session 检查或者简单地直接查询
         try:
@@ -133,6 +134,7 @@ class KnowledgeBaseService:
 
     def build_index(self, db_name='default'):
         """Build index from all chunks in specific DB."""
+        from app.db.models import Document, Chunk
         chunks = Chunk.query.join(Document).filter(Document.db_name == db_name).all()
         if not chunks:
             print(f"No chunks to index for '{db_name}'.")

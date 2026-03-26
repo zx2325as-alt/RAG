@@ -207,6 +207,7 @@ let cachedModelsData = {
 
 function updateLLMModelOptions(category) {
     var select = $('#llmModelSelect');
+    var currentValue = select.val() || select.data('target-value'); // Save current selection or target
     select.empty();
     
     var models = [];
@@ -226,6 +227,12 @@ function updateLLMModelOptions(category) {
                 select.append(`<option value="${model}">${model}</option>`);
             }
         });
+        
+        // Restore previous selection if it exists in the new options
+        if (currentValue && select.find(`option[value="${currentValue}"]`).length > 0) {
+            select.val(currentValue);
+            select.removeData('target-value'); // Clear the target once set
+        }
     } else {
         select.append('<option value="">暂无可用模型</option>');
     }
@@ -244,20 +251,16 @@ function loadCurrentLLM() {
             }
             $('#llmCategorySelect').val(category);
             
-            // 需要等模型列表加载完成后再选中
-            setTimeout(() => {
-                updateLLMModelOptions(category);
-                if (category === 'online') {
-                    $('#llmModelSelect').val(res.actual_id);
-                } else if (category === 'ollama') {
-                    var modelName = res.current_model.match(/\(([^)]+)\)/)[1];
-                    $('#llmModelSelect').val(modelName);
-                } else if (category === 'vllm') {
-                    var modelName = res.current_model.match(/\(([^)]+)\)/)[1];
-                    // vllm options in dropdown have 'vllm: ' prefix usually
-                    $('#llmModelSelect').val('vllm: ' + modelName);
-                }
-            }, 600);
+            // 将目标模型值存在 data 属性中，以便 updateLLMModelOptions 渲染出选项后自动选中
+            var targetModelName = res.actual_id;
+            if (category === 'ollama') {
+                targetModelName = res.current_model.match(/\(([^)]+)\)/)[1];
+            } else if (category === 'vllm') {
+                targetModelName = 'vllm: ' + res.current_model.match(/\(([^)]+)\)/)[1];
+            }
+            $('#llmModelSelect').data('target-value', targetModelName);
+            
+            updateLLMModelOptions(category);
         }
     });
 }
@@ -589,6 +592,18 @@ function appendChunkToMessage(msgId, textChunk) {
         
         // 追加思考内容并渲染
         var currentThinking = thinkingText.attr('data-raw') || '';
+        
+        // 如果新到达的 chunk 包含 [x] 或新的 [ ]，并且之前有未完成的 [ ]，我们可以将其标记为完成
+        // 具体针对多路召回：
+        if (textChunk.includes('检索完成')) {
+            currentThinking = currentThinking.replace('[ ] 正在执行多路知识召回', '[x] 正在执行多路知识召回');
+            // 将旧的固定文本替换为更详细的动态内容
+            currentThinking = currentThinking.replace('正在执行多路知识召回 (向量库检索 / 关键词 BM25 匹配 / 知识图谱遍历)...', '正在执行多路知识召回 (向量库检索 / 关键词 BM25 匹配 / 知识图谱遍历)... [已完成]');
+        }
+        if (textChunk.includes('所有前置任务完成')) {
+            currentThinking = currentThinking.replace('[ ] 正在评估是否需要调用外部工具', '[x] 正在评估是否需要调用外部工具');
+        }
+        
         currentThinking += textChunk;
         thinkingText.attr('data-raw', currentThinking);
         thinkingText.html(marked.parse(currentThinking));
@@ -815,7 +830,25 @@ function renderSources(sources) {
 }
 
 function toggleSource(element) {
-    $(element).next('.source-content').slideToggle();
+    var content = $(element).next('.source-content');
+    var isVisible = content.is(':visible');
+    
+    // Hide all other source contents first
+    $('.source-content').hide();
+    
+    if (!isVisible) {
+        content.slideDown();
+        // Add one-time keydown listener to hide it
+        $(document).one('keydown.hideSource', function() {
+            content.slideUp();
+        });
+        // Also hide on click outside
+        $(document).one('click.hideSource', function(e) {
+            if (!$(e.target).closest('.source-item').length) {
+                content.slideUp();
+            }
+        });
+    }
 }
 
 function appendLoading() {

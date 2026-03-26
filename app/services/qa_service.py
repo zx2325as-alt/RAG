@@ -137,6 +137,16 @@ class QAService:
                     max_retries=1,
                     timeout=60
                 )
+        
+        # 重新绑定 chain
+        if hasattr(self, 'prompt'):
+            self.chain = self.prompt | self.llm
+            self.chain_with_history = RunnableWithMessageHistory(
+                self.chain,
+                self.get_session_history,
+                input_messages_key="question",
+                history_messages_key="history",
+            )
 
     def get_cache_key(self, question):
         return hashlib.md5(question.encode('utf-8')).hexdigest()
@@ -197,13 +207,25 @@ class QAService:
         yield json.dumps({"type": "chunk", "content": "> - [ ] 正在执行多路知识召回 (向量库检索 / 关键词 BM25 匹配 / 知识图谱遍历)...\n"}) + "\n"
 
         # 3. Retrieval 使用改写后的完整问题进行检索，支持多库
+        import time
+        t1 = time.time()
         results = self.kb_service.search(search_query, top_k=5, db_names=db_names)
+        t2 = time.time()
         
+        # 将检索到的具体库、数量、耗时展示出来
+        search_details = f"耗时 {round(t2-t1, 2)}s"
+        if results:
+            docs_info = "\n>   - " + "\n>   - ".join([f"匹配度: {round(score, 3)} | 来源: {doc.metadata.get('doc_name', '未知')}" for doc, score in results[:3]])
+            if len(results) > 3:
+                docs_info += f"\n>   - ...等共 {len(results)} 条片段"
+        else:
+            docs_info = "\n>   - 未检索到强相关内容"
+
         # 增加思考过程展示：检索完成，评估工具
         if enable_tools:
-            yield json.dumps({"type": "chunk", "content": f"> - [x] 检索完成，成功召回并融合重排了 {len(results)} 条相关知识片段。\n> - [ ] 正在评估是否需要调用外部工具获取实时状态...\n"}) + "\n"
+            yield json.dumps({"type": "chunk", "content": f"> - [x] 检索完成 ({search_details})，召回并融合重排了 {len(results)} 条知识片段:{docs_info}\n> - [ ] 正在评估是否需要调用外部工具获取实时状态...\n"}) + "\n"
         else:
-            yield json.dumps({"type": "chunk", "content": f"> - [x] 检索完成，成功召回并融合重排了 {len(results)} 条相关知识片段。\n> - [ ] 外部工具调用已禁用，直接进入知识整合阶段...\n"}) + "\n"
+            yield json.dumps({"type": "chunk", "content": f"> - [x] 检索完成 ({search_details})，召回并融合重排了 {len(results)} 条知识片段:{docs_info}\n> - [ ] 外部工具调用已禁用，直接进入知识整合阶段...\n"}) + "\n"
         
         # 3.5 Agent 工具调用 (Function Calling)
         # 判断大模型是否需要调用工具获取实时数据
@@ -257,19 +279,23 @@ class QAService:
         context_parts = []
         sources = []
         
+        # 为了保证 LLM 引用的 [1], [2] 和前端展示的来源一致，我们需要统一计数
+        source_index = 1
+        
         # 优先将工具调用结果作为最强关联资料放入 context
         if tool_context:
-            context_parts.append(f"【工具执行结果】（请优先根据此结果回答用户）:\n{tool_context}")
+            context_parts.append(f"资料 [{source_index}] (【工具执行结果】请优先根据此结果回答用户):\n{tool_context}")
             sources.append({
                 "content": tool_context[:100] + "...",
                 "doc_id": "tool_execution",
                 "doc_name": "系统实时执行结果",
                 "score": 1.0
             })
+            source_index += 1
             
-        for i, (doc, score) in enumerate(results):
+        for doc, score in results:
             # 将序号一并编入 Context 供 LLM 参考
-            context_parts.append(f"资料 [{i+1}]:\n{doc.page_content}")
+            context_parts.append(f"资料 [{source_index}]:\n{doc.page_content}")
             doc_name = doc.metadata.get("doc_name", "Unknown")
             
             # 如果元数据里是 Unknown，尝试从数据库里查一次
@@ -293,6 +319,7 @@ class QAService:
                 "doc_name": doc_name,
                 "score": float(score)
             })
+            source_index += 1
             
         context = "\n\n".join(context_parts)
         

@@ -7,25 +7,16 @@ try:
 except ImportError:
     DocxDocument = None
 
-# 初始化 PaddleOCR（全局单例，避免重复加载）
-# 需要安装：pip install paddlepaddle paddleocr
+# 初始化 RapidOCR（全局单例，避免重复加载）
+# 需要安装：pip install rapidocr-onnxruntime
 try:
-    # 禁用 Paddle 联网检查
-    os.environ['PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK'] = 'True'
-    from paddleocr import PaddleOCR
+    from rapidocr_onnxruntime import RapidOCR
     import numpy as np
-    import logging
     
-    # 禁用 PaddleOCR 默认的 INFO 级别日志输出（包括那些模型下载、缓存提示）
-    logging.getLogger('ppocr').setLevel(logging.ERROR)
-    import logging as sys_logging
-    # PaddleOCR 内部使用了原生的 logging，需要将总日志调低
-    sys_logging.getLogger('ppocr').setLevel(sys_logging.WARNING)
-    # 当前版本的 PaddleOCR 不支持 show_log 参数，通过上方 sys_logging 设置来控制日志
-    ocr = PaddleOCR(use_angle_cls=True, lang="ch")
-except ImportError:
+    ocr = RapidOCR()
+except Exception as e:
     ocr = None
-    print("Warning: PaddleOCR not installed. OCR fallback will be disabled.")
+    print(f"Warning: OCR initialization failed ({e}). OCR fallback will be disabled.")
 
 def extract_text_from_pdf(file_path):
     """
@@ -56,19 +47,45 @@ def extract_text_from_pdf(file_path):
     # 2. 使用 PyMuPDF 提取普通文本或进行 OCR
     doc = fitz.open(file_path)
     
-    # 限制 OCR 的最大页数，避免超大扫描件卡死服务器
-    max_ocr_pages = 5
-    ocr_count = 0
-    
     for page_num, page in enumerate(doc):
         text = page.get_text()
         
-        # 如果提取出的文本过少，可能该页是扫描件或图片，则启用 OCR
-        if len(text.strip()) < 50 and ocr is not None and ocr_count < max_ocr_pages:
+        # 提取页面中的所有图片并进行 OCR 识别，确保图片内的公式、文字不丢失
+        if ocr is not None:
+            image_list = page.get_images(full=True)
+            for img_index, img_info in enumerate(image_list):
+                try:
+                    xref = img_info[0]
+                    pix = fitz.Pixmap(doc, xref)
+                    
+                    # 确保图片色彩空间受支持 (如果是 CMYK 等，转换为 RGB)
+                    if pix.n - pix.alpha > 3:
+                        pix = fitz.Pixmap(fitz.csRGB, pix)
+                        
+                    img_array = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.h, pix.w, pix.n)
+                    
+                    if pix.n == 4:
+                        import cv2
+                        img_array = cv2.cvtColor(img_array, cv2.COLOR_RGBA2RGB)
+                    elif pix.n == 1:
+                        import cv2
+                        img_array = cv2.cvtColor(img_array, cv2.COLOR_GRAY2RGB)
+                        
+                    result, _ = ocr(img_array)
+                    if result:
+                        text += "\n[图片补充内容]: "
+                        for line in result:
+                            text += line[1] + " "
+                        text += "\n"
+                except Exception as e:
+                    print(f"OCR failed on image in page {page_num}: {e}")
+                    
+        # 兼容处理全扫描件：如果一页文本极少，且没有提取到明显的内嵌图片，则将整页渲染后进行 OCR
+        if len(text.strip()) < 50 and ocr is not None and not image_list:
             try:
                 # 渲染页面为图片
                 pix = page.get_pixmap(matrix=fitz.Matrix(2, 2)) # 提高分辨率
-                # 将 pixmap 转换为 numpy 数组供 PaddleOCR 使用
+                # 将 pixmap 转换为 numpy 数组
                 img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.h, pix.w, pix.n)
                 # 如果是 RGBA，转为 RGB
                 if pix.n == 4:
@@ -78,11 +95,10 @@ def extract_text_from_pdf(file_path):
                     import cv2
                     img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
                     
-                result = ocr.ocr(img)
-                if result and result[0]:
-                    for line in result[0]:
-                        text += line[1][0] + "\n"
-                ocr_count += 1
+                result, _ = ocr(img)
+                if result:
+                    for line in result:
+                        text += line[1] + "\n"
             except Exception as e:
                 print(f"OCR failed on page {page_num}: {e}")
             
@@ -95,13 +111,13 @@ def extract_text_from_image(file_path):
     Extract text directly from images using OCR.
     """
     if ocr is None:
-        return "Error: PaddleOCR not installed. Cannot process image."
+        return "Error: rapidocr-onnxruntime not installed. Cannot process image."
     
     full_text = ""
-    result = ocr.ocr(file_path)
-    if result and result[0]:
-        for line in result[0]:
-            full_text += line[1][0] + "\n"
+    result, _ = ocr(file_path)
+    if result:
+        for line in result:
+            full_text += line[1] + "\n"
     return full_text
 
 def extract_text_from_docx(file_path):

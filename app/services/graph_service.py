@@ -58,7 +58,7 @@ class GraphService:
     def extract_and_store_graph(self, chunks, doc_id):
         """利用 LLM 从文本块中抽取实体和关系并存入 Neo4j (Graph RAG 构建)"""
         if not self.driver:
-            print("Graph RAG: Neo4j not configured, skipping graph extraction.")
+            # print("Graph RAG: Neo4j not configured, skipping graph extraction.") # 注释掉避免用户误认为是bug
             return
 
         prompt = ChatPromptTemplate.from_messages([
@@ -72,20 +72,29 @@ class GraphService:
         
         chain = prompt | self.llm
         
-        # 为了避免全量抽取过慢，可限制仅处理前几个核心块，或者采用异步任务
-        max_chunks = min(len(chunks), 5)
-        
+        # 完整实现：处理所有文本块
         with self.driver.session() as session:
-            for i in range(max_chunks):
-                text = chunks[i].content
+            for i, chunk in enumerate(chunks):
+                text = chunk.content
+                # 过滤掉过短的无意义文本块
+                if len(text.strip()) < 20:
+                    continue
+                    
                 try:
-                    response = chain.invoke({"text": text[:1000]}) # 限制长度避免超长
+                    # 适当限制单次请求文本长度，避免超出上下文限制
+                    response = chain.invoke({"text": text[:2000]}) 
                     result_text = response.content.strip()
                     # 清理可能的 markdown 标记
                     if result_text.startswith("```json"):
                         result_text = result_text[7:-3].strip()
                     elif result_text.startswith("```"):
                         result_text = result_text[3:-3].strip()
+                        
+                    # 尝试解析 JSON
+                    import re
+                    json_match = re.search(r'(\{.*\})', result_text, re.DOTALL)
+                    if json_match:
+                        result_text = json_match.group(1)
                         
                     data = json.loads(result_text)
                     entities = data.get("entities", [])
@@ -95,14 +104,14 @@ class GraphService:
                     for entity in entities:
                         session.run(
                             "MERGE (e:Entity {id: $id}) SET e.name = $name, e.type = $type",
-                            id=f"{doc_id}_{entity['id']}", name=entity.get('name', ''), type=entity.get('type', 'Unknown')
+                            id=f"{doc_id}_{entity.get('id', '')}", name=entity.get('name', ''), type=entity.get('type', 'Unknown')
                         )
                         
                     for rel in relations:
                         session.run(
                             f"MATCH (a:Entity {{id: $source}}), (b:Entity {{id: $target}}) "
-                            f"MERGE (a)-[r:{rel['type']}]->(b)",
-                            source=f"{doc_id}_{rel['source']}", target=f"{doc_id}_{rel['target']}"
+                            f"MERGE (a)-[r:{rel.get('type', 'RELATED_TO')}]->(b)",
+                            source=f"{doc_id}_{rel.get('source', '')}", target=f"{doc_id}_{rel.get('target', '')}"
                         )
                 except Exception as e:
                     print(f"Graph extraction error on chunk {i}: {e}")

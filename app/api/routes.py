@@ -242,32 +242,47 @@ def delete_document(doc_id):
 @api_bp.route('/documents/clear_all', methods=['DELETE'])
 def clear_all_documents():
     """清空所有文档、文本块记录及本地物理文件和向量索引"""
+    import shutil
     try:
-        # 删除物理文件
-        docs = Document.query.all()
-        db_names = set()
-        document_service = get_document_service()
-        for doc in docs:
-            db_name = getattr(doc, 'db_name', 'default')
-            db_names.add(db_name)
-            filepath = os.path.join(document_service.upload_folder, db_name, doc.doc_name)
-            if os.path.exists(filepath):
-                os.remove(filepath)
-                
         # 删除数据库记录
-        Chunk.query.delete()
-        Document.query.delete()
+        from app.db.models import QueryLog, QACache, VectorIndex, Document, Chunk
+        db.session.query(Chunk).delete()
+        db.session.query(Document).delete()
+        db.session.query(QueryLog).delete()
+        db.session.query(QACache).delete()
+        db.session.query(VectorIndex).delete()
         db.session.commit()
         
-        # 触发重建(清空)索引
+        # 彻底清空本地物理文件
+        document_service = get_document_service()
+        if os.path.exists(document_service.upload_folder):
+            shutil.rmtree(document_service.upload_folder)
+            os.makedirs(document_service.upload_folder, exist_ok=True)
+            
+        # 彻底清空向量索引目录
+        from app.config import Config
+        index_dir = Config.FAISS_INDEX_PATH
+        if os.path.exists(index_dir):
+            shutil.rmtree(index_dir)
+            os.makedirs(index_dir, exist_ok=True)
+            
+        # 重置内存中的知识库服务状态
         kb = get_kb_service()
-        for db_name in db_names:
-            kb.build_index(db_name)
-        # 确保默认库也被清空
-        if 'default' not in db_names:
-            kb.build_index('default')
+        kb.vector_stores = {}
+        kb.bm25 = None
+        kb.chunk_map = {}
+        kb.bm25_stores = {}
+        kb.build_index('default')
         
-        current_app.logger.info('All documents and indexes have been cleared.')
+        # 清空 Redis 缓存（如果开启了）
+        qa = get_qa_service()
+        if hasattr(qa, 'use_redis') and qa.use_redis:
+            try:
+                qa.redis_client.flushdb()
+            except Exception:
+                pass
+        
+        current_app.logger.info('All documents, databases, local files and indexes have been thoroughly cleared.')
         return jsonify({'message': 'All data cleared successfully'})
     except Exception as e:
         db.session.rollback()
