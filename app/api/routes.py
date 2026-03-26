@@ -51,7 +51,9 @@ def index():
 
 @api_bp.route('/finetune')
 def finetune():
-    return render_template('finetune.html', tensorboard_port=Config.TENSORBOARD_PORT)
+    return render_template('finetune.html', 
+                           tensorboard_port=Config.TENSORBOARD_PORT,
+                           tensorboard_public_url=Config.TENSORBOARD_PUBLIC_URL)
 
 # 存储 webui 和 tensorboard 进程引用
 tensorboard_process = None
@@ -66,7 +68,9 @@ def start_tensorboard():
     # 检查端口是否被占用
     def is_port_in_use(port):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            return s.connect_ex((Config.TENSORBOARD_HOST, port)) == 0
+            # 如果配置的是 0.0.0.0，检测时应该使用 127.0.0.1 才能正确探测本地端口是否拉起
+            check_host = '127.0.0.1' if Config.TENSORBOARD_HOST == '0.0.0.0' else Config.TENSORBOARD_HOST
+            return s.connect_ex((check_host, port)) == 0
 
     if is_port_in_use(Config.TENSORBOARD_PORT):
         return jsonify({'status': 'already_running'})
@@ -101,7 +105,8 @@ def check_tensorboard():
     import socket
     def is_port_in_use(port):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            return s.connect_ex((Config.TENSORBOARD_HOST, port)) == 0
+            check_host = '127.0.0.1' if Config.TENSORBOARD_HOST == '0.0.0.0' else Config.TENSORBOARD_HOST
+            return s.connect_ex((check_host, port)) == 0
             
     return jsonify({'running': is_port_in_use(Config.TENSORBOARD_PORT)})
 
@@ -789,9 +794,18 @@ def get_eval_data():
     predict_file = os.path.join(model_dir, 'predict_results.json')
     trainer_state_file = os.path.join(model_dir, 'trainer_state.json')
     
-    if not os.path.exists(model_dir):
-        return jsonify({'metrics': {'status': '获取评估数据失败，可能是该模型尚未完成评估或目录不存在。'}})
-        
+    # 核心修复：因为合并模型后，主目录虽然存在但日志全被移到了 _lora 目录
+    # 所以无论主目录存不存在，只要主目录里没有 trainer_state.json，我们就去 _lora 目录找
+    if not os.path.exists(trainer_state_file) and not model_name.endswith('_lora'):
+        lora_model_name = f"{model_name}_lora"
+        lora_model_dir = os.path.join(current_app.root_path, '..', 'finetuned_models', lora_model_name)
+        if os.path.exists(lora_model_dir):
+            model_name = lora_model_name
+            model_dir = lora_model_dir
+            eval_file = os.path.join(model_dir, 'eval_results.json')
+            predict_file = os.path.join(model_dir, 'predict_results.json')
+            trainer_state_file = os.path.join(model_dir, 'trainer_state.json')
+            
     # 如果根目录没有 trainer_state.json，尝试去最新的 checkpoint 目录里找
     if not os.path.exists(trainer_state_file):
         checkpoints = [d for d in os.listdir(model_dir) if d.startswith('checkpoint-') and os.path.isdir(os.path.join(model_dir, d))]

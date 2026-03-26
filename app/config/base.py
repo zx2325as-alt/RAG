@@ -34,6 +34,10 @@ class BaseConfig:
     WEBUI_PORT = int(os.getenv('WEBUI_PORT', 7860))
     TENSORBOARD_HOST = os.getenv('TENSORBOARD_HOST', '0.0.0.0')
     TENSORBOARD_PORT = int(os.getenv('TENSORBOARD_PORT', 6006))
+    
+    # 针对线上部署/端口映射：前端访问 TensorBoard 的实际外网地址和端口
+    # 如果没配置，前端会自动使用 window.location.hostname + TENSORBOARD_PORT
+    TENSORBOARD_PUBLIC_URL = os.getenv('TENSORBOARD_PUBLIC_URL', '')
 
     # 2. DeepSeek 服务配置
     DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', 'sk-803936ec8add440db0dca13ec660f070')

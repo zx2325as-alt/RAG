@@ -7,9 +7,9 @@
     <link href="/static/vendor/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container">
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); box-shadow: 0 2px 10px rgba(0,0,0,0.1); height: 56px;">
+        <div class="container-fluid px-4">
             <a class="navbar-brand" href="/">运维知识助手 (RAG)</a>
             <div class="collapse navbar-collapse">
                 <ul class="navbar-nav ms-auto">
@@ -33,9 +33,9 @@
         <div class="row">
             <!-- 左侧：基础配置（变窄） -->
             <div class="col-md-4">
-                <div class="card shadow-sm mb-4">
-                    <div class="card-header bg-light">
-                        <h5 class="mb-0">1. 选择基座模型</h5>
+                <div class="card border-0 shadow-sm mb-4 rounded-3">
+                    <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
+                        <h6 class="mb-0 fw-bold" style="color: #1e3c72;">1. 选择基座模型</h6>
                     </div>
                     <div class="card-body">
                         <div class="mb-3">
@@ -68,9 +68,9 @@
                     </div>
                 </div>
 
-                <div class="card shadow-sm">
-                    <div class="card-header bg-light">
-                        <h5 class="mb-0">2. 选择微调数据集</h5>
+                <div class="card border-0 shadow-sm rounded-3">
+                    <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
+                        <h6 class="mb-0 fw-bold" style="color: #1e3c72;">2. 选择微调数据集</h6>
                     </div>
                     <div class="card-body">
                         <div class="mb-3">
@@ -93,9 +93,9 @@
 
             <!-- 右侧：训练配置与状态 -->
             <div class="col-md-8">
-                <div class="card shadow-sm h-100">
-                    <div class="card-header bg-light">
-                        <h5 class="mb-0">3. 训练高级配置与状态</h5>
+                <div class="card border-0 shadow-sm h-100 rounded-3">
+                    <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
+                        <h6 class="mb-0 fw-bold" style="color: #1e3c72;">3. 训练高级配置与状态</h6>
                     </div>
                     <div class="card-body d-flex flex-column" style="font-size: 0.85rem;">
                         <div class="row g-2 mb-2">
@@ -580,14 +580,23 @@
             $.post('/api/start_tensorboard', function(res) {
                 if (res.status === 'ok' || res.status === 'already_running') {
                     // 使用轮询检测端口是否真正可用，防止拒绝连接
-                    var maxRetries = 10;
+                    var maxRetries = 15; // 稍微延长等待次数，服务器冷启动可能较慢
                     var retries = 0;
                     
                     function checkTbReady() {
                         $.get('/api/check_tensorboard', function(checkRes) {
                             if (checkRes.running) {
-                                var host = window.location.hostname;
-                                $('#tbIframe').attr('src', 'http://' + host + ':{{ tensorboard_port }}');
+                                // 支持自定义线上外网地址映射
+                                var tbUrl = '{{ tensorboard_public_url }}';
+                                if (!tbUrl) {
+                                    tbUrl = 'http://' + window.location.hostname + ':{{ tensorboard_port }}';
+                                }
+                                
+                                $('#tbIframe').attr('src', tbUrl);
+                                
+                                // 更新“新窗口打开”按钮的链接
+                                $('#tbModalHeader a').attr('onclick', `window.open('${tbUrl}')`);
+                                
                                 var tbModal = new bootstrap.Modal(document.getElementById('tensorboardModal'));
                                 tbModal.show();
                                 btn.prop('disabled', false).html(originalText);
@@ -597,7 +606,7 @@
                                     setTimeout(checkTbReady, 1000);
                                 } else {
                                     btn.prop('disabled', false).html(originalText);
-                                    alert('拉起 TensorBoard 超时，请检查后端日志。');
+                                    alert('拉起 TensorBoard 超时，请检查后端环境。');
                                 }
                             }
                         }).fail(function() {
@@ -611,8 +620,8 @@
                         });
                     }
                     
-                    // 延迟 1 秒后开始检测
-                    setTimeout(checkTbReady, 1000);
+                    // 延迟 1.5 秒后开始检测，给进程足够启动时间
+                    setTimeout(checkTbReady, 1500);
                 } else {
                     btn.prop('disabled', false).html(originalText);
                     alert('拉起 TensorBoard 失败: ' + res.error);

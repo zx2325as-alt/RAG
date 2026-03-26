@@ -12,9 +12,9 @@
         .heatmap-cell { width: 40px; height: 40px; text-align: center; vertical-align: middle; }
     </style>
 </head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container">
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); box-shadow: 0 2px 10px rgba(0,0,0,0.1); height: 56px;">
+        <div class="container-fluid px-4">
             <a class="navbar-brand" href="/">运维知识助手 (RAG)</a>
             <div class="collapse navbar-collapse">
                 <ul class="navbar-nav ms-auto">
@@ -28,12 +28,12 @@
 
     <div class="container mt-4 mb-5">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h3 class="mb-0">训练后评估报告</h3>
+            <h3 class="mb-0 fw-bold" style="color: #1e3c72;">训练后评估报告</h3>
             <div class="d-flex">
                 <select id="modelSelect" class="form-select me-2" style="width: 250px;">
                     <option value="">请选择微调模型...</option>
                 </select>
-                <button id="loadReportBtn" class="btn btn-primary">生成报告</button>
+                <button id="loadReportBtn" class="btn text-white" style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); border: none;">生成报告</button>
             </div>
         </div>
 
@@ -42,35 +42,51 @@
         <div id="reportContainer" style="display: none;">
             <!-- 核心指标 -->
             <div class="row mb-4">
-                <div class="col-md-3">
-                    <div class="card shadow-sm metric-card">
+                <div class="col-md-2">
+                    <div class="card border-0 shadow-sm rounded-3 metric-card" style="border-left-color: #1e3c72;">
                         <div class="card-body">
-                            <h6 class="text-muted">评估损失 (Eval Loss)</h6>
-                            <h3 id="metricLoss">-</h3>
+                            <h6 class="text-muted mb-1" style="font-size: 0.85rem;">评估损失 (Eval Loss)</h6>
+                            <h3 id="metricLoss" class="mb-0 fw-bold text-primary">-</h3>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <div class="card shadow-sm metric-card" style="border-left-color: #198754;">
+                <div class="col-md-2">
+                    <div class="card border-0 shadow-sm rounded-3 metric-card" style="border-left-color: #198754;">
                         <div class="card-body">
-                            <h6 class="text-muted">ROUGE-L</h6>
-                            <h3 id="metricRouge">-</h3>
+                            <h6 class="text-muted mb-1" style="font-size: 0.85rem;">ROUGE-L</h6>
+                            <h3 id="metricRouge" class="mb-0 fw-bold text-success">-</h3>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <div class="card shadow-sm metric-card" style="border-left-color: #ffc107;">
+                <div class="col-md-2">
+                    <div class="card border-0 shadow-sm rounded-3 metric-card" style="border-left-color: #ffc107;">
                         <div class="card-body">
-                            <h6 class="text-muted">BLEU Score</h6>
-                            <h3 id="metricBleu">-</h3>
+                            <h6 class="text-muted mb-1" style="font-size: 0.85rem;">BLEU Score</h6>
+                            <h3 id="metricBleu" class="mb-0 fw-bold text-warning">-</h3>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <div class="card shadow-sm metric-card" style="border-left-color: #dc3545;">
+                <div class="col-md-2">
+                    <div class="card border-0 shadow-sm rounded-3 metric-card" style="border-left-color: #0dcaf0;">
                         <div class="card-body">
-                            <h6 class="text-muted">推理吞吐 (Samples/s)</h6>
-                            <h3 id="metricSpeed">-</h3>
+                            <h6 class="text-muted mb-1" style="font-size: 0.85rem;">训练轮数 (Epochs)</h6>
+                            <h3 id="metricEpochs" class="mb-0 fw-bold text-info">-</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card border-0 shadow-sm rounded-3 metric-card" style="border-left-color: #6f42c1;">
+                        <div class="card-body">
+                            <h6 class="text-muted mb-1" style="font-size: 0.85rem;">总步数 (Steps)</h6>
+                            <h3 id="metricSteps" class="mb-0 fw-bold" style="color: #6f42c1;">-</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card border-0 shadow-sm rounded-3 metric-card" style="border-left-color: #dc3545;">
+                        <div class="card-body">
+                            <h6 class="text-muted mb-1" style="font-size: 0.85rem;">运行时长 (Mins)</h6>
+                            <h3 id="metricRuntime" class="mb-0 fw-bold text-danger">-</h3>
                         </div>
                     </div>
                 </div>
@@ -79,9 +95,9 @@
             <div class="row mb-4">
                 <!-- 静态评估报告图表展示 -->
                 <div class="col-md-12" id="staticImagesCol">
-                    <div class="card shadow-sm h-100">
-                        <div class="card-header bg-white">
-                            <h5 class="mb-0">评估图表展示 (直接读取系统输出图片)</h5>
+                    <div class="card border-0 shadow-sm rounded-3 h-100">
+                        <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
+                            <h6 class="mb-0 fw-bold" style="color: #1e3c72;">评估图表展示 (直接读取系统输出图片)</h6>
                         </div>
                         <div class="card-body">
                             <div class="row" id="staticImagesContainer">
@@ -95,12 +111,12 @@
             <div class="row mb-4">
                 <!-- 训练损失曲线 (动态渲染，如果不存在则隐藏) -->
                 <div class="col-md-12 d-none" id="chartCol">
-                    <div class="card shadow-sm h-100">
-                        <div class="card-header bg-white">
-                            <h5 class="mb-0">损失曲线 (Loss)</h5>
+                    <div class="card border-0 shadow-sm rounded-3 h-100">
+                        <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
+                            <h6 class="mb-0 fw-bold" style="color: #1e3c72;">损失曲线 (Loss)</h6>
                         </div>
                         <div class="card-body">
-                            <canvas id="lossChart" style="max-height: 400px;"></canvas>
+                            <canvas id="lossChart" height="100"></canvas>
                         </div>
                     </div>
                 </div>
@@ -190,10 +206,18 @@
                     var bleu = m.eval_bleu || m.predict_bleu;
                     var speed = m.eval_samples_per_second || m.predict_samples_per_second;
                     
+                    var config = data.config || {};
+                    var epochs = m.epoch || config.epoch;
+                    var steps = config.global_step || m.global_step;
+                    var runtime = m.train_runtime || m.predict_runtime;
+                    
                     $('#metricLoss').text(loss ? parseFloat(loss).toFixed(4) : 'N/A');
                     $('#metricRouge').text(rouge ? parseFloat(rouge).toFixed(2) : 'N/A');
                     $('#metricBleu').text(bleu ? parseFloat(bleu).toFixed(2) : 'N/A');
-                    $('#metricSpeed').text(speed ? parseFloat(speed).toFixed(2) : 'N/A');
+                    
+                    $('#metricEpochs').text(epochs ? parseFloat(epochs).toFixed(2) : 'N/A');
+                    $('#metricSteps').text(steps ? parseInt(steps) : 'N/A');
+                    $('#metricRuntime').text(runtime ? (parseFloat(runtime) / 60).toFixed(2) : 'N/A');
                     
                     // 渲染系统生成的静态评估图片
                     if (data.images && Object.keys(data.images).length > 0) {
