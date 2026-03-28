@@ -2,8 +2,8 @@ import os
 import sys
 import warnings
 import logging
-
-# 将项目根目录添加到 sys.path，以便能够正确导入 app 模块
+#wwww
+# 将项目根目录添加到1 sys.path，以便能够正确导入 app 模块
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app
