@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, render_template, current_app
+from flask import Blueprint, request, jsonify, render_template, current_app, Response, stream_with_context
 from app.db.models import Document, Chunk, QueryLog
 from app.db import db
 from app.services.document_service import DocumentService
@@ -7,7 +7,10 @@ from app.config import Config
 from werkzeug.utils import secure_filename
 import os
 import sys
+import json
 from datetime import datetime
+import threading
+import queue
 
 def get_llamafactory_cli_path():
     import shutil
@@ -23,10 +26,6 @@ def get_llamafactory_cli_path():
     return 'llamafactory-cli'
 
 api_bp = Blueprint('api', __name__)
-
-# Remove these lines from global scope because they require app context
-# document_service = DocumentService()
-# qa_service = QAService()
 
 # Use a function to get or initialize them lazily
 def get_document_service():
@@ -121,24 +120,77 @@ def status():
         'chunk_count': chunk_count
     })
 
-import threading
+# 用于存储 SSE 客户端的消息队列
+progress_queues = {}
+
+@api_bp.route('/progress')
+def progress_stream():
+    """SSE endpoint for real-time processing progress."""
+    def generate():
+        q = queue.Queue()
+        client_id = str(id(q))
+        progress_queues[client_id] = q
+        try:
+            # 发送初始连接成功消息
+            yield f"data: {json.dumps({'type': 'connection', 'status': 'connected'})}\n\n"
+            while True:
+                msg = q.get()
+                if msg == "STOP":
+                    break
+                yield f"data: {json.dumps(msg)}\n\n"
+        finally:
+            if client_id in progress_queues:
+                del progress_queues[client_id]
+                
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
+
+def notify_progress(doc_id, doc_name, step, progress, message):
+    """Notify all connected SSE clients about processing progress."""
+    data = {
+        'type': 'progress',
+        'doc_id': doc_id,
+        'doc_name': doc_name,
+        'step': step,
+        'progress': progress,
+        'message': message
+    }
+    for q in progress_queues.values():
+        q.put(data)
 
 def process_document_background(app, doc_id, filepath, db_name):
-    """Background task for processing documents to avoid blocking the API."""
+    """Background task for processing documents with real-time feedback."""
     with app.app_context():
+        doc = Document.query.get(doc_id)
+        doc_name = doc.doc_name if doc else "Unknown"
+        
         try:
+            notify_progress(doc_id, doc_name, 'start', 0, '准备解析文档...')
+            
             document_service = get_document_service()
             kb = get_kb_service()
             
-            # 解析文档并分块 (现在内部已经使用了 bulk_save_objects 提升速度)
-            chunks = document_service.parse_document(doc_id, filepath)
+            # 1. 解析与分块 (带回调)
+            def progress_cb(p, msg):
+                notify_progress(doc_id, doc_name, 'processing', p, msg)
+                
+            chunks = document_service.parse_document(doc_id, filepath, progress_callback=progress_cb)
             
-            # 构建向量索引和 BM25 索引
             if chunks:
+                # 2. 构建向量索引
+                notify_progress(doc_id, doc_name, 'indexing', 85, f'正在构建向量索引 ({len(chunks)} 个分片)...')
                 kb.add_documents(chunks, db_name=db_name)
+                
+                # 3. 完成
+                notify_progress(doc_id, doc_name, 'completed', 100, '处理完成！')
+            else:
+                notify_progress(doc_id, doc_name, 'failed', 0, '解析失败：未提取到有效文本内容')
+                
         except Exception as e:
             import traceback
             app.logger.error(f"Background processing failed for doc {doc_id}: {e}\n{traceback.format_exc()}")
+            notify_progress(doc_id, doc_name, 'failed', 0, f'处理出错: {str(e)}')
+            
+            # 使用新的查询获取对象，避免 DetachedInstanceError
             doc = Document.query.get(doc_id)
             if doc:
                 doc.status = 'failed'
@@ -777,150 +829,6 @@ def stop_finetune():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@api_bp.route('/eval_report')
-def eval_report():
-    return render_template('eval_report.html')
-
-@api_bp.route('/api/eval_data', methods=['GET'])
-def get_eval_data():
-    import json
-    """读取评估数据并返回给前端报告页面"""
-    model_name = request.args.get('model_name')
-    if not model_name:
-        return jsonify({'error': '未提供模型名称'}), 400
-        
-    model_dir = os.path.join(current_app.root_path, '..', 'finetuned_models', model_name)
-    eval_file = os.path.join(model_dir, 'eval_results.json')
-    predict_file = os.path.join(model_dir, 'predict_results.json')
-    trainer_state_file = os.path.join(model_dir, 'trainer_state.json')
-    
-    # 核心修复：因为合并模型后，主目录虽然存在但日志全被移到了 _lora 目录
-    # 所以无论主目录存不存在，只要主目录里没有 trainer_state.json，我们就去 _lora 目录找
-    if not os.path.exists(trainer_state_file) and not model_name.endswith('_lora'):
-        lora_model_name = f"{model_name}_lora"
-        lora_model_dir = os.path.join(current_app.root_path, '..', 'finetuned_models', lora_model_name)
-        if os.path.exists(lora_model_dir):
-            model_name = lora_model_name
-            model_dir = lora_model_dir
-            eval_file = os.path.join(model_dir, 'eval_results.json')
-            predict_file = os.path.join(model_dir, 'predict_results.json')
-            trainer_state_file = os.path.join(model_dir, 'trainer_state.json')
-            
-    # 如果根目录没有 trainer_state.json，尝试去最新的 checkpoint 目录里找
-    if not os.path.exists(trainer_state_file):
-        checkpoints = [d for d in os.listdir(model_dir) if d.startswith('checkpoint-') and os.path.isdir(os.path.join(model_dir, d))]
-        if checkpoints:
-            checkpoints.sort(key=lambda x: int(x.split('-')[1]) if x.split('-')[1].isdigit() else 0, reverse=True)
-            latest_ckpt = checkpoints[0]
-            trainer_state_file = os.path.join(model_dir, latest_ckpt, 'trainer_state.json')
-            
-    # 构建空的数据结构，只返回真实数据
-    response_data = {
-        'model_name': model_name,
-        'metrics': {},
-        'samples': [],
-        'config': {},
-        'loss_history': [],
-        'eval_loss_history': []
-    }
-    
-    # 尝试读取 LLaMA-Factory 的评估结果
-    if os.path.exists(eval_file):
-        try:
-            with open(eval_file, 'r', encoding='utf-8') as f:
-                response_data['metrics'].update(json.load(f))
-        except Exception:
-            pass
-            
-    # 尝试读取 predict_results.json 中的指标 (包含 ROUGE, BLEU 等)
-    if os.path.exists(predict_file):
-        try:
-            with open(predict_file, 'r', encoding='utf-8') as f:
-                response_data['metrics'].update(json.load(f))
-        except Exception:
-            pass
-            
-    # 尝试读取所有的评估图片并进行 Base64 编码返回给前端展示
-    import base64
-    image_files = ['training_loss.png', 'training_eval_loss.png', 'training_eval_accuracy.png']
-    images_base64 = {}
-    for img_name in image_files:
-        img_path = os.path.join(model_dir, img_name)
-        if os.path.exists(img_path):
-            try:
-                with open(img_path, "rb") as image_file:
-                    encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
-                    images_base64[img_name] = f"data:image/png;base64,{encoded_string}"
-            except Exception:
-                pass
-    response_data['images'] = images_base64
-    
-    # 尝试读取训练状态 (提取 loss 曲线等)
-    has_loss_data = False
-    if os.path.exists(trainer_state_file):
-        try:
-            with open(trainer_state_file, 'r', encoding='utf-8') as f:
-                state = json.load(f)
-                response_data['config']['global_step'] = state.get('global_step')
-                response_data['config']['epoch'] = state.get('epoch')
-                
-                log_history = state.get('log_history', [])
-                train_losses = []
-                eval_losses = []
-                
-                for log in log_history:
-                    if 'loss' in log and 'step' in log:
-                        train_losses.append({'step': log['step'], 'loss': log['loss']})
-                    if 'eval_loss' in log and 'step' in log:
-                        eval_losses.append({'step': log['step'], 'loss': log['eval_loss']})
-                        
-                response_data['loss_history'] = train_losses
-                response_data['eval_loss_history'] = eval_losses
-                
-                if train_losses or eval_losses:
-                    has_loss_data = True
-                
-                # 如果 metrics 中没有 eval_loss，且有 eval_losses 历史记录，取最后一次
-                if not response_data.get('metrics') and eval_losses:
-                    response_data['metrics'] = {'eval_loss': eval_losses[-1]['loss']}
-                elif not response_data.get('metrics') and train_losses:
-                    # 退而求其次取 train_loss
-                    response_data['metrics'] = {'eval_loss': train_losses[-1]['loss']}
-                    
-        except Exception as e:
-            current_app.logger.error(f"Error parsing trainer_state.json: {e}")
-            pass
-            
-    # 如果没有 metrics 也没有 loss 历史，说明目录为空或训练还没开始
-    if not response_data.get('metrics') and not has_loss_data:
-        # 尝试检查模型目录是否存在，如果存在但没有日志，可能仅仅是没有 eval 或者 LLaMA-Factory 配置不输出日志
-        if os.path.exists(model_dir):
-            response_data['metrics'] = {'status': '模型目录存在，但尚未产生标准的训练或评估日志文件。'}
-            return jsonify(response_data)
-        else:
-            return jsonify({'metrics': {'status': '获取评估数据失败，可能是该模型尚未产生训练日志或目录不存在。'}})
-        
-    # 尝试获取真实生成的样例比对结果 (通常由 LLaMA-Factory 的 predict 产生)
-    predict_file = os.path.join(model_dir, 'generated_predictions.jsonl')
-    if os.path.exists(predict_file):
-        try:
-            samples = []
-            with open(predict_file, 'r', encoding='utf-8') as f:
-                for line in f:
-                    if not line.strip(): continue
-                    item = json.loads(line)
-                    samples.append({
-                        "instruction": item.get("prompt", ""),
-                        "reference": item.get("label", ""),
-                        "predict": item.get("predict", ""),
-                        "status": "待定" # 如果没有准确评分，默认待定
-                    })
-            response_data['samples'] = samples[:50] # 最多返回50条展示
-        except Exception:
-            pass
-
-    return jsonify(response_data)
-
 @api_bp.route('/finetuned_models_list', methods=['GET'])
 def get_finetuned_models():
     """获取所有微调过的模型列表"""
@@ -954,8 +862,9 @@ def get_checkpoints():
 
 @api_bp.route('/api/get_datasets', methods=['GET'])
 def get_datasets():
-    """获取 uploads/datasets/raw 目录下的所111sonl 数据集文件"""
+    """获取 uploads/datasets/raw 目录下的所有 jsonl 数据集文件"""
     try:
+        from app.config import Config
         raw_dataset_dir = os.path.join(current_app.root_path, '..', Config.UPLOAD_FOLDER, 'datasets', 'raw')
         if not os.path.exists(raw_dataset_dir):
             os.makedirs(raw_dataset_dir, exist_ok=True)

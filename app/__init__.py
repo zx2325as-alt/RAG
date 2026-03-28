@@ -28,7 +28,7 @@ def create_app(config_class=Config):
             try:
                 os.makedirs(dir_path, exist_ok=True)
             except Exception as e:
-                print(f"Warning: Could not create directory {dir_path}: {e}")
+                app.logger.warning(f"Warning: Could not create directory {dir_path}: {e}")
 
     # 设置详细的日志格式
     if not os.path.exists('logs'):
@@ -57,6 +57,35 @@ def create_app(config_class=Config):
     with app.app_context():
         from app.db import models
         db.create_all()
+        
+        # 统一异常处理
+        from flask import jsonify
+        from werkzeug.exceptions import HTTPException
+
+        @app.errorhandler(Exception)
+        def handle_exception(e):
+            # 处理 HTTP 异常 (如 404, 405 等)
+            if isinstance(e, HTTPException):
+                response = {
+                    "code": e.code,
+                    "message": e.description,
+                    "status": "error"
+                }
+                return jsonify(response), e.code
+
+            # 处理业务逻辑中的未捕获异常
+            app.logger.error(f"Unhandled Exception: {str(e)}", exc_info=True)
+            response = {
+                "code": 500,
+                "message": "Internal Server Error",
+                "status": "error"
+            }
+            # 如果是开发模式，可以返回更详细的错误信息
+            if app.debug:
+                response["detail"] = str(e)
+            
+            return jsonify(response), 500
+
         from app.api.routes import api_bp
         app.register_blueprint(api_bp, url_prefix='/') # Mount at root for simplicity or keep /api for API and another for UI
 

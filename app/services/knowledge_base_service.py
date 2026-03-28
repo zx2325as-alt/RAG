@@ -1,5 +1,8 @@
 import os
 import sys
+import logging
+
+logger = logging.getLogger(__name__)
 
 # 将项目根目录添加到 sys.path，以便能够正确导入 app 模块
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -35,7 +38,7 @@ class KnowledgeBaseService:
         
         # 引入重排序模型，并将其放置到 GPU 上以提升推理速度
         self.reranker_model_name = Config.RERANKER_MODEL_PATH
-        print("Loading reranker model...")
+        logger.info("Loading reranker model...")
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.reranker_tokenizer = AutoTokenizer.from_pretrained(self.reranker_model_name)
         self.reranker_model = AutoModelForSequenceClassification.from_pretrained(self.reranker_model_name)
@@ -60,9 +63,9 @@ class KnowledgeBaseService:
                     Config.NEO4J_URI, 
                     auth=(Config.NEO4J_USER, Config.NEO4J_PASSWORD)
                 )
-                print("Neo4j driver initialized successfully for Graph RAG.")
+                logger.info("Neo4j driver initialized successfully for Graph RAG.")
             except Exception as e:
-                print(f"Failed to initialize Neo4j driver: {e}")
+                logger.error(f"Failed to initialize Neo4j driver: {e}")
         
         self.load_all_indexes()
 
@@ -96,9 +99,9 @@ class KnowledgeBaseService:
                     allow_dangerous_deserialization=True
                 )
                 self.vector_stores[db_name] = vs
-                print(f"Loaded FAISS index for '{db_name}' from {db_index_path}")
+                logger.info(f"Loaded FAISS index for '{db_name}' from {db_index_path}")
             except Exception as e:
-                print(f"Failed to load index for '{db_name}': {e}")
+                logger.error(f"Failed to load index for '{db_name}': {e}")
         else:
             # 不要抛出异常或中断，只是打印一条提示即可，新部署或清空后这是正常现象
             # print(f"No existing FAISS index found for '{db_name}'.") # 注释掉避免用户误认为是bug
@@ -127,9 +130,9 @@ class KnowledgeBaseService:
                 
             bm25 = BM25Okapi(tokenized_corpus)
             self.bm25_stores[db_name] = {"bm25": bm25, "chunk_map": chunk_map}
-            print(f"Built BM25 index for '{db_name}' with {len(chunks)} chunks.")
+            logger.info(f"Built BM25 index for '{db_name}' with {len(chunks)} chunks.")
         except Exception as e:
-            print(f"Error building BM25 index for {db_name}: {e}")
+            logger.error(f"Error building BM25 index for {db_name}: {e}")
             self.bm25_stores[db_name] = {"bm25": None, "chunk_map": {}}
 
     def build_index(self, db_name='default'):
@@ -137,7 +140,7 @@ class KnowledgeBaseService:
         from app.db.models import Document, Chunk
         chunks = Chunk.query.join(Document).filter(Document.db_name == db_name).all()
         if not chunks:
-            print(f"No chunks to index for '{db_name}'.")
+            logger.info(f"No chunks to index for '{db_name}'.")
             # 如果该库被清空了，清理内存中的实例并删除磁盘上的旧索引文件
             if db_name in self.vector_stores:
                 del self.vector_stores[db_name]
@@ -161,7 +164,7 @@ class KnowledgeBaseService:
             docs = db.session.query(Document).filter(Document.doc_id.in_(doc_ids)).all()
             doc_map = {doc.doc_id: doc.doc_name for doc in docs}
         except Exception as e:
-            print(f"Warning: Failed to fetch document map for indexing: {e}")
+            logger.warning(f"Warning: Failed to fetch document map for indexing: {e}")
 
         documents = []
         for chunk in chunks:
@@ -177,13 +180,13 @@ class KnowledgeBaseService:
             doc = LangchainDocument(page_content=chunk.content, metadata=meta)
             documents.append(doc)
 
-        print(f"Creating index for '{db_name}' with {len(documents)} documents...")
+        logger.info(f"Creating index for '{db_name}' with {len(documents)} documents...")
         vs = FAISS.from_documents(documents, self.embeddings)
         self.vector_stores[db_name] = vs
         
         db_index_path = self.get_index_path(db_name)
         vs.save_local(db_index_path)
-        print(f"Index saved to {db_index_path}")
+        logger.info(f"Index saved to {db_index_path}")
         
         # 兼容旧代码，将默认库的指标记录下来
         if db_name == 'default':
@@ -210,7 +213,7 @@ class KnowledgeBaseService:
             docs = db.session.query(Document).filter(Document.doc_id.in_(doc_ids)).all()
             doc_map = {doc.doc_id: doc.doc_name for doc in docs}
         except Exception as e:
-            print(f"Warning: Failed to fetch document map for adding documents: {e}")
+            logger.warning(f"Warning: Failed to fetch document map for adding documents: {e}")
 
         documents = []
         for chunk in chunks:
@@ -229,7 +232,7 @@ class KnowledgeBaseService:
         vs.add_documents(documents)
         db_index_path = self.get_index_path(db_name)
         vs.save_local(db_index_path)
-        print(f"Added {len(documents)} documents to index '{db_name}'.")
+        logger.info(f"Added {len(documents)} documents to index '{db_name}'.")
         
         self.build_bm25_index(db_name)
 
@@ -240,7 +243,7 @@ class KnowledgeBaseService:
             graph_service = GraphService()
             return graph_service.extract_entities_from_query(query)
         except Exception as e:
-            print(f"Error using GraphService for entity extraction: {e}")
+            logger.error(f"Error using GraphService for entity extraction: {e}")
             # 回退到基础关键字匹配
             entities = []
             keywords = ["服务器", "数据库", "Zabbix", "Nginx", "MySQL", "网络", "Redis", "宕机"]
@@ -285,7 +288,7 @@ class KnowledgeBaseService:
                         )
                         graph_results.append((doc, 0.95)) # 赋予图谱结果一个较高的初始信任分数
         except Exception as e:
-            print(f"Graph search error: {e}")
+            logger.error(f"Graph search error: {e}")
             
         return graph_results
 
@@ -417,7 +420,7 @@ class KnowledgeBaseService:
                             expanded_content = "\n...\n".join([c.content for c in surrounding_chunks])
                             doc.page_content = expanded_content
                 except Exception as e:
-                    print(f"Parent-Child expansion failed: {e}")
+                    logger.error(f"Parent-Child expansion failed: {e}")
 
                 reranked_results.append((doc, score.item()))
                 

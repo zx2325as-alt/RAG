@@ -21,9 +21,6 @@
                     <li class="nav-item">
                         <a class="nav-link" href="/finetune">模型微调(Ollama)</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/eval_report">评估报告</a>
-                    </li>
                 </ul>
             </div>
         </div>
@@ -61,6 +58,16 @@
                                 上传并解析
                             </button>
                         </form>
+                        <!-- 实时进度条 -->
+                        <div id="progressContainer" class="mt-2" style="display: none;">
+                            <div class="d-flex justify-content-between mb-1">
+                                <small id="progressText" class="text-muted" style="font-size: 0.7rem;">正在处理...</small>
+                                <small id="progressPercent" class="text-muted" style="font-size: 0.7rem;">0%</small>
+                            </div>
+                            <div class="progress" style="height: 6px;">
+                                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%; background-color: #2a5298;"></div>
+                            </div>
+                        </div>
                         <div id="uploadStatus" class="alert alert-secondary mt-1 py-1 px-2" style="display: none; max-height: 40px; overflow-y: auto; font-size: 0.75rem;"></div>
                         <hr class="my-1">
                         <div class="input-group input-group-sm mb-1">

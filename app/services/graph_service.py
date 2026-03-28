@@ -1,8 +1,12 @@
 import json
 import os
+import logging
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from app.config import Config
+
+logger = logging.getLogger(__name__)
+
 try:
     from neo4j import GraphDatabase
 except ImportError:
@@ -17,9 +21,9 @@ class GraphService:
                     Config.NEO4J_URI,
                     auth=(Config.NEO4J_USER, Config.NEO4J_PASSWORD)
                 )
-                print("Neo4j driver initialized successfully in GraphService.")
+                logger.info("Neo4j driver initialized successfully in GraphService.")
             except Exception as e:
-                print(f"Failed to initialize Neo4j driver in GraphService: {e}")
+                logger.error(f"Failed to initialize Neo4j driver in GraphService: {e}")
                 
         # 初始化用于图谱抽取的 LLM
         self.llm = self._init_llm()
@@ -114,7 +118,7 @@ class GraphService:
                             source=f"{doc_id}_{rel.get('source', '')}", target=f"{doc_id}_{rel.get('target', '')}"
                         )
                 except Exception as e:
-                    print(f"Graph extraction error on chunk {i}: {e}")
+                    logger.error(f"Graph extraction error on chunk {i}: {e}")
 
     def extract_entities_from_query(self, query):
         """利用 LLM 动态提取查询中的实体，增强图谱检索召回率"""
@@ -130,5 +134,5 @@ class GraphService:
             entities = [e.strip() for e in response.content.split(',') if e.strip()]
             return [e for e in entities if e]
         except Exception as e:
-            print(f"LLM entity extraction failed: {e}")
+            logger.error(f"LLM entity extraction failed: {e}")
             return []

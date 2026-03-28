@@ -1,6 +1,9 @@
 import fitz  # PyMuPDF
 import os
 import pdfplumber
+import logging
+
+logger = logging.getLogger(__name__)
 
 try:
     from docx import Document as DocxDocument
@@ -16,7 +19,61 @@ try:
     ocr = RapidOCR()
 except Exception as e:
     ocr = None
-    print(f"Warning: OCR initialization failed ({e}). OCR fallback will be disabled.")
+    logger.warning(f"OCR initialization failed ({e}). OCR fallback will be disabled.")
+
+def extract_text_from_excel(file_path):
+    """
+    Extract text from Excel (.xlsx, .xls) files and convert to Markdown table.
+    """
+    try:
+        import pandas as pd
+        df = pd.read_excel(file_path)
+        # 将空值替换为空字符串，并将所有内容转为字符串
+        df = df.fillna("").astype(str)
+        return df.to_markdown(index=False)
+    except Exception as e:
+        logger.error(f"Excel extraction failed: {e}")
+        return f"Error extracting Excel: {str(e)}"
+
+def extract_text_from_csv(file_path):
+    """
+    Extract text from CSV files and convert to Markdown table.
+    """
+    try:
+        import pandas as pd
+        # 尝试常用编码
+        for encoding in ['utf-8', 'gbk', 'utf-16']:
+            try:
+                df = pd.read_csv(file_path, encoding=encoding)
+                break
+            except:
+                continue
+        else:
+            df = pd.read_csv(file_path)
+            
+        df = df.fillna("").astype(str)
+        return df.to_markdown(index=False)
+    except Exception as e:
+        logger.error(f"CSV extraction failed: {e}")
+        return f"Error extracting CSV: {str(e)}"
+
+def extract_text_from_pptx(file_path):
+    """
+    Extract text from PowerPoint (.pptx) files.
+    """
+    try:
+        from pptx import Presentation
+        prs = Presentation(file_path)
+        full_text = []
+        for slide_num, slide in enumerate(prs.slides):
+            full_text.append(f"--- Slide {slide_num + 1} ---")
+            for shape in slide.shapes:
+                if hasattr(shape, "text"):
+                    full_text.append(shape.text)
+        return "\n".join(full_text)
+    except Exception as e:
+        logger.error(f"PPTX extraction failed: {e}")
+        return f"Error extracting PPTX: {str(e)}"
 
 def extract_text_from_pdf(file_path):
     """
@@ -42,7 +99,7 @@ def extract_text_from_pdf(file_path):
                             full_text += "|" + "|".join(["---"] * len(clean_row)) + "|\n"
                     full_text += "\n"
     except Exception as e:
-        print(f"pdfplumber table extraction failed: {e}")
+        logger.error(f"pdfplumber table extraction failed: {e}")
 
     # 2. 使用 PyMuPDF 提取普通文本或进行 OCR
     doc = fitz.open(file_path)
@@ -78,7 +135,7 @@ def extract_text_from_pdf(file_path):
                             text += line[1] + " "
                         text += "\n"
                 except Exception as e:
-                    print(f"OCR failed on image in page {page_num}: {e}")
+                    logger.error(f"OCR failed on image in page {page_num}: {e}")
                     
         # 兼容处理全扫描件：如果一页文本极少，且没有提取到明显的内嵌图片，则将整页渲染后进行 OCR
         if len(text.strip()) < 50 and ocr is not None and not image_list:
@@ -100,7 +157,7 @@ def extract_text_from_pdf(file_path):
                     for line in result:
                         text += line[1] + "\n"
             except Exception as e:
-                print(f"OCR failed on page {page_num}: {e}")
+                logger.error(f"OCR failed on page {page_num}: {e}")
             
         full_text += text + "\n"
         
@@ -162,6 +219,12 @@ def process_file(file_path):
         return extract_text_from_pdf(file_path)
     elif ext in ['.docx']:
         return extract_text_from_docx(file_path)
+    elif ext in ['.xlsx', '.xls']:
+        return extract_text_from_excel(file_path)
+    elif ext == '.csv':
+        return extract_text_from_csv(file_path)
+    elif ext == '.pptx':
+        return extract_text_from_pptx(file_path)
     elif ext in ['.txt', '.md']:
         with open(file_path, 'r', encoding='utf-8') as f:
             return f.read()

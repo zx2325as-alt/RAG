@@ -2,6 +2,7 @@ import os
 import hashlib
 import json
 import redis
+import logging
 from datetime import timedelta
 from app.services.knowledge_base_service import KnowledgeBaseService
 from langchain_openai import ChatOpenAI
@@ -13,6 +14,8 @@ from app.db import db
 from app.db.models import QACache, QueryLog
 from datetime import datetime
 
+logger = logging.getLogger(__name__)
+
 class QAService:
     def __init__(self):
         self.kb_service = KnowledgeBaseService()
@@ -22,7 +25,7 @@ class QAService:
             self.redis_client.ping()
             self.use_redis = True
         except Exception as e:
-            print(f"Warning: Redis not available ({e}). Caching disabled.")
+            logger.warning(f"Redis not available ({e}). Caching disabled.")
             self.use_redis = False
             
         # Initialize LLM 根据配置动态切换大模型
@@ -74,7 +77,7 @@ class QAService:
 
     def initialize_llm(self):
         active_llm = Config.ACTIVE_LLM.lower()
-        print(f"Initializing LLM with backend: {active_llm}")
+        logger.info(f"Initializing LLM with backend: {active_llm}")
         
         if active_llm == 'deepseek':
             self.llm = ChatOpenAI(
@@ -160,51 +163,49 @@ class QAService:
             try:
                 cached_response = self.redis_client.get(cache_key)
                 if cached_response:
-                    print("Hit Redis Cache")
+                    logger.info("Hit Redis Cache")
                     data = json.loads(cached_response)
                     # 模拟流式输出缓存内容
                     yield json.dumps({"type": "chunk", "content": data["answer"]}) + "\n"
                     yield json.dumps({"type": "sources", "sources": data["sources"]}) + "\n"
                     return
             except Exception as e:
-                print(f"Redis get error: {e}")
+                logger.error(f"Redis get error: {e}")
 
         # 1.5 改写用户问题 (Standalone Question)
         search_query = question
-        yield json.dumps({"type": "chunk", "content": "> 🧠 **思考过程:**\n> - [x] 收到用户请求，正在解析意图...\n"}) + "\n"
+        yield json.dumps({"type": "thought", "content": "- [x] 收到用户请求，正在解析意图...\n"}) + "\n"
         
         try:
             history_obj = self.get_session_history(user_id)
             if len(history_obj.messages) > 0:
-                yield json.dumps({"type": "chunk", "content": "> - [x] 检测到多轮对话，正在结合历史上下文重构问题...\n"}) + "\n"
+                yield json.dumps({"type": "thought", "content": "- [x] 检测到多轮对话，正在结合历史上下文重构问题...\n"}) + "\n"
                 from langchain_core.messages import SystemMessage, HumanMessage
                 history_text = "\n".join([f"{msg.type}: {msg.content}" for msg in history_obj.messages[-4:]])
-                rewrite_prompt = f"""根据以下对话历史记录，将用户的最新问题改写为一个独立、完整的问题。
-如果用户的最新问题是一个明确的系统指令（例如：ping www.baidu.com，或者 df -h），请直接原样返回该指令，绝对不要把它改写成“是什么命令”这种询问定义的句子！
-如果是一个普通的残缺问句，请补全所有指代和省略的内容。
-注意：只返回最终的文本，不要有任何其他解释词。
+                rewrite_prompt = f"""你是一个智能运维助手。请根据用户的历史对话和当前提问，将当前提问重写为一个独立、完整且表意清晰的搜索查询（Query）。
+如果当前提问是一个系统命令（如 ping, df -h），请不要重写，直接返回原命令。
+如果当前提问已经很完整，也直接返回原提问。
 
-对话历史：
+历史对话：
 {history_text}
 
-最新问题：{question}
-独立完整的问题："""
+当前提问：{question}
+重写后的完整提问："""
                 rewrite_response = self.llm.invoke([HumanMessage(content=rewrite_prompt)])
                 search_query = rewrite_response.content.strip()
-                print(f"Original Query: {question} -> Rewritten Query: {search_query}")
-                yield json.dumps({"type": "chunk", "content": f"> - [x] 问题重构完成: `{search_query}`\n"}) + "\n"
+                logger.info(f"Original Query: {question} -> Rewritten Query: {search_query}")
+                yield json.dumps({"type": "thought", "content": f"- [x] 问题重构完成: `{search_query}`\n"}) + "\n"
             else:
-                yield json.dumps({"type": "chunk", "content": "> - [x] 独立问题，跳过重构步骤。\n"}) + "\n"
+                yield json.dumps({"type": "thought", "content": "- [x] 独立问题，跳过重构步骤。\n"}) + "\n"
         except Exception as e:
-            print(f"Rewrite Query Error: {e}")
-            error_str = str(e).lower()
-            if "connect" in error_str or "timeout" in error_str or "winerror" in error_str:
+            logger.error(f"Rewrite Query Error: {e}")
+            if "Connection error" in str(e) or "Connection refused" in str(e):
                 yield json.dumps({"type": "chunk", "content": "\n抱歉，连接大模型服务失败，请检查 LLM 服务或 Redis 状态。"}) + "\n"
                 return
-            yield json.dumps({"type": "chunk", "content": "> - [!] 问题重构失败，将使用原始问题继续。\n"}) + "\n"
+            yield json.dumps({"type": "thought", "content": "- [!] 问题重构失败，将使用原始问题继续。\n"}) + "\n"
 
         # 增加思考过程展示：开始检索
-        yield json.dumps({"type": "chunk", "content": "> - [ ] 正在执行多路知识召回 (向量库检索 / 关键词 BM25 匹配 / 知识图谱遍历)...\n"}) + "\n"
+        yield json.dumps({"type": "thought", "content": "- [ ] 正在执行多路知识召回 (向量库检索 / 关键词 BM25 匹配 / 知识图谱遍历)...\n"}) + "\n"
 
         # 3. Retrieval 使用改写后的完整问题进行检索，支持多库
         import time
@@ -215,17 +216,17 @@ class QAService:
         # 将检索到的具体库、数量、耗时展示出来
         search_details = f"耗时 {round(t2-t1, 2)}s"
         if results:
-            docs_info = "\n>   - " + "\n>   - ".join([f"匹配度: {round(score, 3)} | 来源: {doc.metadata.get('doc_name', '未知')}" for doc, score in results[:3]])
+            docs_info = "\n  - " + "\n  - ".join([f"匹配度: {round(score, 3)} | 来源: {doc.metadata.get('doc_name', '未知')}" for doc, score in results[:3]])
             if len(results) > 3:
-                docs_info += f"\n>   - ...等共 {len(results)} 条片段"
+                docs_info += f"\n  - ...等共 {len(results)} 条片段"
         else:
-            docs_info = "\n>   - 未检索到强相关内容"
+            docs_info = "\n  - 未检索到强相关内容"
 
         # 增加思考过程展示：检索完成，评估工具
         if enable_tools:
-            yield json.dumps({"type": "chunk", "content": f"> - [x] 检索完成 ({search_details})，召回并融合重排了 {len(results)} 条知识片段:{docs_info}\n> - [ ] 正在评估是否需要调用外部工具获取实时状态...\n"}) + "\n"
+            yield json.dumps({"type": "thought", "content": f"- [x] 检索完成 ({search_details})，召回并融合重排了 {len(results)} 条知识片段:{docs_info}\n- [ ] 正在评估是否需要调用外部工具获取实时状态...\n"}) + "\n"
         else:
-            yield json.dumps({"type": "chunk", "content": f"> - [x] 检索完成 ({search_details})，召回并融合重排了 {len(results)} 条知识片段:{docs_info}\n> - [ ] 外部工具调用已禁用，直接进入知识整合阶段...\n"}) + "\n"
+            yield json.dumps({"type": "thought", "content": f"- [x] 检索完成 ({search_details})，召回并融合重排了 {len(results)} 条知识片段:{docs_info}\n- [ ] 外部工具调用已禁用，直接进入知识整合阶段...\n"}) + "\n"
         
         # 3.5 Agent 工具调用 (Function Calling)
         # 判断大模型是否需要调用工具获取实时数据
@@ -249,31 +250,34 @@ class QAService:
                     
                     tool_msg = llm_with_tools.invoke([("system", "你是一个能够调用工具的智能助手。"), ("user", tool_prompt)])
                     if tool_msg.tool_calls:
-                        yield json.dumps({"type": "chunk", "content": "> - [x] 问题涉及实时状态，触发外部工具调用逻辑。\n"}) + "\n"
+                        yield json.dumps({"type": "thought", "content": "- [x] 问题涉及实时状态，触发外部工具调用逻辑。\n"}) + "\n"
                         for tool_call in tool_msg.tool_calls:
                             tool_name = tool_call["name"]
                             tool_args = tool_call["args"]
-                            print(f"Calling tool: {tool_name} with args: {tool_args}")
-                            yield json.dumps({"type": "chunk", "content": f"> - [ ] 正在执行工具: `{tool_name}` ...\n"}) + "\n"
+                            logger.info(f"Calling tool: {tool_name} with args: {tool_args}")
+                            yield json.dumps({"type": "thought", "content": f"- [ ] 正在执行工具: `{tool_name}` ...\n"}) + "\n"
                             
                             # 动态调用对应工具
                             if tool_name in AVAILABLE_TOOLS:
                                 tool_func = AVAILABLE_TOOLS[tool_name]
                                 res = tool_func.invoke(tool_args)
                                 tool_context += f"【{tool_name} 执行结果】:\n{res}\n\n"
-                                yield json.dumps({"type": "chunk", "content": f"> - [x] 工具 `{tool_name}` 执行成功，已获取实时数据。\n"}) + "\n"
+                                yield json.dumps({"type": "thought", "content": f"- [x] 工具 `{tool_name}` 执行成功，已获取实时数据。\n"}) + "\n"
                                 
-                        yield json.dumps({"type": "chunk", "content": "> - [x] 所有前置任务完成，开始整合上下文并生成最终分析报告...\n\n---\n\n"}) + "\n"
+                        yield json.dumps({"type": "thought", "content": "- [x] 所有前置任务完成，开始整合上下文并生成最终分析报告...\n\n"}) + "\n"
                     else:
-                        yield json.dumps({"type": "chunk", "content": "> - [x] 评估完毕：无需调用外部工具。\n> - [x] 所有前置任务完成，开始整合知识生成最终分析报告...\n\n---\n\n"}) + "\n"
+                        yield json.dumps({"type": "thought", "content": "- [x] 评估完毕：无需调用外部工具。\n- [x] 所有前置任务完成，开始整合知识生成最终分析报告...\n\n"}) + "\n"
                 else:
-                    yield json.dumps({"type": "chunk", "content": "> - [x] 未配置外部工具，跳过评估。\n> - [x] 所有前置任务完成，开始整合知识生成最终分析报告...\n\n---\n\n"}) + "\n"
+                    yield json.dumps({"type": "thought", "content": "- [x] 未配置外部工具，跳过评估。\n- [x] 所有前置任务完成，开始整合知识生成最终分析报告...\n\n"}) + "\n"
             except Exception as e:
-                print(f"Tool Calling Error: {e}")
-                yield json.dumps({"type": "chunk", "content": "> - [!] 工具调用或评估时发生错误，已跳过。\n> - [x] 开始整合可用知识生成分析报告...\n\n---\n\n"}) + "\n"
+                logger.error(f"Tool Calling Error: {e}")
+                yield json.dumps({"type": "thought", "content": "- [!] 工具调用或评估时发生错误，已跳过。\n- [x] 开始整合可用知识生成分析报告...\n\n"}) + "\n"
         else:
             # 工具被禁用，直接输出完成信息
-            yield json.dumps({"type": "chunk", "content": "> - [x] 所有前置任务完成，开始整合知识生成最终分析报告...\n\n---\n\n"}) + "\n"
+            yield json.dumps({"type": "thought", "content": "- [x] 所有前置任务完成，开始整合知识生成最终分析报告...\n\n"}) + "\n"
+
+        # 告诉前端思考结束，准备输出正文
+        yield json.dumps({"type": "thought_end"}) + "\n"
 
         # 4. Prepare Context
         context_parts = []
@@ -336,7 +340,7 @@ class QAService:
                     full_answer += content
                     yield json.dumps({"type": "chunk", "content": content}) + "\n"
         except Exception as e:
-            print(f"LLM Error: {e}")
+            logger.error(f"LLM Error: {e}")
             error_msg = "抱歉，生成答案时出现错误。请检查LLM服务状态。"
             yield json.dumps({"type": "chunk", "content": error_msg}) + "\n"
             full_answer = error_msg
@@ -353,7 +357,7 @@ class QAService:
             try:
                 self.redis_client.setex(cache_key, timedelta(seconds=3), json.dumps(result))
             except Exception as e:
-                print(f"Redis set error: {e}")
+                logger.error(f"Redis set error: {e}")
         
         # 6. Log Query (使用 app.app_context 确保在生成器线程中也能正常记录数据库)
         try:
@@ -372,7 +376,7 @@ class QAService:
                 db.session.add(log)
                 db.session.commit()
         except Exception as e:
-            print(f"DB Log error: {e}")
+            logger.error(f"DB Log error: {e}")
 
     def stream_reanalyze_question(self, question, previous_answer, score, user_id="anonymous"):
         """处理低于4分的重新分析工作流"""
