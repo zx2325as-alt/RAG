@@ -1,6 +1,10 @@
 import fitz  # PyMuPDF
 import os
 import pdfplumber
+import logging
+
+# 忽略 pdfminer 的 FontBBox 警告
+logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
 try:
     from docx import Document as DocxDocument
@@ -12,8 +16,21 @@ except ImportError:
 try:
     from rapidocr_onnxruntime import RapidOCR
     import numpy as np
+    import torch
     
-    ocr = RapidOCR()
+    # 检测是否有 GPU，如果可用，通过 onnxruntime 开启 GPU 推理支持
+    # 这需要环境中安装了 onnxruntime-gpu
+    use_gpu = torch.cuda.is_available()
+    if use_gpu:
+        try:
+            # 尝试初始化带 CUDA Execution Provider 的 OCR
+            ocr = RapidOCR(det_use_cuda=True, cls_use_cuda=True, rec_use_cuda=True)
+            print("RapidOCR initialized with GPU (CUDA) support.")
+        except Exception as gpu_e:
+            print(f"Failed to initialize RapidOCR with GPU: {gpu_e}. Falling back to CPU.")
+            ocr = RapidOCR()
+    else:
+        ocr = RapidOCR()
 except Exception as e:
     ocr = None
     print(f"Warning: OCR initialization failed ({e}). OCR fallback will be disabled.")

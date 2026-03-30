@@ -154,8 +154,9 @@
                             </div>
                         </div>
                         
-                        <div class="d-flex flex-column gap-2 border rounded-4 p-2 bg-white shadow-sm" style="border-color: #e2e8f0 !important;">
-                            <div class="input-group input-group-lg border-0" style="background: transparent;">
+                        <!-- 输入区域：去掉 flex-column 防止内容撑大被挤压，保持底部固定高度 -->
+                        <div class="border rounded-4 p-2 bg-white shadow-sm" style="border-color: #e2e8f0 !important; flex-shrink: 0;">
+                            <div class="input-group input-group-lg border-0 mb-1" style="background: transparent;">
                                 <input type="text" id="queryInput" class="form-control border-0 shadow-none fs-6" style="background: transparent;" placeholder="请输入故障现象或问题..." aria-label="Query">
                                 <button class="btn btn-primary rounded-circle ms-2 d-flex justify-content-center align-items-center shadow-sm" type="button" id="sendBtn" style="width: 44px; height: 44px; padding: 0; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); border: none;">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-arrow-up" viewBox="0 0 16 16">
@@ -169,14 +170,41 @@
                                 </button>
                             </div>
                             <div class="d-flex align-items-center px-2 pb-1">
-                                <div class="form-check form-switch m-0 d-flex align-items-center" style="padding-left: 0;">
-                                    <input class="form-check-input ms-0 me-2" type="checkbox" id="enableToolsToggle" style="margin-top: 0; cursor: pointer;">
-                                    <label class="form-check-label text-muted d-flex align-items-center rounded px-2 py-1" style="font-size: 0.8rem; cursor: pointer; background-color: #f8f9fa; border: 1px solid #e9ecef;" for="enableToolsToggle">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-globe me-1" viewBox="0 0 16 16">
-                                            <path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m7.5-6.923c-.67.204-1.335.82-1.887 1.855A8 8 0 0 0 5.145 4H7.5zM4.09 4a9.3 9.3 0 0 1 .64-1.539 7 7 0 0 1 .597-.933A7.03 7.03 0 0 0 2.255 4zm-.582 3.5c.03-.877.138-1.718.312-2.5H1.674a7 7 0 0 0-.656 2.5zM4.847 5a12.5 12.5 0 0 0-.338 2.5H7.5V5zM8.5 5v2.5h2.99a12.5 12.5 0 0 0-.337-2.5zM4.51 8.5a12.5 12.5 0 0 0 .337 2.5H7.5V8.5zm3.99 0V11h2.653c.187-.765.306-1.608.338-2.5zM5.145 12q.208.58.468 1.068c.552 1.035 1.218 1.65 1.887 1.855V12zm.182 2.472a7 7 0 0 1-.597-.933A9.3 9.3 0 0 1 4.09 12H2.255a7 7 0 0 0 3.072 2.472M3.82 11a13.7 13.7 0 0 1-.312-2.5h-2.49c.062.89.291 1.733.656 2.5zm6.853 3.472A7 7 0 0 0 13.745 12H11.91a9.3 9.3 0 0 1-.64 1.539 7 7 0 0 1-.597.933M8.5 12v2.923c.67-.204 1.335-.82 1.887-1.855q.26-.487.468-1.068zm3.68-1h2.146c.365-.767.594-1.61.656-2.5h-2.49a13.7 13.7 0 0 1-.312 2.5m2.802-3.5a7 7 0 0 0-.656-2.5H12.18c.174.782.282 1.623.312 2.5zM11.27 2.461c.247.464.462.98.64 1.539h1.835a7 7 0 0 0-3.072-2.472c.218.284.418.598.597.933M10.855 4a8 8 0 0 0-.468-1.068C9.835 1.897 9.17 1.282 8.5 1.077V4z"/>
-                                        </svg>智能搜索
+                                <div class="d-flex align-items-center" style="padding-left: 0;">
+                                    <input class="d-none" type="checkbox" id="enableToolsToggle">
+                                    <label class="form-check-label d-flex align-items-center rounded px-2 py-1" id="toolsToggleLabel" style="font-size: 0.8rem; cursor: pointer; border: 1px solid #e9ecef; transition: all 0.3s;" for="enableToolsToggle">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-tools me-1" viewBox="0 0 16 16">
+                                          <path d="M1 0 0 1l2.2 3.081a1 1 0 0 0 .815.419h.07a1 1 0 0 1 .708.293l2.675 2.675-2.617 2.654A3.003 3.003 0 0 0 0 13a3 3 0 1 0 5.878-.851l2.654-2.617.968.968-.305.914a1 1 0 0 0 .242 1.023l3.27 3.27a.997.997 0 0 0 1.414 0l1.586-1.586a.997.997 0 0 0 0-1.414l-3.27-3.27a1 1 0 0 0-1.023-.242L10.5 9.5l-.96-.96 2.68-2.643A3.005 3.005 0 0 0 16 3c0-.269-.035-.53-.102-.777l-2.14 2.141L12 4l-.364-1.757L13.777.102a3 3 0 0 0-3.675 3.68L7.462 6.46 4.793 3.793a1 1 0 0 1-.293-.707v-.071a1 1 0 0 0-.419-.814L1 0Zm9.646 10.646a.5.5 0 0 1 .708 0l2.914 2.915a.5.5 0 0 1-.707.707l-2.915-2.914a.5.5 0 0 1 0-.708ZM3 11l.471.242.529.026.287.445.445.287.026.529L5 13l-.242.471-.026.529-.445.287-.287.445-.529.026L3 15l-.471-.242L2 14.732l-.287-.445L1.268 14l-.026-.529L1 13l.242-.471.026-.529.445-.287.287-.445.529-.026L3 11Z"/>
+                                        </svg>
+                                        工具调用
                                     </label>
                                 </div>
+                                
+                                <script>
+                                    document.addEventListener('DOMContentLoaded', function() {
+                                        const toggle = document.getElementById('enableToolsToggle');
+                                        const label = document.getElementById('toolsToggleLabel');
+                                        
+                                        function updateToggleStyle() {
+                                            if (toggle.checked) {
+                                                label.style.backgroundColor = '#e8f0fe';
+                                                label.style.color = '#1e3c72';
+                                                label.style.borderColor = '#1e3c72';
+                                                label.classList.add('fw-bold');
+                                            } else {
+                                                label.style.backgroundColor = '#f8f9fa';
+                                                label.style.color = '#6c757d';
+                                                label.style.borderColor = '#e9ecef';
+                                                label.classList.remove('fw-bold');
+                                            }
+                                        }
+                                        
+                                        toggle.addEventListener('change', updateToggleStyle);
+                                        // 初始化状态
+                                        updateToggleStyle();
+                                    });
+                                </script>
+                            </div>
                             </div>
                         </div>
                     </div>

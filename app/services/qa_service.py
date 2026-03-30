@@ -81,7 +81,7 @@ class QAService:
                 base_url=Config.DEEPSEEK_API_URL.replace('/chat/completions', ''), 
                 api_key=Config.DEEPSEEK_API_KEY,
                 model=Config.DEEPSEEK_MODEL_NAME,
-                temperature=0.3,
+                temperature=0.1,
                 max_retries=1,
                 timeout=60
             )
@@ -89,7 +89,7 @@ class QAService:
             self.llm = ChatOpenAI(
                 api_key=os.getenv('OPENAI_API_KEY', 'EMPTY'),
                 model='gpt-3.5-turbo',
-                temperature=0.3,
+                temperature=0.1,
                 max_retries=1,
                 timeout=60
             )
@@ -98,7 +98,7 @@ class QAService:
             self.llm = ChatOllama(
                 base_url=Config.OLLAMA_BASE_URL,
                 model=Config.OLLAMA_MODEL_NAME,
-                temperature=0.3
+                temperature=0.1
             )
         elif active_llm == 'vllm':
             # vLLM 兼容 OpenAI 接口，需要将 /chat/completions 后缀去掉，保留到 /v1 级别
@@ -110,7 +110,7 @@ class QAService:
                 base_url=base_url, 
                 api_key=Config.VLLM_API_KEY,
                 model=Config.VLLM_MODEL_NAME,
-                temperature=0.3,
+                temperature=0.1,
                 max_retries=1,
                 timeout=60
             )
@@ -124,7 +124,7 @@ class QAService:
                     base_url="https://dashscope.aliyuncs.com/compatible-mode/v1", 
                     api_key=os.getenv('DASHSCOPE_API_KEY', Config.QWEN_API_KEY),
                     model="qwen-plus", # 默认使用 qwen-plus
-                    temperature=0.3,
+                    temperature=0.1,
                     max_retries=1,
                     timeout=60
                 )
@@ -133,7 +133,7 @@ class QAService:
                     base_url=Config.QWEN_API_URL.replace('/chat/completions', ''), 
                     api_key=Config.QWEN_API_KEY,
                     model=Config.QWEN_MODEL_NAME,
-                    temperature=0.3,
+                    temperature=0.1,
                     max_retries=1,
                     timeout=60
                 )
@@ -169,152 +169,94 @@ class QAService:
             except Exception as e:
                 print(f"Redis get error: {e}")
 
-        # 1.5 改写用户问题 (Standalone Question)
+        yield json.dumps({"type": "chunk", "content": "> 🧠 **思考过程:**\n> - [x] 收到用户请求...\n"}) + "\n"
+
+        # 1.5 改写用户问题 (Standalone Question) & 历史裁剪
         search_query = question
-        yield json.dumps({"type": "chunk", "content": "> 🧠 **思考过程:**\n> - [x] 收到用户请求，正在解析意图...\n"}) + "\n"
-        
         try:
             history_obj = self.get_session_history(user_id)
-            if len(history_obj.messages) > 0:
-                yield json.dumps({"type": "chunk", "content": "> - [x] 检测到多轮对话，正在结合历史上下文重构问题...\n"}) + "\n"
-                from langchain_core.messages import SystemMessage, HumanMessage
-                history_text = "\n".join([f"{msg.type}: {msg.content}" for msg in history_obj.messages[-4:]])
-                rewrite_prompt = f"""根据以下对话历史记录，将用户的最新问题改写为一个独立、完整的问题。
-如果用户的最新问题是一个明确的系统指令（例如：ping www.baidu.com，或者 df -h），请直接原样返回该指令，绝对不要把它改写成“是什么命令”这种询问定义的句子！
-如果是一个普通的残缺问句，请补全所有指代和省略的内容。
-注意：只返回最终的文本，不要有任何其他解释词。
+            messages = history_obj.messages
+            
+            # 历史消息干扰：只保留最近 2-3 轮，过滤掉工具调用等中间步骤，只保留最终的 user 和 assistant 消息
+            filtered_messages = []
+            for msg in messages:
+                if msg.type in ['human', 'ai'] and getattr(msg, 'name', None) is None:
+                    filtered_messages.append(msg)
+            
+            # 保留最近 4 条消息（2轮对话）
+            if len(filtered_messages) > 4:
+                filtered_messages = filtered_messages[-4:]
+                
+            if len(filtered_messages) > 0 and not enable_tools:
+                yield json.dumps({"type": "chunk", "content": "> - [x] 结合历史上下文重构问题...\n"}) + "\n"
+                history_text = "\n".join([f"{msg.type}: {msg.content}" for msg in filtered_messages])
+                rewrite_prompt = f"""请根据以下对话历史记录，将用户的最新问题改写为一个独立、完整且没有歧义的问题。
+改写要求：
+1. 仅补全必要的指代词（如将“它”替换为上文的具体名词）。
+2. **严禁过度发散、严禁添加任何额外的推理逻辑、严禁扩展用户的原始问题**。
+3. 如果用户的最新问题是一个明确的系统指令（例如：ping www.baidu.com），请直接原样返回。
+4. 如果问题已经是完整清晰的，直接原样返回。
+注意：只返回最终的纯文本，不要有任何其他解释词。
 
 对话历史：
 {history_text}
 
 最新问题：{question}
 独立完整的问题："""
+                from langchain_core.messages import HumanMessage
                 rewrite_response = self.llm.invoke([HumanMessage(content=rewrite_prompt)])
                 search_query = rewrite_response.content.strip()
-                print(f"Original Query: {question} -> Rewritten Query: {search_query}")
                 yield json.dumps({"type": "chunk", "content": f"> - [x] 问题重构完成: `{search_query}`\n"}) + "\n"
             else:
-                yield json.dumps({"type": "chunk", "content": "> - [x] 独立问题，跳过重构步骤。\n"}) + "\n"
+                yield json.dumps({"type": "chunk", "content": "> - [x] 跳过重构步骤。\n"}) + "\n"
         except Exception as e:
             print(f"Rewrite Query Error: {e}")
-            error_str = str(e).lower()
-            if "connect" in error_str or "timeout" in error_str or "winerror" in error_str:
-                yield json.dumps({"type": "chunk", "content": "\n抱歉，连接大模型服务失败，请检查 LLM 服务或 Redis 状态。"}) + "\n"
-                return
             yield json.dumps({"type": "chunk", "content": "> - [!] 问题重构失败，将使用原始问题继续。\n"}) + "\n"
 
-        # 增加思考过程展示：开始检索
-        yield json.dumps({"type": "chunk", "content": "> - [ ] 正在执行多路知识召回 (向量库检索 / 关键词 BM25 匹配 / 知识图谱遍历)...\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": "> - [ ] 正在执行多路知识召回 (向量库 / BM25 / 图谱)...\n"}) + "\n"
 
-        # 3. Retrieval 使用改写后的完整问题进行检索，支持多库
+        # 3. Retrieval 
         import time
         t1 = time.time()
         results = self.kb_service.search(search_query, top_k=5, db_names=db_names)
         t2 = time.time()
         
-        # 将检索到的具体库、数量、耗时展示出来
         search_details = f"耗时 {round(t2-t1, 2)}s"
         if results:
             docs_info = "\n>   - " + "\n>   - ".join([f"匹配度: {round(score, 3)} | 来源: {doc.metadata.get('doc_name', '未知')}" for doc, score in results[:3]])
             if len(results) > 3:
                 docs_info += f"\n>   - ...等共 {len(results)} 条片段"
+            top_score = float(results[0][1])
         else:
             docs_info = "\n>   - 未检索到强相关内容"
+            top_score = 0.0
 
-        # 增加思考过程展示：检索完成，评估工具
-        if enable_tools:
-            yield json.dumps({"type": "chunk", "content": f"> - [x] 检索完成 ({search_details})，召回并融合重排了 {len(results)} 条知识片段:{docs_info}\n> - [ ] 正在评估是否需要调用外部工具获取实时状态...\n"}) + "\n"
-        else:
-            yield json.dumps({"type": "chunk", "content": f"> - [x] 检索完成 ({search_details})，召回并融合重排了 {len(results)} 条知识片段:{docs_info}\n> - [ ] 外部工具调用已禁用，直接进入知识整合阶段...\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": f"> - [x] 检索完成 ({search_details})，召回并融合重排了 {len(results)} 条片段:{docs_info}\n"}) + "\n"
         
-        # 3.5 Agent 工具调用 (Function Calling)
-        # 判断大模型是否需要调用工具获取实时数据
-        tool_context = ""
-        if enable_tools:
-            try:
-                from app.services.agent_tools import get_tools_by_names, AVAILABLE_TOOLS
-                
-                # 从配置中动态加载工具列表
-                enabled_tool_names = getattr(Config, 'ENABLED_TOOLS', ['execute_shell_command', 'query_api_endpoint'])
-                tools = get_tools_by_names(enabled_tool_names)
-                
-                if tools:
-                    # 绑定工具到大模型
-                    llm_with_tools = self.llm.bind_tools(tools)
-                    # 强化 Prompt，明确如果问题是命令（如 ping）必须直接调用对应的执行工具
-                    tool_prompt = f"""分析以下用户的输入。如果它是一个系统命令（例如 'ping xxx'，'df -h' 等），或者需要获取实时的主机/系统状态、外部API数据，
-    你**必须**调用相应的工具去获取结果。可用的工具包括：{', '.join(enabled_tool_names)}。
-    如果只是普通的知识问答，不需要调用工具。
-    用户输入：{search_query}"""
-                    
-                    tool_msg = llm_with_tools.invoke([("system", "你是一个能够调用工具的智能助手。"), ("user", tool_prompt)])
-                    if tool_msg.tool_calls:
-                        yield json.dumps({"type": "chunk", "content": "> - [x] 问题涉及实时状态，触发外部工具调用逻辑。\n"}) + "\n"
-                        for tool_call in tool_msg.tool_calls:
-                            tool_name = tool_call["name"]
-                            tool_args = tool_call["args"]
-                            print(f"Calling tool: {tool_name} with args: {tool_args}")
-                            yield json.dumps({"type": "chunk", "content": f"> - [ ] 正在执行工具: `{tool_name}` ...\n"}) + "\n"
-                            
-                            # 动态调用对应工具
-                            if tool_name in AVAILABLE_TOOLS:
-                                tool_func = AVAILABLE_TOOLS[tool_name]
-                                res = tool_func.invoke(tool_args)
-                                tool_context += f"【{tool_name} 执行结果】:\n{res}\n\n"
-                                yield json.dumps({"type": "chunk", "content": f"> - [x] 工具 `{tool_name}` 执行成功，已获取实时数据。\n"}) + "\n"
-                                
-                        yield json.dumps({"type": "chunk", "content": "> - [x] 所有前置任务完成，开始整合上下文并生成最终分析报告...\n\n---\n\n"}) + "\n"
-                    else:
-                        yield json.dumps({"type": "chunk", "content": "> - [x] 评估完毕：无需调用外部工具。\n> - [x] 所有前置任务完成，开始整合知识生成最终分析报告...\n\n---\n\n"}) + "\n"
-                else:
-                    yield json.dumps({"type": "chunk", "content": "> - [x] 未配置外部工具，跳过评估。\n> - [x] 所有前置任务完成，开始整合知识生成最终分析报告...\n\n---\n\n"}) + "\n"
-            except Exception as e:
-                print(f"Tool Calling Error: {e}")
-                yield json.dumps({"type": "chunk", "content": "> - [!] 工具调用或评估时发生错误，已跳过。\n> - [x] 开始整合可用知识生成分析报告...\n\n---\n\n"}) + "\n"
-        else:
-            # 工具被禁用，直接输出完成信息
-            yield json.dumps({"type": "chunk", "content": "> - [x] 所有前置任务完成，开始整合知识生成最终分析报告...\n\n---\n\n"}) + "\n"
-
+        # 低质量资料导致发散: 在检索后增加阈值过滤
+        if not enable_tools and (top_score < 0.6 and len(results) < 2):
+            yield json.dumps({"type": "chunk", "content": "> - [!] 检索到的资料质量过低或为空，直接返回未找到。\n"}) + "\n"
+            yield json.dumps({"type": "chunk", "content": "抱歉，当前知识库中未找到相关资料，无法提供解答。"}) + "\n"
+            yield json.dumps({"type": "sources", "sources": []}) + "\n"
+            return
+        
         # 4. Prepare Context
         context_parts = []
         sources = []
-        
-        # 为了保证 LLM 引用的 [1], [2] 和前端展示的来源一致，我们需要统一计数
         source_index = 1
-        
-        # 优先将工具调用结果作为最强关联资料放入 context
-        if tool_context:
-            context_parts.append(f"资料 [{source_index}] (【工具执行结果】请优先根据此结果回答用户):\n{tool_context}")
-            sources.append({
-                "content": tool_context[:100] + "...",
-                "doc_id": "tool_execution",
-                "doc_name": "系统实时执行结果",
-                "score": 1.0
-            })
-            source_index += 1
             
         for doc, score in results:
-            # 将序号一并编入 Context 供 LLM 参考
-            context_parts.append(f"资料 [{source_index}]:\n{doc.page_content}")
+            # 解决 ChatPromptTemplate 变量缺失报错：转义检索内容中的单大括号
+            safe_content = doc.page_content.replace("{", "{{").replace("}", "}}")
+            context_parts.append(f"资料 [{source_index}]:\n{safe_content}")
             doc_name = doc.metadata.get("doc_name", "Unknown")
             
-            # 如果元数据里是 Unknown，尝试从数据库里查一次
-            if doc_name == "Unknown":
-                try:
-                    from app.db import db
-                    from app.db.models import Document
-                    from flask import current_app
-                    with current_app.app_context():
-                        doc_id = doc.metadata.get("doc_id")
-                        if doc_id:
-                            db_doc = db.session.query(Document).filter_by(doc_id=doc_id).first()
-                            if db_doc:
-                                doc_name = db_doc.doc_name
-                except Exception:
-                    pass
-
+            # 增加返回的参考内容长度，原来是 100 字符，现在扩大到 600 字符，方便前端展示更完整的片段
+            original_content = doc.page_content
+            display_content = original_content[:600] + "..." if len(original_content) > 600 else original_content
+            
             sources.append({
-                "content": doc.page_content[:100] + "...",
+                "content": display_content,
                 "doc_id": doc.metadata.get("doc_id"),
                 "doc_name": doc_name,
                 "score": float(score)
@@ -323,23 +265,142 @@ class QAService:
             
         context = "\n\n".join(context_parts)
         
-        # 4. Generate Answer via Stream
-        full_answer = ""
+        # 动态 Prompt 工程
+        base_system_prompt = """你是一位严谨的知识库问答助手。
+【最高指令】：
+1. 你的所有回答**必须完全、仅限于**参考资料中提供的信息。
+2. 绝对不允许使用你的预训练知识进行回答，不允许推测、发散或补充资料中没有的操作步骤、数据或概念。
+3. 如果你在参考资料中找不到直接回答用户问题的答案，你必须直接且仅回复：“抱歉，当前知识库中未找到相关资料。”
+4. 如果你不知道，就说不知道，不要试图编造答案。
+
+【排版要求】：分步骤条理清晰。你必须在回答中准确引用参考资料的编号（如 [1], [2]），引用的编号必须与参考资料中的 `资料 [X]` 严格对应。在生成答案的末尾，请附上你的回答置信度（高/中/低），并标注引用的资料来源。"""
+
+        if top_score < 0.7 and results:
+            base_system_prompt += "\n【注意】当前检索到的资料相关性较低，如果资料确实无法直接回答问题，请直接回答“未找到相关资料”。"
+        elif top_score > 0.9:
+            base_system_prompt += "\n【注意】当前检索到的资料高度相关，请完全限制在提供资料的范围内回答。"
+
+        base_system_prompt += f"\n\n<参考资料>\n{context}\n</参考资料>"
+        
+        # 强制在用户提问中再次强调规则
+        user_query_with_rule = f"用户问题：{search_query}\n\n请仅使用上面提供的参考资料回答，不要使用任何外部知识。如果资料中没有，请回答未找到相关资料。"
+        
+        # 5. Agent 执行 (ReAct Pattern)
         try:
-            # 使用 LangChain 的 stream 方法，并传入 session_id
-            for chunk in self.chain_with_history.stream(
-                {"context": context, "question": question},
-                config={"configurable": {"session_id": user_id}}
-            ):
-                content = chunk.content
-                if content:
-                    full_answer += content
-                    yield json.dumps({"type": "chunk", "content": content}) + "\n"
-        except Exception as e:
-            print(f"LLM Error: {e}")
-            error_msg = "抱歉，生成答案时出现错误。请检查LLM服务状态。"
-            yield json.dumps({"type": "chunk", "content": error_msg}) + "\n"
-            full_answer = error_msg
+            from langchain.agents import AgentExecutor
+        except ImportError:
+            # Older versions might have it in a different path or we can use custom implementation
+            AgentExecutor = None
+
+        try:
+            from langchain.agents import create_tool_calling_agent
+        except ImportError:
+            # Fallback for older langchain versions
+            try:
+                from langchain.agents.format_scratchpad.openai_tools import format_to_openai_tool_messages
+                from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
+            except ImportError:
+                format_to_openai_tool_messages = None
+                OpenAIToolsAgentOutputParser = None
+            create_tool_calling_agent = None
+
+        from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+        
+        full_answer = ""
+        if enable_tools and AgentExecutor is not None:
+            try:
+                yield json.dumps({"type": "chunk", "content": "> - [ ] 正在初始化 Agent 并规划任务...\n"}) + "\n"
+                from app.services.agent_tools import get_tools_by_names
+                enabled_tool_names = getattr(Config, 'ENABLED_TOOLS', ['execute_shell_command', 'query_api_endpoint'])
+                tools = get_tools_by_names(enabled_tool_names)
+                
+                if tools:
+                    # 使用支持 Tool Calling 的 Agent
+                    agent_prompt = ChatPromptTemplate.from_messages([
+                        ("system", base_system_prompt),
+                        MessagesPlaceholder(variable_name="history", optional=True),
+                        ("user", "{input}"),
+                        MessagesPlaceholder(variable_name="agent_scratchpad"),
+                    ])
+                    
+                    if create_tool_calling_agent:
+                        agent = create_tool_calling_agent(self.llm, tools, agent_prompt)
+                    elif format_to_openai_tool_messages and OpenAIToolsAgentOutputParser:
+                        # Fallback implementation if create_tool_calling_agent is not available
+                        llm_with_tools = self.llm.bind_tools(tools)
+                        agent = (
+                            {
+                                "input": lambda x: x["input"],
+                                "agent_scratchpad": lambda x: format_to_openai_tool_messages(
+                                    x["intermediate_steps"]
+                                ),
+                                "history": lambda x: x.get("history", []),
+                            }
+                            | agent_prompt
+                            | llm_with_tools
+                            | OpenAIToolsAgentOutputParser()
+                        )
+                    else:
+                        raise Exception("No suitable Agent creation method found in current langchain version.")
+
+                    # max_iterations=3 允许 Agent 多次思考与工具调用 (ReAct模式)
+                    agent_executor = AgentExecutor(agent=agent, tools=tools, max_iterations=3, verbose=True, return_intermediate_steps=True)
+                    
+                    yield json.dumps({"type": "chunk", "content": "> - [x] Agent 启动，开始推理和工具调用链...\n\n---\n\n"}) + "\n"
+                    
+                    # 传入裁剪后的历史
+                    history_messages = history_obj.messages[-6:] if history_obj else []
+                    
+                    response = agent_executor.invoke({
+                        "input": user_query_with_rule,
+                        "history": history_messages
+                    })
+                    
+                    # 输出工具调用的自省过程 (CoT)
+                    if response.get("intermediate_steps"):
+                        for action, observation in response["intermediate_steps"]:
+                            yield json.dumps({"type": "chunk", "content": f"\n\n*🔧 Agent 调用了工具 `{action.tool}`*\n*输入参数: {action.tool_input}*\n*执行结果片段: {str(observation)[:100]}...*\n\n"}) + "\n"
+                    
+                    full_answer = response["output"]
+                    yield json.dumps({"type": "chunk", "content": full_answer}) + "\n"
+                else:
+                    raise Exception("No tools available")
+            except Exception as e:
+                print(f"Agent Execution Error: {e}")
+                enable_tools = False # 降级为普通生成
+                yield json.dumps({"type": "chunk", "content": "> - [!] Agent 执行异常，降级为普通知识问答...\n\n---\n\n"}) + "\n"
+        
+        if not enable_tools or not full_answer:
+            yield json.dumps({"type": "chunk", "content": "> - [x] 开始整合知识生成最终分析报告...\n\n---\n\n"}) + "\n"
+            try:
+                # 重新构建带历史的 prompt
+                qa_prompt = ChatPromptTemplate.from_messages([
+                    ("system", base_system_prompt),
+                    MessagesPlaceholder(variable_name="history"),
+                    ("user", "{question}")
+                ])
+                chain = qa_prompt | self.llm
+                from langchain_core.runnables.history import RunnableWithMessageHistory
+                chain_with_history = RunnableWithMessageHistory(
+                    chain,
+                    self.get_session_history,
+                    input_messages_key="question",
+                    history_messages_key="history",
+                )
+                
+                for chunk in chain_with_history.stream(
+                    {"question": user_query_with_rule},
+                    config={"configurable": {"session_id": user_id}}
+                ):
+                    content = chunk.content
+                    if content:
+                        full_answer += content
+                        yield json.dumps({"type": "chunk", "content": content}) + "\n"
+            except Exception as e:
+                print(f"LLM Error: {e}")
+                error_msg = "抱歉，生成答案时出现错误。请检查LLM服务状态。"
+                yield json.dumps({"type": "chunk", "content": error_msg}) + "\n"
+                full_answer = error_msg
             
         # 发送引用来源
         yield json.dumps({"type": "sources", "sources": sources}) + "\n"

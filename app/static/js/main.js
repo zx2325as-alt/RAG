@@ -629,6 +629,13 @@ function appendChunkToMessage(msgId, textChunk) {
         // Format citations before parsing markdown
         var formattedText = formatCitations(rawText);
         
+        // 预处理数学公式：保护 LaTeX 公式不被 marked 错误解析为斜体或意外换行
+        // 例如保护带下划线的 LaTeX 不被当作 markdown 加粗/斜体处理
+        formattedText = formattedText.replace(/\\\(/g, ' <span class="math-inline">\\(')
+                                     .replace(/\\\)/g, '\\)</span> ')
+                                     .replace(/\$\$(.*?)\$\$/gs, '<div class="math-block">$$$$$1$$$$</div>')
+                                     .replace(/\\\[(.*?)\\\]/gs, '<div class="math-block">\\[$1\\]</div>');
+        
         var parsedHtml = formattedText;
         if (typeof marked !== 'undefined') {
             if (typeof marked.parse === 'function') {
@@ -648,11 +655,12 @@ function appendChunkToMessage(msgId, textChunk) {
             renderMathInElement(textElem[0], {
                 delimiters: [
                     {left: '$$', right: '$$', display: true},
-                    {left: '$', right: '$', display: false},
+                    {left: '\\[', right: '\\]', display: true},
                     {left: '\\(', right: '\\)', display: false},
-                    {left: '\\[', right: '\\]', display: true}
+                    {left: '$', right: '$', display: false}
                 ],
-                throwOnError: false
+                throwOnError: false,
+                output: 'html' // 强制输出 HTML 避免控制台警告
             });
         }
         
@@ -871,7 +879,22 @@ function removeLoading(id) {
     $('#' + id).remove();
 }
 
+// 标志位：是否允许自动滚动
+let shouldAutoScroll = true;
+
+// 监听用户的滚动事件
+$(document).ready(function() {
+    var chatContainer = $('#chatHistory');
+    chatContainer.on('scroll', function() {
+        // 判断是否滚动到了底部 (允许 50px 的误差)
+        var isAtBottom = chatContainer[0].scrollHeight - chatContainer.scrollTop() <= chatContainer.outerHeight() + 50;
+        // 如果用户往上滑动了，暂停自动滚动；如果滑回了底部，恢复自动滚动
+        shouldAutoScroll = isAtBottom;
+    });
+});
+
 function scrollToBottom() {
+    if (!shouldAutoScroll) return; // 如果用户正在查看历史记录，不执行滚动
     var chatHistory = document.getElementById("chatHistory");
     // 加一点冗余高度，确保如果有 margin 折叠也能滚到底
     chatHistory.scrollTop = chatHistory.scrollHeight + 100;

@@ -57,7 +57,7 @@ class BaseConfig:
     
     # 6. 智能体工具调用配置 (Agent Function Calling)
     # 支持在配置中启用或禁用特定的工具
-    ENABLED_TOOLS = os.getenv('ENABLED_TOOLS', 'execute_shell_command,query_api_endpoint').split(',')
+    ENABLED_TOOLS = os.getenv('ENABLED_TOOLS', 'execute_shell_command,query_api_endpoint,query_metrics').split(',')
     
     # Hugging Face 模型下载与存放目录
     HF_MODEL_DIR = os.getenv('HF_MODEL_DIR', os.path.join(BASE_DIR, 'hugface'))

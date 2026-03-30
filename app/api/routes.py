@@ -663,8 +663,10 @@ def query():
                     yield chunk
             except Exception as inner_e:
                 import traceback
+                import json
                 current_app.logger.error(f"Stream error: {traceback.format_exc()}")
-                yield f"data: > [ERROR] 知识库检索或生成时发生错误: {str(inner_e)}\n\n"
+                # 返回符合 JSON 格式的错误块，避免前端解析失败导致不显示
+                yield json.dumps({"type": "chunk", "content": f"\n\n> [!ERROR] 知识库检索或生成时发生错误: {str(inner_e)}\n\n"}) + "\n"
                 
         return Response(stream_with_context(safe_stream()), mimetype='application/x-ndjson')
     except Exception as e:

@@ -44,10 +44,29 @@ def query_api_endpoint(url: str, method: str = "GET", params: dict = None) -> st
     except Exception as e:
         return f"API request failed: {str(e)}"
 
+@tool
+def query_metrics(service_name: str) -> str:
+    """
+    专门用于查询指定服务（如 Nginx, MySQL, Redis）的健康指标或运行状态。
+    建议在决定是否需要重启或执行 shell 命令之前，先调用此工具获取指标进行判断。
+    """
+    # 模拟指标查询结果
+    metrics_mock = {
+        "nginx": "Status: Active, CPU: 85%, Memory: 40%, Connections: 1500 (Warning: High CPU load)",
+        "mysql": "Status: Active, CPU: 20%, Memory: 60%, QPS: 350",
+        "redis": "Status: Down, Error: Connection refused"
+    }
+    service_name_lower = service_name.lower()
+    for key, val in metrics_mock.items():
+        if key in service_name_lower:
+            return f"Metrics for {service_name}: {val}"
+    return f"Metrics for {service_name}: Status Unknown."
+
 # 工具注册表，方便动态加载和扩展
 AVAILABLE_TOOLS = {
     "execute_shell_command": execute_shell_command,
-    "query_api_endpoint": query_api_endpoint
+    "query_api_endpoint": query_api_endpoint,
+    "query_metrics": query_metrics
 }
 
 def get_tools_by_names(tool_names):

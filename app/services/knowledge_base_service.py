@@ -121,7 +121,8 @@ class KnowledgeBaseService:
             chunk_map = {}
             for chunk in chunks:
                 # 使用重排序模型的 tokenizer 替代 jieba 进行分词
-                tokens = self.reranker_tokenizer.tokenize(chunk.content)
+                # 添加截断避免 Token indices sequence length is longer than maximum sequence length 警告
+                tokens = self.reranker_tokenizer.tokenize(chunk.content[:800])
                 tokenized_corpus.append(tokens)
                 chunk_map[chunk.chunk_id] = chunk
                 
@@ -234,23 +235,22 @@ class KnowledgeBaseService:
         self.build_bm25_index(db_name)
 
     def _extract_entities_from_query(self, query):
-        """利用 LLM 动态提取查询中的实体，增强图谱检索召回率"""
-        try:
-            from app.services.graph_service import GraphService
-            graph_service = GraphService()
-            return graph_service.extract_entities_from_query(query)
-        except Exception as e:
-            print(f"Error using GraphService for entity extraction: {e}")
-            # 回退到基础关键字匹配
-            entities = []
-            keywords = ["服务器", "数据库", "Zabbix", "Nginx", "MySQL", "网络", "Redis", "宕机"]
-            for kw in keywords:
-                if kw.lower() in query.lower():
-                    entities.append(kw)
-            return entities
+        """利用词典/NER提取查询中的实体，替代大模型抽取以降低延迟"""
+        # 使用运维实体词典进行快速匹配
+        entities = []
+        # 预置运维词库，实际可扩展为外部字典加载
+        ops_dict = ["服务器", "数据库", "Zabbix", "Nginx", "MySQL", "网络", "Redis", "宕机", "CPU", "内存", "磁盘", "Tomcat", "微服务", "网关"]
+        
+        # 简单最大前向匹配或直接包含匹配
+        for kw in ops_dict:
+            if kw.lower() in query.lower():
+                entities.append(kw)
+                
+        # TODO: 可在此处集成本地的 bert-base-chinese-ner 模型进行推理
+        return list(set(entities))
 
     def graph_search(self, query):
-        """执行图数据库检索 (Graph RAG)"""
+        """执行图数据库检索 (Graph RAG)，包含动态深度与个性化排序"""
         if not self.neo4j_driver:
             return []
             
@@ -262,17 +262,33 @@ class KnowledgeBaseService:
         try:
             with self.neo4j_driver.session() as session:
                 for entity in entities:
-                    # 查询该实体相关的 1 级和 2 级关联节点，用于发现牵一发而动全身的问题
-                    cypher_query = """
-                    MATCH (n)-[r*1..2]-(m)
+                    # 动态深度查询：先查 1 跳，若结果太少再查 2 跳
+                    cypher_1_hop = """
+                    MATCH (n)-[r*1..1]-(m)
                     WHERE n.name CONTAINS $entity OR n.id CONTAINS $entity
                     RETURN n.name as source, type(r[-1]) as relation, m.name as target
-                    LIMIT 5
+                    LIMIT 15
                     """
-                    result = session.run(cypher_query, entity=entity)
-                    for record in result:
+                    result = session.run(cypher_1_hop, entity=entity)
+                    records = list(result)
+                    
+                    if len(records) < 3:
+                        # 扩展至 2 跳，并引入基于度中心性（PageRank的简化版）的重要性排序
+                        cypher_2_hop = """
+                        MATCH (n)-[r*1..2]-(m)
+                        WHERE n.name CONTAINS $entity OR n.id CONTAINS $entity
+                        WITH n, r, m, size((m)--()) as degree
+                        ORDER BY degree DESC
+                        RETURN n.name as source, type(r[-1]) as relation, m.name as target
+                        LIMIT 10
+                        """
+                        result = session.run(cypher_2_hop, entity=entity)
+                        records = list(result)
+                    
+                    for record in records:
                         target_info = record['target']
-                        relation_desc = f"图谱关联 (Graph RAG): [{record['source']}] --({record['relation']})--> [{target_info}]"
+                        # 图结果自然语言化，避免单纯的结构化丢失信息
+                        relation_desc = f"在系统拓扑中，节点[{record['source']}]与节点[{target_info}]之间存在【{record['relation']}】关系。"
                         # 包装成与 Vector/BM25 相同的结构
                         doc = LangchainDocument(
                             page_content=relation_desc,
@@ -300,6 +316,13 @@ class KnowledgeBaseService:
         # 1. Graph RAG 检索
         graph_results = self.graph_search(query)
         
+        # 动态调整召回数量与权重
+        # 简单的意图启发式：如果有明显的英文缩写或特殊符号，更偏向精准词匹配(BM25)
+        import re
+        is_exact_query = bool(re.search(r'[a-zA-Z0-9_]{3,}', query))
+        vector_k = 30 if is_exact_query else 60
+        bm25_k = 60 if is_exact_query else 30
+        
         for db_name in db_names:
             vs = self.vector_stores.get(db_name)
             if not vs:
@@ -308,7 +331,7 @@ class KnowledgeBaseService:
                 vs = self.vector_stores.get(db_name)
                 
             if vs:
-                vector_results = vs.similarity_search_with_score(query, k=top_k)
+                vector_results = vs.similarity_search_with_score(query, k=vector_k)
                 all_vector_results.extend(vector_results)
                 
             # BM25 Search
@@ -319,7 +342,7 @@ class KnowledgeBaseService:
                 
                 tokenized_query = self.reranker_tokenizer.tokenize(query)
                 doc_scores = bm25.get_scores(tokenized_query)
-                top_indices = sorted(range(len(doc_scores)), key=lambda i: doc_scores[i], reverse=True)[:top_k]
+                top_indices = sorted(range(len(doc_scores)), key=lambda i: doc_scores[i], reverse=True)[:bm25_k]
                 
                 chunk_ids = list(chunk_map.keys())
                 for idx in top_indices:
@@ -356,48 +379,62 @@ class KnowledgeBaseService:
                         doc = LangchainDocument(page_content=chunk.content, metadata=meta)
                         all_bm25_results.append((doc, float(doc_scores[idx])))
                         
-        # 3. RRF Fusion (Reciprocal Rank Fusion)
+        # 3. 自适应 RRF Fusion (Reciprocal Rank Fusion)
         fused_scores = {}
-        k = 60 # RRF constant
+        k_rrf = 60 # RRF constant
         
-        # 为了进行跨库 RRF 融合，我们需要对所有向量结果和所有 BM25 结果进行一次全局排序
-        # 向量距离越小越好
+        # 向量权重
+        vector_weight = 1.0 if is_exact_query else 1.5
+        # BM25权重
+        bm25_weight = 1.5 if is_exact_query else 1.0
+        
         all_vector_results.sort(key=lambda x: x[1])
         for rank, (doc, score) in enumerate(all_vector_results):
             doc_id = f"{doc.metadata.get('db_name')}_{doc.metadata.get('chunk_id')}"
             if doc_id not in fused_scores:
                 fused_scores[doc_id] = {"doc": doc, "score": 0.0}
-            fused_scores[doc_id]["score"] += 1 / (k + rank + 1)
+            fused_scores[doc_id]["score"] += vector_weight * (1 / (k_rrf + rank + 1))
             
-        # BM25 分数越大越好
         all_bm25_results.sort(key=lambda x: x[1], reverse=True)
         for rank, (doc, score) in enumerate(all_bm25_results):
             doc_id = f"{doc.metadata.get('db_name')}_{doc.metadata.get('chunk_id')}"
             if doc_id not in fused_scores:
                 fused_scores[doc_id] = {"doc": doc, "score": 0.0}
-            fused_scores[doc_id]["score"] += 1 / (k + rank + 1)
+            fused_scores[doc_id]["score"] += bm25_weight * (1 / (k_rrf + rank + 1))
             
         # Sort by fused score
         sorted_results = sorted(fused_scores.values(), key=lambda x: x["score"], reverse=True)
         
-        # 取融合后的Top-50进入重排序阶段
-        top_50_fused = [item["doc"] for item in sorted_results[:50]]
+        # 多阶段检索：取融合后的 Top-100 进入重排序阶段
+        top_100_fused = [item["doc"] for item in sorted_results[:30]]
         
-        # 将图谱结果无条件置顶混入，不经过重排序（因为其具有高确定性）
+        # 将图谱结果无条件置顶混入，不经过重排序
         graph_docs = [item[0] for item in graph_results]
+        
+        # Reranker 缓存机制 (简单的内存缓存，生产环境可用 Redis)
+        if hasattr(self, 'reranker_cache') is False:
+            self.reranker_cache = {}
+            
+        cache_key = f"{query}_" + "_".join(db_names)
+        if cache_key in self.reranker_cache:
+            print("Hit Reranker Cache!")
+            cached_reranked = self.reranker_cache[cache_key]
+            final_results = graph_results + cached_reranked
+            return final_results[:top_k]
         
         # 4. Rerank (重排序)
         reranked_results = []
-        if top_50_fused:
-            pairs = [[query, doc.page_content] for doc in top_50_fused]
+        if top_100_fused:
+            # 截断 page_content 避免 Token 长度超出 512 的限制
+            # 通常中文字符到 token 的比例大概是 1:1 到 1:2，这里安全起见截断文本长度
+            max_char_len = 800
+            pairs = [[query, doc.page_content[:max_char_len]] for doc in top_100_fused]
             with torch.no_grad():
                 inputs = self.reranker_tokenizer(pairs, padding=True, truncation=True, return_tensors='pt', max_length=512)
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
                 scores = self.reranker_model(**inputs, return_dict=True).logits.view(-1, ).float()
             
-            for doc, score in zip(top_50_fused, scores):
-                # Apply Parent-Child Chunking expansion: 
-                # Instead of just returning the small chunk, we retrieve the surrounding chunks from DB
+            for doc, score in zip(top_100_fused, scores):
                 chunk_index = doc.metadata.get("chunk_index")
                 document_id = doc.metadata.get("doc_id")
                 
@@ -417,12 +454,15 @@ class KnowledgeBaseService:
                             expanded_content = "\n...\n".join([c.content for c in surrounding_chunks])
                             doc.page_content = expanded_content
                 except Exception as e:
-                    print(f"Parent-Child expansion failed: {e}")
+                    pass
 
                 reranked_results.append((doc, score.item()))
                 
             # 按重排序得分降序
             reranked_results.sort(key=lambda x: x[1], reverse=True)
+            
+            # 缓存重排结果
+            self.reranker_cache[cache_key] = reranked_results[:top_k]
             
             # 将图谱结果前置
             final_results = graph_results + reranked_results

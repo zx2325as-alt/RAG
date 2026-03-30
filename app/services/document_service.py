@@ -81,7 +81,15 @@ class DocumentService:
             
             # 3. Chunk Text
             is_markdown = filepath.lower().endswith('.md')
-            text_chunks = chunk_text(cleaned_text, is_markdown=is_markdown)
+            # 注入基础元数据
+            from datetime import datetime
+            import os
+            metadata = {
+                "source": doc.doc_name,
+                "type": doc.doc_type,
+                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+            text_chunks = chunk_text(cleaned_text, is_markdown=is_markdown, metadata=metadata)
             logger.info(f"[{doc.doc_name}] Text chunked successfully into {len(text_chunks)} segments.")
             
             # 4. Save Chunks using bulk_save_objects for performance
