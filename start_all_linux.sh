@@ -51,7 +51,7 @@ else
     exit 1
 fi
 
-# 1.1 安装 Redis
+# 1.1 安装 Redis 和 Java (Neo4j 依赖 Java 17+)
 if ! command -v redis-server >/dev/null; then
     echo "正在安装 Redis..."
     if [ "$PKG_MANAGER" = "apt-get" ]; then
@@ -71,19 +71,16 @@ else
     fi
 fi
 
-# 1.2 检查 Docker (用于快速启动 Neo4j)
-if ! command -v docker >/dev/null; then
-    echo "正在安装 Docker (用于运行 Neo4j)..."
+# 1.2 检查 Java 环境 (Neo4j 5.x 需要 Java 17)
+if ! command -v java >/dev/null; then
+    echo "正在安装 Java 17 (Neo4j 依赖)..."
     if [ "$PKG_MANAGER" = "apt-get" ]; then
-        $SUDO_CMD apt-get update -y
-        $SUDO_CMD apt-get install -y docker.io
+        $SUDO_CMD apt-get install -y openjdk-17-jre-headless
     else
-        $SUDO_CMD $PKG_MANAGER install -y docker
+        $SUDO_CMD $PKG_MANAGER install -y java-17-openjdk
     fi
-    $SUDO_CMD systemctl enable docker || true
-    $SUDO_CMD systemctl start docker || true
 else
-    echo "Docker 已安装。"
+    echo "Java 已安装。"
 fi
 
 # ==========================================
@@ -91,29 +88,29 @@ fi
 # ==========================================
 echo -e "\n${YELLOW}[2/4] 正在配置 Python 环境并安装依赖...${NC}"
 
-if [ ! -f "requirements.txt" ]; then
-    echo -e "${RED}未找到 requirements.txt 文件，请确保在项目根目录下执行此脚本。${NC}"
+# 如果您使用 requirements_online.txt 安装过了，这一步将很快跳过
+echo "检查并安装基础 Python 依赖..."
+if [ -f "requirements_online.txt" ]; then
+    pip install -r requirements_online.txt
+elif [ -f "requirements.txt" ]; then
+    pip install -r requirements.txt
+else
+    echo -e "${RED}未找到 requirements 文件，请确保在项目根目录下执行此脚本。${NC}"
     exit 1
 fi
 
-echo "检查并安装基础 Python 依赖..."
-# 使用 pip install -r 且配合 --no-cache-dir 或让 pip 自行判断缓存，pip 默认如果已安装且版本满足就会跳过
-# 为了更明显的跳过提示，我们这里直接运行，pip 会自动跳过已安装的
-pip install -r requirements.txt
-
-echo "检查并安装 LLaMA-Factory..."
-if ! command -v llamafactory-cli >/dev/null; then
-    pip install llamafactory
+echo "检查并安装本地 LLaMA-Factory..."
+if [ -d "LLaMA-Factory" ]; then
+    echo "发现本地 LLaMA-Factory 目录，正在安装..."
+    pip install -e LLaMA-Factory
 else
-    echo "LLaMA-Factory 已安装，跳过。"
+    echo "未发现本地 LLaMA-Factory 目录，尝试通过 pip 安装..."
+    if ! command -v llamafactory-cli >/dev/null; then
+        pip install llamafactory
+    fi
 fi
 
-echo "检查并安装 vLLM..."
-if ! python -c "import vllm" >/dev/null 2>&1; then
-    pip install vllm || echo -e "${YELLOW}警告: vLLM 安装失败，可能需要特定的 CUDA 版本，请稍后手动排查。${NC}"
-else
-    echo "vLLM 已安装，跳过。"
-fi
+
 
 # ==========================================
 # 3. 启动后台数据库/中间件
@@ -128,31 +125,27 @@ else
     echo -e "${YELLOW}警告: Redis 未响应，请检查 Redis 服务状态。${NC}"
 fi
 
-# Neo4j (使用 Docker 启动)
-echo "正在启动 Neo4j Docker 容器..."
-# 检查是否已存在名为 rag-neo4j 的容器
-if $SUDO_CMD docker ps -a --format '{{.Names}}' | grep -Eq "^rag-neo4j$"; then
-    echo "Neo4j 容器已存在，检查运行状态..."
-    if ! $SUDO_CMD docker ps --format '{{.Names}}' | grep -Eq "^rag-neo4j$"; then
-        echo "启动已存在的 Neo4j 容器..."
-        $SUDO_CMD docker start rag-neo4j
-    else
-        echo "Neo4j 容器已经在运行中。"
-    fi
+# Neo4j (本地目录启动)
+echo "正在启动本地 Neo4j 服务..."
+NEO4J_HOME="$PWD/model/neo4j-community-5.18.1"
+if [ -d "$NEO4J_HOME" ]; then
+    echo "发现本地 Neo4j 目录: $NEO4J_HOME"
+    
+    # 确保脚本有执行权限
+    chmod +x "$NEO4J_HOME/bin/neo4j"
+    chmod +x "$NEO4J_HOME/bin/cypher-shell" || true
+    
+    # 尝试启动
+    echo "执行 Neo4j 启动命令..."
+    "$NEO4J_HOME/bin/neo4j" start || echo -e "${YELLOW}警告: Neo4j 启动遇到问题，它可能已经在运行。${NC}"
+    
+    # 等待 Neo4j 初始化
+    echo "等待本地 Neo4j 服务启动 (约 10 秒)..."
+    sleep 10
 else
-    echo "创建并启动新的 Neo4j 容器..."
-    # 密码设置为 11111111 与 config/base.py 对应
-    $SUDO_CMD docker run -d \
-        --name rag-neo4j \
-        -p 7474:7474 -p 7687:7687 \
-        -e NEO4J_AUTH=neo4j/11111111 \
-        -v $PWD/neo4j_data:/data \
-        neo4j:latest
+    echo -e "${RED}未找到本地 Neo4j 目录 ($NEO4J_HOME)，请确认路径是否正确。${NC}"
+    echo -e "${YELLOW}由于未找到 Neo4j，图谱相关功能将降级或失效。${NC}"
 fi
-
-# 等待 Neo4j 初始化
-echo "等待 Neo4j 服务启动 (约 10 秒)..."
-sleep 10
 
 # ==========================================
 # 4. 启动 Python 应用项目
@@ -163,22 +156,47 @@ echo -e "\n${YELLOW}[4/4] 正在启动所有核心应用服务...${NC}"
 mkdir -p logs
 
 # 4.1 启动 LLaMA-Factory WebUI
-# 修复找不到 data/dataset_info.json 的问题：需确保在 LLaMA-Factory 目录下启动，或者手动创建所需目录
 echo "-> 准备 LLaMA-Factory 运行环境..."
-if [ ! -d "data" ]; then
-    mkdir -p data
-    echo "{}" > data/dataset_info.json
-fi
-if [ ! -f "data/dataset_info.json" ]; then
-    echo "{}" > data/dataset_info.json
+LLAMA_FACTORY_DIR="$PWD/LLaMA-Factory"
+
+if [ -d "$LLAMA_FACTORY_DIR" ]; then
+    echo "进入本地 LLaMA-Factory 目录启动 WebUI..."
+    cd "$LLAMA_FACTORY_DIR"
+    
+    # 修复找不到 data/dataset_info.json 的问题
+    if [ ! -d "data" ]; then
+        mkdir -p data
+    fi
+    if [ ! -f "data/dataset_info.json" ]; then
+        echo "{}" > data/dataset_info.json
+    fi
+
+    echo "-> 启动 LLaMA-Factory WebUI (绑定端口: 6006 以适应 AutoDL 映射)..."
+    export GRADIO_SERVER_PORT=6006
+    export GRADIO_SERVER_NAME=0.0.0.0
+    
+    # 使用本地源代码启动
+    nohup python src/webui.py > ../logs/llamafactory.log 2>&1 &
+    LLAMA_PID=$!
+    
+    # 退回原目录
+    cd ..
+else
+    echo -e "${YELLOW}未找到本地 LLaMA-Factory 目录，尝试使用系统命令启动...${NC}"
+    # 修复找不到 data/dataset_info.json 的问题
+    if [ ! -d "data" ]; then
+        mkdir -p data
+    fi
+    if [ ! -f "data/dataset_info.json" ]; then
+        echo "{}" > data/dataset_info.json
+    fi
+    
+    export GRADIO_SERVER_PORT=6006
+    export GRADIO_SERVER_NAME=0.0.0.0
+    nohup llamafactory-cli webui > logs/llamafactory.log 2>&1 &
+    LLAMA_PID=$!
 fi
 
-echo "-> 启动 LLaMA-Factory WebUI (绑定端口: 6006 以适应 AutoDL 映射)..."
-# 通过环境变量强制 LLaMA-Factory 使用 6006 端口
-export GRADIO_SERVER_PORT=6006
-export GRADIO_SERVER_NAME=0.0.0.0
-nohup llamafactory-cli webui > logs/llamafactory.log 2>&1 &
-LLAMA_PID=$!
 echo "LLaMA-Factory 进程 ID: $LLAMA_PID"
 
 # 4.2 启动 vLLM API Server (可选)
