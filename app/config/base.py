@@ -53,7 +53,7 @@ class BaseConfig:
     # 5. Neo4j 图数据库配置 (Graph RAG)
     NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://127.0.0.1:7687')
     NEO4J_USER = os.getenv('NEO4J_USER', 'neo4j')
-    NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD', 'password')
+    NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD', '11111111')
     
     # 6. 智能体工具调用配置 (Agent Function Calling)
     # 支持在配置中启用或禁用特定的工具
