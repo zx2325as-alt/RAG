@@ -9,20 +9,20 @@
     <link href="/static/vendor/css/katex.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body class="bg-light" style="overflow: hidden; height: 100vh;">
-    <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); box-shadow: 0 2px 10px rgba(0,0,0,0.1); height: 56px;">
+<body class="bg-light" style="overflow: hidden; height: 100vh; display: flex; flex-direction: column;">
+    <nav class="navbar navbar-expand-lg navbar-dark flex-shrink-0" style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); box-shadow: 0 2px 10px rgba(0,0,0,0.1); height: 56px;">
         <div class="container-fluid px-4">
             <a class="navbar-brand" href="/">运维知识助手 (RAG)</a>
             <div class="collapse navbar-collapse">
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a class="nav-link active" href="/">问答系统</a>
+                        <a class="nav-link active" href="javascript:void(0);" onclick="showMainContent()">问答系统</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/finetune">模型微调(Ollama)</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="http://127.0.0.1:7860" target="_blank">原生LLaMA-Factory</a>
+                        <a class="nav-link" href="javascript:void(0);" onclick="openAutoDLUrl(6006)">原生LLaMA-Factory</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/eval_report">评估报告</a>
@@ -32,7 +32,10 @@
         </div>
     </nav>
 
-    <div class="container-fluid p-3" style="height: calc(100vh - 56px); display: flex; flex-direction: column;">
+    <!-- 移除了 iframe 容器 -->
+
+    <!-- 原有的主内容区域 -->
+    <div id="mainContentContainer" class="container-fluid p-3" style="flex-grow: 1; display: flex; flex-direction: column; overflow: hidden;">
         <div class="row flex-grow-1 overflow-hidden">
             <!-- 左侧：知识库管理与状态 -->
             <div class="col-md-3 d-flex flex-column h-100 pe-2">
@@ -223,5 +226,27 @@
     <script src="/static/vendor/js/katex.min.js"></script>
     <script src="/static/vendor/js/auto-render.min.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        function getAutoDLUrl(port) {
+            let hostname = window.location.hostname;
+            if (hostname.includes('seetacloud.com')) {
+                if (port === 7860 || port === 6006) {
+                    let mappedHost = hostname.replace(/^uu/, 'u');
+                    return `https://${mappedHost}:8443`;
+                }
+            }
+            return `http://${window.location.hostname}:${port}`;
+        }
+
+        function openAutoDLUrl(port) {
+            let targetUrl = getAutoDLUrl(port);
+            window.open(targetUrl, '_blank');
+        }
+
+        function showMainContent() {
+            $('.nav-link').removeClass('active');
+            $('a:contains("问答系统")').addClass('active');
+        }
+    </script>
 </body>
 </html>

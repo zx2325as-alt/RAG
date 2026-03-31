@@ -163,7 +163,20 @@ echo -e "\n${YELLOW}[4/4] 正在启动所有核心应用服务...${NC}"
 mkdir -p logs
 
 # 4.1 启动 LLaMA-Factory WebUI
-echo "-> 启动 LLaMA-Factory WebUI (端口: 7860)..."
+# 修复找不到 data/dataset_info.json 的问题：需确保在 LLaMA-Factory 目录下启动，或者手动创建所需目录
+echo "-> 准备 LLaMA-Factory 运行环境..."
+if [ ! -d "data" ]; then
+    mkdir -p data
+    echo "{}" > data/dataset_info.json
+fi
+if [ ! -f "data/dataset_info.json" ]; then
+    echo "{}" > data/dataset_info.json
+fi
+
+echo "-> 启动 LLaMA-Factory WebUI (绑定端口: 6006 以适应 AutoDL 映射)..."
+# 通过环境变量强制 LLaMA-Factory 使用 6006 端口
+export GRADIO_SERVER_PORT=6006
+export GRADIO_SERVER_NAME=0.0.0.0
 nohup llamafactory-cli webui > logs/llamafactory.log 2>&1 &
 LLAMA_PID=$!
 echo "LLaMA-Factory 进程 ID: $LLAMA_PID"
@@ -186,8 +199,8 @@ echo "RAG 后端进程 ID: $RAG_PID"
 echo -e "\n${GREEN}=======================================================${NC}"
 echo -e "${GREEN}所有服务已下发启动指令！运行日志已保存至 logs/ 目录。${NC}"
 echo -e "服务访问地址："
-echo -e "- RAG 问答主前端:   ${YELLOW}http://<本机IP>:6008${NC}"
-echo -e "- LLaMA-Factory:    ${YELLOW}http://<本机IP>:7860${NC}"
+echo -e "- RAG 问答主前端:   ${YELLOW}http://<本机IP>:6008${NC} (AutoDL用户请访问 6008 映射地址)"
+echo -e "- LLaMA-Factory:    ${YELLOW}http://<本机IP>:6006${NC} (AutoDL用户请访问 6006 映射地址)"
 echo -e "- Neo4j Browser:    ${YELLOW}http://<本机IP>:7474${NC} (用户: neo4j, 密码: 11111111)"
 echo -e "${GREEN}=======================================================${NC}"
 echo "如需停止服务，请使用: kill $LLAMA_PID $RAG_PID"

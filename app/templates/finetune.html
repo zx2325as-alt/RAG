@@ -20,7 +20,7 @@
                         <a class="nav-link active" href="/finetune">模型微调(Ollama)</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="http://127.0.0.1:7860" target="_blank">原生LLaMA-Factory</a>
+                        <a class="nav-link" href="javascript:void(0);" onclick="openAutoDLUrl(6006)">原生LLaMA-Factory</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/eval_report">评估报告</a>
@@ -30,7 +30,7 @@
         </div>
     </nav>
 
-    <div class="container mt-4">
+    <div id="mainContentContainer" class="container mt-4">
         <h3 class="mb-4">本地模型微调 (Ollama / vLLM)</h3>
         
         <div class="row">
@@ -633,6 +633,23 @@
                 btn.prop('disabled', false).html(originalText);
                 alert('请求后端接口失败');
             });
+        }
+    </script>
+    <script>
+        function getAutoDLUrl(port) {
+            let hostname = window.location.hostname;
+            if (hostname.includes('seetacloud.com')) {
+                if (port === 7860 || port === 6006) {
+                    let mappedHost = hostname.replace(/^uu/, 'u');
+                    return `https://${mappedHost}:8443`;
+                }
+            }
+            return `http://${window.location.hostname}:${port}`;
+        }
+
+        function openAutoDLUrl(port) {
+            let targetUrl = getAutoDLUrl(port);
+            window.open(targetUrl, '_blank');
         }
     </script>
 </body>
