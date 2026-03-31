@@ -22,3 +22,6 @@ pyyaml
 torch
 pdfplumber
 transformers
+neo4j
+llamafactory
+vllm

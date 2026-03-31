@@ -19,6 +19,20 @@ echo -e "${GREEN}        湖北移动运维知识助手 (RAG) 自动化部署脚
 echo -e "${GREEN}=======================================================${NC}"
 
 # ==========================================
+# 0. 环境准备：处理 sudo
+# ==========================================
+# 如果当前是 root 用户，则无需使用 sudo
+SUDO_CMD=""
+if [ "$(id -u)" -ne 0 ]; then
+    if command -v sudo >/dev/null; then
+        SUDO_CMD="sudo"
+    else
+        echo -e "${RED}当前非 root 用户且未安装 sudo，请切换到 root 用户执行此脚本。${NC}"
+        exit 1
+    fi
+fi
+
+# ==========================================
 # 1. 检查并安装系统级依赖
 # ==========================================
 echo -e "\n${YELLOW}[1/4] 正在检查并安装系统级依赖...${NC}"
@@ -26,7 +40,8 @@ echo -e "\n${YELLOW}[1/4] 正在检查并安装系统级依赖...${NC}"
 # 检查包管理器
 if command -v apt-get >/dev/null; then
     PKG_MANAGER="apt-get"
-    sudo apt-get update -y
+    # 为了加快二次执行速度，可以跳过频繁的 update
+    # $SUDO_CMD apt-get update -y
 elif command -v yum >/dev/null; then
     PKG_MANAGER="yum"
 elif command -v dnf >/dev/null; then
@@ -39,24 +54,34 @@ fi
 # 1.1 安装 Redis
 if ! command -v redis-server >/dev/null; then
     echo "正在安装 Redis..."
-    sudo $PKG_MANAGER install -y redis-server redis-tools
-    sudo systemctl enable redis-server || true
-    sudo systemctl start redis-server || true
+    if [ "$PKG_MANAGER" = "apt-get" ]; then
+        $SUDO_CMD apt-get update -y
+    fi
+    $SUDO_CMD $PKG_MANAGER install -y redis-server redis-tools
+    $SUDO_CMD systemctl enable redis-server || true
+    $SUDO_CMD systemctl start redis-server || true
 else
     echo "Redis 已安装，确保其正在运行..."
-    sudo systemctl start redis-server || true
+    # 尝试启动，如果不是 systemd 管理的系统（如某些 docker 容器内），可能会失败，这里忽略错误
+    $SUDO_CMD systemctl start redis-server >/dev/null 2>&1 || true
+    # 如果 redis 没跑起来，尝试直接后台启动
+    if ! redis-cli ping >/dev/null 2>&1; then
+        echo "尝试手动后台启动 redis-server..."
+        $SUDO_CMD redis-server --daemonize yes || true
+    fi
 fi
 
 # 1.2 检查 Docker (用于快速启动 Neo4j)
 if ! command -v docker >/dev/null; then
     echo "正在安装 Docker (用于运行 Neo4j)..."
     if [ "$PKG_MANAGER" = "apt-get" ]; then
-        sudo apt-get install -y docker.io
+        $SUDO_CMD apt-get update -y
+        $SUDO_CMD apt-get install -y docker.io
     else
-        sudo $PKG_MANAGER install -y docker
+        $SUDO_CMD $PKG_MANAGER install -y docker
     fi
-    sudo systemctl enable docker || true
-    sudo systemctl start docker || true
+    $SUDO_CMD systemctl enable docker || true
+    $SUDO_CMD systemctl start docker || true
 else
     echo "Docker 已安装。"
 fi
@@ -71,19 +96,24 @@ if [ ! -f "requirements.txt" ]; then
     exit 1
 fi
 
-# 建议使用虚拟环境，这里假设已经激活或将安装在当前环境中
-echo "安装基础 Python 依赖..."
+echo "检查并安装基础 Python 依赖..."
+# 使用 pip install -r 且配合 --no-cache-dir 或让 pip 自行判断缓存，pip 默认如果已安装且版本满足就会跳过
+# 为了更明显的跳过提示，我们这里直接运行，pip 会自动跳过已安装的
 pip install -r requirements.txt
 
-echo "安装 LLaMA-Factory (如果未安装)..."
+echo "检查并安装 LLaMA-Factory..."
 if ! command -v llamafactory-cli >/dev/null; then
-    # LLaMA-Factory 官方推荐通过源码或 pip 安装
     pip install llamafactory
+else
+    echo "LLaMA-Factory 已安装，跳过。"
 fi
 
-echo "安装 vLLM (用于模型推理加速)..."
-# 注意: vLLM 需要 Linux 和兼容的 GPU 环境
-pip install vllm || echo -e "${YELLOW}警告: vLLM 安装失败，可能需要特定的 CUDA 版本，请稍后手动排查。${NC}"
+echo "检查并安装 vLLM..."
+if ! python -c "import vllm" >/dev/null 2>&1; then
+    pip install vllm || echo -e "${YELLOW}警告: vLLM 安装失败，可能需要特定的 CUDA 版本，请稍后手动排查。${NC}"
+else
+    echo "vLLM 已安装，跳过。"
+fi
 
 # ==========================================
 # 3. 启动后台数据库/中间件
@@ -95,19 +125,24 @@ echo "检查 Redis 状态..."
 if redis-cli ping >/dev/null 2>&1; then
     echo "Redis 运行正常。"
 else
-    echo -e "${YELLOW}警告: Redis 未响应。${NC}"
+    echo -e "${YELLOW}警告: Redis 未响应，请检查 Redis 服务状态。${NC}"
 fi
 
 # Neo4j (使用 Docker 启动)
 echo "正在启动 Neo4j Docker 容器..."
 # 检查是否已存在名为 rag-neo4j 的容器
-if docker ps -a --format '{{.Names}}' | grep -Eq "^rag-neo4j$"; then
-    echo "Neo4j 容器已存在，尝试启动..."
-    sudo docker start rag-neo4j
+if $SUDO_CMD docker ps -a --format '{{.Names}}' | grep -Eq "^rag-neo4j$"; then
+    echo "Neo4j 容器已存在，检查运行状态..."
+    if ! $SUDO_CMD docker ps --format '{{.Names}}' | grep -Eq "^rag-neo4j$"; then
+        echo "启动已存在的 Neo4j 容器..."
+        $SUDO_CMD docker start rag-neo4j
+    else
+        echo "Neo4j 容器已经在运行中。"
+    fi
 else
     echo "创建并启动新的 Neo4j 容器..."
     # 密码设置为 11111111 与 config/base.py 对应
-    sudo docker run -d \
+    $SUDO_CMD docker run -d \
         --name rag-neo4j \
         -p 7474:7474 -p 7687:7687 \
         -e NEO4J_AUTH=neo4j/11111111 \
