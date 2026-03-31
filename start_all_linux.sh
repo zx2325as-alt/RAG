@@ -88,6 +88,12 @@ fi
 # ==========================================
 echo -e "\n${YELLOW}[2/4] 正在配置 Python 环境并安装依赖...${NC}"
 
+# 配置 pip 镜像源加速下载
+echo "配置国内 pip 镜像源加速下载..."
+pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/
+pip config set global.extra-index-url https://pypi.tuna.tsinghua.edu.cn/simple/
+pip config set global.trusted-host "mirrors.aliyun.com pypi.tuna.tsinghua.edu.cn"
+
 # 如果您使用 requirements_online.txt 安装过了，这一步将很快跳过
 echo "检查并安装基础 Python 依赖..."
 if [ -f "requirements_online.txt" ]; then
@@ -108,6 +114,23 @@ else
     if ! command -v llamafactory-cli >/dev/null; then
         pip install llamafactory
     fi
+fi
+
+echo "检查并安装 vLLM (针对 CUDA 11.8 优化)..."
+if ! python -c "import vllm" >/dev/null 2>&1; then
+    echo "检测到未安装 vLLM。为了彻底避免 CUDA 12 编译卡死，将分两步进行：先装依赖，再裸装 vLLM..."
+    
+    # 1. 优先安装 vLLM 0.4.1 的安全依赖 (不带 nccl-cu12)
+    pip install ray==2.54.1 xformers==0.0.25 outlines==0.0.34 nvidia-ml-py pydantic==2.12.5 fastapi uvicorn
+    
+    # 2. 强制屏蔽编译过程，使用 --no-deps 阻止 pip 自动触发 nccl-cu12 下载
+    export VLLM_INSTALL_PUNICA_DROP_IN=0
+    export VLLM_TARGET_DEVICE="cuda"
+    
+    echo "正在下载并裸装 vLLM 预编译核心包..."
+    pip install --no-deps https://github.com/vllm-project/vllm/releases/download/v0.4.1/vllm-0.4.1+cu118-cp310-cp310-manylinux1_x86_64.whl || echo -e "${YELLOW}警告: vLLM 安装失败。${NC}"
+else
+    echo "vLLM 已安装，跳过。"
 fi
 
 
