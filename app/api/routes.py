@@ -1288,7 +1288,7 @@ def start_finetune():
                 "max_length": int(max_length) if max_length and max_length != 'undefined' else 1024, # 降低默认最大长度防 OOM
                 "weight_decay": float(weight_decay) if weight_decay and weight_decay != 'undefined' else 0.0,
                 "max_grad_norm": float(max_grad_norm) if max_grad_norm and max_grad_norm != 'undefined' else 1.0,
-                "dataloader_num_workers": 2, # 降低进程数，减少 CPU 内存向 GPU 转移时的峰值占用
+                "dataloader_num_workers": 0, # Windows 环境下避免多进程 DataLoader 导致的 pickle 报错
                 "dataloader_pin_memory": True, # 锁页内存，加速 CPU 到 GPU 的数据拷贝
                 "seed": int(seed) if seed and seed != 'undefined' else 42,
                 "plot_loss": True,
@@ -1301,8 +1301,10 @@ def start_finetune():
             # 精度设置
             if precision == "fp16":
                 train_config["fp16"] = True
+                train_config["bf16"] = False
             elif precision == "bf16":
                 train_config["bf16"] = True
+                train_config["fp16"] = False
             else: # fp32
                 train_config["pure_bf16"] = False
                 train_config["fp16"] = False

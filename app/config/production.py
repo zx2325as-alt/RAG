@@ -7,7 +7,7 @@ class ProductionConfig(BaseConfig):
     # SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'mysql+pymysql://user:password@localhost/rag_db')
     SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'sqlite:///rag.db')
     REDIS_URL = os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0')
-    FAISS_INDEX_PATH = os.getenv('FAISS_INDEX_PATH', '/data/faiss_index')
+    FAISS_INDEX_PATH = os.getenv('FAISS_INDEX_PATH', os.path.join(BASE_DIR, 'faiss_index'))
     
     # 线上版服务绑定地址 (通常需要 0.0.0.0 对外暴露，或由 Nginx 代理)
     APP_HOST = '0.0.0.0'
