@@ -2200,6 +2200,16 @@ def start_deploy():
         if not model_name:
             return jsonify({'error': '请指定要部署的模型'}), 400
         
+        # 检查 vLLM 是否已安装
+        try:
+            import vllm
+            vllm_version = vllm.__version__
+        except ImportError:
+            return jsonify({
+                'error': 'vLLM 未安装',
+                'message': '请先安装 vLLM: pip install vllm。Windows 系统请使用 WSL2 或参考 vLLM 官方文档安装。'
+            }), 500
+        
         # 查找模型路径
         models_dir = os.path.join(current_app.root_path, '..', 'finetuned_models')
         hugface_dir = os.path.join(current_app.root_path, '..', 'hugface')
@@ -2261,19 +2271,34 @@ def start_deploy():
                 env=env
             )
             
+            # 等待一小段时间检查进程是否成功启动
+            import time
+            time.sleep(1)
+            
+            # 检查进程是否仍在运行
+            if process.poll() is not None:
+                # 进程已退出，读取错误信息
+                stdout, stderr = process.communicate()
+                error_msg = stderr if stderr else stdout
+                return jsonify({
+                    'error': f'vLLM 启动失败',
+                    'message': f'进程异常退出，错误信息: {error_msg[:500] if error_msg else "未知错误"}'
+                }), 500
+            
             # 存储进程信息
             service_id = f"{model_name}_{port}"
             active_vllm_processes[service_id] = {
                 'process': process,
                 'model': model_name,
                 'port': port,
-                'start_time': datetime.now().isoformat()
+                'start_time': datetime.now().isoformat(),
+                'model_path': model_path
             }
             
             api_url = f"http://localhost:{port}/v1/chat/completions"
             
             return jsonify({
-                'message': f'vLLM 服务已启动',
+                'message': f'vLLM 服务已启动 (v{vllm_version})',
                 'model': model_name,
                 'port': port,
                 'api_url': api_url,

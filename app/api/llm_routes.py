@@ -170,7 +170,9 @@ def get_ollama_models():
             if os.path.exists(models_dir):
                 for d in os.listdir(models_dir):
                     full_path = os.path.join(models_dir, d)
-                    if os.path.isdir(full_path) and d not in ['base_models', 'runs'] and not d.endswith('_lora') and not d.endswith('_merged'):
+                    # 排除特定目录，但保留量化模型（_awq_4bit, _gptq 等）
+                    excluded_dirs = ['base_models', 'runs']
+                    if os.path.isdir(full_path) and d not in excluded_dirs:
                         vllm_tag = f"vllm: {d}"
                         if vllm_tag not in vllm_models_list:
                             vllm_models_list.append(vllm_tag)

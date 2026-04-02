@@ -507,9 +507,13 @@
                         <div class="row compact-row">
                             <div class="col-md-4">
                                 <label class="form-label">待量化模型</label>
-                                <select class="form-select form-select-sm" id="quantizeModelSelect">
-                                    <option value="">加载中...</option>
-                                </select>
+                                <div class="input-group input-group-sm">
+                                    <select class="form-select form-select-sm" id="quantizeModelSelect">
+                                        <option value="">加载中...</option>
+                                    </select>
+                                    <button class="btn btn-outline-danger" type="button" id="deleteQuantizeModelBtn" onclick="deleteQuantizeModel()" style="display:none;">🗑️</button>
+                                    <button class="btn btn-outline-secondary" type="button" id="refreshQuantizeModelBtn" onclick="loadFinetunedModels()">🔄</button>
+                                </div>
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label">量化方法</label>
@@ -1050,41 +1054,68 @@
                             }
                         });
                         
-                        // ========== 待量化模型选项 ==========
-                        // 量化模型：使用 LoRA 模型或其他模型（排除已量化的）
+                        // ========== 待量化/部署模型选项 ==========
+                        // 量化模型下拉列表：包含 LoRA 模型、其他模型、以及已量化模型（用于部署）
                         var loraModels = res.lora_models || [];
                         var otherModels = res.other_models || [];
                         var quantizedModels = res.quantized_models || [];
-                        var quantizedNames = quantizedModels.map(m => m.name);
+                        var mergedModels = res.merged_models || [];
                         
-                        // 过滤掉已经量化的模型
+                        // 添加分组：已量化模型（可用于部署）
+                        if (quantizedModels.length > 0) {
+                            var quantizedGroup = $('<optgroup label="已量化模型（可直接部署）"></optgroup>');
+                            quantizedModels.forEach(function(m) {
+                                var typeLabel = MODEL_TYPE_LABELS[m.type] || '(量化)';
+                                quantizedGroup.append(`<option value="${m.name}">${m.name} ${typeLabel}</option>`);
+                            });
+                            quantizeSelect.append(quantizedGroup);
+                        }
+                        
+                        // 添加分组：可量化模型（LoRA/合并模型）
                         var availableForQuantize = [];
                         loraModels.forEach(function(m) {
                             var modelName = (typeof m === 'object') ? m.name : m;
                             var modelPath = (typeof m === 'object') ? (m.path || m.name) : m;
-                            if (!quantizedNames.some(qn => modelName.includes(qn) || qn.includes(modelName))) {
-                                availableForQuantize.push({name: modelName, path: modelPath, type: 'lora'});
-                            }
+                            availableForQuantize.push({name: modelName, path: modelPath, type: 'lora'});
+                        });
+                        mergedModels.forEach(function(m) {
+                            var modelName = (typeof m === 'object') ? m.name : m;
+                            var modelPath = (typeof m === 'object') ? (m.path || m.name) : m;
+                            availableForQuantize.push({name: modelName, path: modelPath, type: 'merged'});
                         });
                         otherModels.forEach(function(m) {
                             var modelName = (typeof m === 'object') ? m.name : m;
                             var modelPath = (typeof m === 'object') ? (m.path || m.name) : m;
-                            if (!quantizedNames.some(qn => modelName.includes(qn) || qn.includes(modelName))) {
-                                availableForQuantize.push({name: modelName, path: modelPath, type: 'other'});
-                            }
+                            availableForQuantize.push({name: modelName, path: modelPath, type: 'other'});
                         });
                         
                         if (availableForQuantize.length > 0) {
+                            var quantizeGroup = $('<optgroup label="可量化模型"></optgroup>');
                             availableForQuantize.forEach(function(m) {
                                 if (m.type === 'lora') {
-                                    quantizeSelect.append(`<option value="${m.path}">${m.name} (LoRA)</option>`);
+                                    quantizeGroup.append(`<option value="${m.path}">${m.name} (LoRA)</option>`);
+                                } else if (m.type === 'merged') {
+                                    quantizeGroup.append(`<option value="${m.path}">${m.name} (完整模型)</option>`);
                                 } else {
-                                    quantizeSelect.append(`<option value="${m.path}">${m.name}</option>`);
+                                    quantizeGroup.append(`<option value="${m.path}">${m.name}</option>`);
                                 }
                             });
-                        } else {
-                            quantizeSelect.append('<option value="">未找到可量化的模型（所有模型已量化）</option>');
+                            quantizeSelect.append(quantizeGroup);
                         }
+                        
+                        if (quantizeSelect.children().length === 0) {
+                            quantizeSelect.append('<option value="">未找到可用模型</option>');
+                        }
+                        
+                        // 绑定模型选择变化事件，控制删除按钮显示
+                        quantizeSelect.change(function() {
+                            var selectedModel = $(this).val();
+                            if (selectedModel) {
+                                $('#deleteQuantizeModelBtn').show();
+                            } else {
+                                $('#deleteQuantizeModelBtn').hide();
+                            }
+                        });
                     }
                 });
             }
@@ -1106,7 +1137,7 @@
                     alert('请先选择要删除的模型！');
                     return;
                 }
-                
+                            
                 if (category === 'ollama' || category === 'vllm' || category === 'hf') {
                     var modelLabel = category === 'ollama' ? 'Ollama' : (category === 'vllm' ? 'vLLM' : 'Hugging Face');
                     if (confirm(`确定要删除本地 ${modelLabel} 模型 [${selectedModel}] 吗？\n注意：此操作不可逆！`)) {
@@ -1122,7 +1153,7 @@
                                 window.loadModels(); // 重新加载列表
                             },
                             error: function(err) {
-                                alert('删除失败: ' + (err.responseJSON ? err.responseJSON.error : '未知错误'));
+                                alert('删除失败：' + (err.responseJSON ? err.responseJSON.error : '未知错误'));
                             },
                             complete: function() {
                                 btn.prop('disabled', false);
@@ -1131,6 +1162,46 @@
                     }
                 }
             });
+                        
+            // 删除选中的待量化模型
+            window.deleteQuantizeModel = function() {
+                var selectedModel = $('#quantizeModelSelect').val();
+                if (!selectedModel) {
+                    alert('请先选择要删除的模型！');
+                    return;
+                }
+                            
+                // 判断模型类型
+                var modelType = 'vllm'; // 默认为 vllm 类型
+                var modelName = selectedModel;
+                            
+                if (selectedModel.includes('_lora')) {
+                    modelType = 'vllm';
+                } else if (selectedModel.includes('_awq_4bit') || selectedModel.includes('_gptq')) {
+                    modelType = 'vllm';
+                }
+                            
+                if (confirm(`确定要删除本地模型 [${selectedModel}] 吗？\n注意：此操作不可逆！`)) {
+                    var btn = $('#deleteQuantizeModelBtn');
+                    btn.prop('disabled', true);
+                    $.ajax({
+                        url: '/ollama/models',
+                        type: 'DELETE',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ model_name: modelName, model_type: modelType }),
+                        success: function(res) {
+                            alert(res.message || '删除成功');
+                            loadFinetunedModels(); // 重新加载列表
+                        },
+                        error: function(err) {
+                            alert('删除失败：' + (err.responseJSON ? err.responseJSON.error : '未知错误'));
+                        },
+                        complete: function() {
+                            btn.prop('disabled', false);
+                        }
+                    });
+                }
+            };
         });
 
         let currentAbortController = null;

@@ -1,0 +1,918 @@
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/engine/arg_utils.py", line 6, in <module>
+    from vllm.config import (CacheConfig, DecodingConfig, DeviceConfig,
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/config.py", line 7, in <module>
+    import torch
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/torch/__init__.py", line 1382, in <module>
+    from .functional import *  # noqa: F403
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/torch/functional.py", line 7, in <module>
+    import torch.nn.functional as F
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/torch/nn/__init__.py", line 1, in <module>
+    from .modules import *  # noqa: F403
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/torch/nn/modules/__init__.py", line 35, in <module>
+    from .transformer import TransformerEncoder, TransformerDecoder, \
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/torch/nn/modules/transformer.py", line 20, in <module>
+    device: torch.device = torch.device(torch._C._get_default_device()),  # torch.device('cpu'),
+/root/miniconda3/envs/RAG/lib/python3.10/site-packages/torch/nn/modules/transformer.py:20: UserWarning: Failed to initialize NumPy: _ARRAY_API not found (Triggered internally at ../torch/csrc/utils/tensor_numpy.cpp:84.)
+  device: torch.device = torch.device(torch._C._get_default_device()),  # torch.device('cpu'),
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/__init__.py", line 3, in <module>
+    from vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/engine/arg_utils.py", line 6, in <module>
+    from vllm.config import (CacheConfig, DecodingConfig, DeviceConfig,
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/config.py", line 9, in <module>
+    from transformers import PretrainedConfig
+ModuleNotFoundError: No module named 'transformers'
+(RAG) root@autodl-container-vj4u8f00c5-5ffa0651:~/autodl-tmp/RAG# pip install numpy==1.26.4 transformers==4.41.2
+Looking in indexes: https://mirrors.aliyun.com/pypi/simple/, https://pypi.tuna.tsinghua.edu.cn/simple/
+Collecting numpy==1.26.4
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/4b/d7/ecf66c1cd12dc28b4040b15ab4d17b773b87fa9d29ca16125de01adb36cd/numpy-1.26.4-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (18.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 18.2/18.2 MB 19.9 MB/s  0:00:01
+Collecting transformers==4.41.2
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/d9/b7/98f821d70102e2d38483bbb7013a689d2d646daa4495377bc910374ad727/transformers-4.41.2-py3-none-any.whl (9.1 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 9.1/9.1 MB 15.9 MB/s  0:00:00
+Requirement already satisfied: filelock in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from transformers==4.41.2) (3.25.2)
+Collecting huggingface-hub<1.0,>=0.23.0 (from transformers==4.41.2)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/a8/af/48ac8483240de756d2438c380746e7130d1c6f75802ef22f3c6d49982787/huggingface_hub-0.36.2-py3-none-any.whl (566 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 566.4/566.4 kB 17.9 MB/s  0:00:00
+Requirement already satisfied: packaging>=20.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from transformers==4.41.2) (26.0)
+Collecting pyyaml>=5.1 (from transformers==4.41.2)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/7a/1e/7acc4f0e74c4b3d9531e24739e0ab832a5edf40e64fbae1a9c01941cabd7/pyyaml-6.0.3-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (770 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 770.3/770.3 kB 21.5 MB/s  0:00:00
+Collecting regex!=2019.12.17 (from transformers==4.41.2)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/05/e6/80335c06ddf7fd7a28b97402ebe1ea4fe80a3aa162fba0f7364175f625d1/regex-2026.3.32-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (790 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 790.6/790.6 kB 18.2 MB/s  0:00:00
+Requirement already satisfied: requests in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from transformers==4.41.2) (2.33.1)
+Collecting tokenizers<0.20,>=0.19 (from transformers==4.41.2)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/40/4f/eb78de4af3b17b589f43a369cbf0c3a7173f25c3d2cd93068852c07689aa/tokenizers-0.19.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.6/3.6 MB 10.6 MB/s  0:00:00
+Collecting safetensors>=0.4.1 (from transformers==4.41.2)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/a0/60/429e9b1cb3fc651937727befe258ea24122d9663e4d5709a48c9cbfceecb/safetensors-0.7.0-cp38-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (507 kB)
+Collecting tqdm>=4.27 (from transformers==4.41.2)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/16/e1/3079a9ff9b8e11b846c6ac5c8b5bfb7ff225eee721825310c91b3b50304f/tqdm-4.67.3-py3-none-any.whl (78 kB)
+Requirement already satisfied: fsspec>=2023.5.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from huggingface-hub<1.0,>=0.23.0->transformers==4.41.2) (2026.3.0)
+Collecting hf-xet<2.0.0,>=1.1.3 (from huggingface-hub<1.0,>=0.23.0->transformers==4.41.2)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/df/9a/a24b26dc8a65f0ecc0fe5be981a19e61e7ca963b85e062c083f3a9100529/hf_xet-1.4.3-cp37-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (4.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.2/4.2 MB 10.5 MB/s  0:00:00
+Requirement already satisfied: typing-extensions>=3.7.4.3 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from huggingface-hub<1.0,>=0.23.0->transformers==4.41.2) (4.15.0)
+Requirement already satisfied: charset_normalizer<4,>=2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from requests->transformers==4.41.2) (3.4.7)
+Requirement already satisfied: idna<4,>=2.5 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from requests->transformers==4.41.2) (3.11)
+Requirement already satisfied: urllib3<3,>=1.26 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from requests->transformers==4.41.2) (2.6.3)
+Requirement already satisfied: certifi>=2023.5.7 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from requests->transformers==4.41.2) (2026.2.25)
+Installing collected packages: tqdm, safetensors, regex, pyyaml, numpy, hf-xet, huggingface-hub, tokenizers, transformers
+  Attempting uninstall: numpy
+    Found existing installation: numpy 2.2.6
+    Uninstalling numpy-2.2.6:
+      Successfully uninstalled numpy-2.2.6
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+vllm 0.4.1+cu118 requires cmake>=3.21, which is not installed.
+vllm 0.4.1+cu118 requires fastapi, which is not installed.
+vllm 0.4.1+cu118 requires lm-format-enforcer==0.9.8, which is not installed.
+vllm 0.4.1+cu118 requires ninja, which is not installed.
+vllm 0.4.1+cu118 requires nvidia-ml-py, which is not installed.
+vllm 0.4.1+cu118 requires outlines==0.0.34, which is not installed.
+vllm 0.4.1+cu118 requires prometheus-client>=0.18.0, which is not installed.
+vllm 0.4.1+cu118 requires psutil, which is not installed.
+vllm 0.4.1+cu118 requires py-cpuinfo, which is not installed.
+vllm 0.4.1+cu118 requires pydantic>=2.0, which is not installed.
+vllm 0.4.1+cu118 requires ray>=2.9, which is not installed.
+vllm 0.4.1+cu118 requires sentencepiece, which is not installed.
+vllm 0.4.1+cu118 requires tiktoken==0.6.0, which is not installed.
+vllm 0.4.1+cu118 requires uvicorn[standard], which is not installed.
+vllm 0.4.1+cu118 requires vllm-nccl-cu11<2.19,>=2.18, which is not installed.
+vllm 0.4.1+cu118 requires torch==2.2.1, but you have torch 2.1.2+cu118 which is incompatible.
+vllm 0.4.1+cu118 requires xformers==0.0.25, but you have xformers 0.0.23.post1 which is incompatible.
+Successfully installed hf-xet-1.4.3 huggingface-hub-0.36.2 numpy-1.26.4 pyyaml-6.0.3 regex-2026.3.32 safetensors-0.7.0 tokenizers-0.19.1 tqdm-4.67.3 transformers-4.41.2
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+(RAG) root@autodl-container-vj4u8f00c5-5ffa0651:~/autodl-tmp/RAG# python -c "import vllm; print('vLLM OK')"
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/__init__.py", line 3, in <module>
+    from vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/engine/arg_utils.py", line 6, in <module>
+    from vllm.config import (CacheConfig, DecodingConfig, DeviceConfig,
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/config.py", line 12, in <module>
+    from vllm.model_executor.layers.quantization import QUANTIZATION_METHODS
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/model_executor/__init__.py", line 1, in <module>
+    from vllm.model_executor.sampling_metadata import SamplingMetadata
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/model_executor/sampling_metadata.py", line 8, in <module>
+    from vllm.sampling_params import SamplingParams, SamplingType
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/sampling_params.py", line 8, in <module>
+    from pydantic import Field
+ModuleNotFoundError: No module named 'pydantic'
+(RAG) root@autodl-container-vj4u8f00c5-5ffa0651:~/autodl-tmp/RAG# pip install -r requirements_online.txt
+adding trusted host: 'mirrors.aliyun.com' (from line 8 of requirements_online.txt)
+Looking in indexes: https://mirrors.aliyun.com/pypi/simple/, https://pypi.tuna.tsinghua.edu.cn/simple/
+Collecting flask==3.1.3 (from -r requirements_online.txt (line 25))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/7f/9c/34f6962f9b9e9c71f6e5ed806e0d0ff03c9d1b0b2340088a0cf4bce09b18/flask-3.1.3-py3-none-any.whl (103 kB)
+Collecting flask-sqlalchemy==3.1.1 (from -r requirements_online.txt (line 26))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/1d/6a/89963a5c6ecf166e8be29e0d1bf6806051ee8fe6c82e232842e3aeac9204/flask_sqlalchemy-3.1.1-py3-none-any.whl (25 kB)
+Collecting gunicorn==25.1.0 (from -r requirements_online.txt (line 27))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/da/73/4ad5b1f6a2e21cf1e85afdaad2b7b1a933985e2f5d679147a1953aaa192c/gunicorn-25.1.0-py3-none-any.whl (197 kB)
+Collecting werkzeug==3.1.3 (from -r requirements_online.txt (line 28))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/52/24/ab44c871b0f07f491e5d2ad12c9bd7358e527510618cb1b803a88e986db1/werkzeug-3.1.3-py3-none-any.whl (224 kB)
+Collecting pymysql==1.1.2 (from -r requirements_online.txt (line 31))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/7c/4c/ad33b92b9864cbde84f259d5df035a6447f91891f5be77788e2a3892bce3/pymysql-1.1.2-py3-none-any.whl (45 kB)
+Collecting redis==5.0.1 (from -r requirements_online.txt (line 32))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/0b/34/a01250ac1fc9bf9161e07956d2d580413106ce02d5591470130a25c599e3/redis-5.0.1-py3-none-any.whl (250 kB)
+Requirement already satisfied: numpy==1.26.4 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 35)) (1.26.4)
+Collecting pandas==2.3.3 (from -r requirements_online.txt (line 36))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/40/a8/4dac1f8f8235e5d25b9955d02ff6f29396191d4e665d71122c3722ca83c5/pandas-2.3.3-cp310-cp310-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (12.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.8/12.8 MB 21.1 MB/s  0:00:00
+Collecting pyyaml==6.0.1 (from -r requirements_online.txt (line 37))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/29/61/bf33c6c85c55bc45a29eee3195848ff2d518d84735eb0e2d8cb42e0d285e/PyYAML-6.0.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (705 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 705.5/705.5 kB 35.2 MB/s  0:00:00
+Collecting python-dotenv==1.0.0 (from -r requirements_online.txt (line 38))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/44/2f/62ea1c8b593f4e093cc1a7768f0d46112107e790c3e478532329e434f00b/python_dotenv-1.0.0-py3-none-any.whl (19 kB)
+Collecting requests==2.31.0 (from -r requirements_online.txt (line 39))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/70/8e/0e2d847013cb52cd35b38c009bb167a1a26b2ce6cd6965bf26b47bc0bf44/requests-2.31.0-py3-none-any.whl (62 kB)
+Collecting tqdm==4.66.1 (from -r requirements_online.txt (line 40))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl (78 kB)
+Collecting faiss-gpu==1.7.2 (from -r requirements_online.txt (line 44))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/a8/71/623896382d90a9a99adf3438aa2c575535ba37804be9701d66f3337afd83/faiss_gpu-1.7.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (85.5 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 85.5/85.5 MB 16.6 MB/s  0:00:05
+Collecting pymupdf==1.24.5 (from -r requirements_online.txt (line 47))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/e6/23/c0680dc5c72f952248a5a23297e7ea8b773fd181009d48c1ed695a1185d0/PyMuPDF-1.24.5-cp310-none-manylinux2014_x86_64.whl (3.5 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.5/3.5 MB 13.5 MB/s  0:00:00
+Collecting pdfplumber==0.11.0 (from -r requirements_online.txt (line 48))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/ee/ec/315015b6c4667d889cc14348c93e31f9fd43a6f61162b85c39e4a21018d5/pdfplumber-0.11.0-py3-none-any.whl (56 kB)
+Collecting python-docx==1.1.2 (from -r requirements_online.txt (line 49))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/3e/3d/330d9efbdb816d3f60bf2ad92f05e1708e4a1b9abe80461ac3444c83f749/python_docx-1.1.2-py3-none-any.whl (244 kB)
+Collecting openpyxl==3.1.5 (from -r requirements_online.txt (line 50))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/c0/da/977ded879c29cbd04de313843e76868e6e13408a94ed6b987245dc7c8506/openpyxl-3.1.5-py2.py3-none-any.whl (250 kB)
+Collecting chardet==5.2.0 (from -r requirements_online.txt (line 51))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/38/6f/f5fbc992a329ee4e0f288c1fe0e2ad9485ed064cac731ed2fe47dcc38cbf/chardet-5.2.0-py3-none-any.whl (199 kB)
+Collecting rapidocr-onnxruntime==1.4.4 (from -r requirements_online.txt (line 54))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/ba/12/1e5497183bdbe782dbb91bad1d0d2297dba4d2831b2652657f7517bfc6df/rapidocr_onnxruntime-1.4.4-py3-none-any.whl (14.9 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 14.9/14.9 MB 11.3 MB/s  0:00:01
+Collecting onnxruntime-gpu==1.17.1 (from -r requirements_online.txt (line 55))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/24/18/86d24a10e624ad1b94294230b4efc2bcd243b83b169cc5d4e3f5ace5de25/onnxruntime_gpu-1.17.1-cp310-cp310-manylinux_2_28_x86_64.whl (192.1 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 192.1/192.1 MB 14.0 MB/s  0:00:13
+Collecting opencv-python==4.9.0.80 (from -r requirements_online.txt (line 56))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/d9/64/7fdfb9386511cd6805451e012c537073a79a958a58795c4e602e538c388c/opencv_python-4.9.0.80-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (62.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 62.2/62.2 MB 17.7 MB/s  0:00:03
+Collecting rank-bm25==0.2.2 (from -r requirements_online.txt (line 59))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/2a/21/f691fb2613100a62b3fa91e9988c991e9ca5b89ea31c0d3152a3210344f9/rank_bm25-0.2.2-py3-none-any.whl (8.6 kB)
+Collecting jieba==0.42.1 (from -r requirements_online.txt (line 60))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/c6/cb/18eeb235f833b726522d7ebed54f2278ce28ba9438e3135ab0278d9792a2/jieba-0.42.1.tar.gz (19.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 19.2/19.2 MB 18.1 MB/s  0:00:01
+  Installing build dependencies ... done
+  Getting requirements to build wheel ... done
+  Preparing metadata (pyproject.toml) ... done
+Collecting langchain==0.1.20 (from -r requirements_online.txt (line 63))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/4b/28/da40a6b12e7842a0c8b443f8cc5c6f59e49d7a9071cfad064b9639c6b044/langchain-0.1.20-py3-none-any.whl (1.0 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.0/1.0 MB 19.3 MB/s  0:00:00
+Collecting langchain-community==0.0.38 (from -r requirements_online.txt (line 64))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/1b/d3/1f4d1941ae5a627299c8ea052847b99ad6674b97b699d8a08fc4faf25d3e/langchain_community-0.0.38-py3-none-any.whl (2.0 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.0/2.0 MB 21.2 MB/s  0:00:00
+Collecting langchain-core==0.1.52 (from -r requirements_online.txt (line 65))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/43/8b/48b7e6de9041d2b33d5108e154b82d1bd6c47cc68f0e44cb4fcdaccf5ec7/langchain_core-0.1.52-py3-none-any.whl (302 kB)
+Collecting langchain-huggingface==0.0.1 (from -r requirements_online.txt (line 66))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/cd/72/893e286ff638fa5da0dbf97e78b53e0f95cae00162145dcc1a2942d774ff/langchain_huggingface-0.0.1-py3-none-any.whl (17 kB)
+Collecting langchain-openai==0.1.3 (from -r requirements_online.txt (line 67))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/a2/d2/141e675257d82dbd39d5b999f090e7d491db4a88f7312715f2ca9ddaa009/langchain_openai-0.1.3-py3-none-any.whl (33 kB)
+Collecting langchain-text-splitters==0.0.1 (from -r requirements_online.txt (line 68))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/9d/a1/aec824080111e9b4a4802b51b988032faa193828c865e11233d1b18e88fa/langchain_text_splitters-0.0.1-py3-none-any.whl (21 kB)
+Collecting langsmith==0.1.59 (from -r requirements_online.txt (line 69))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/5e/58/5dbbe37c79e8b6d55f5788e3300afe365fa7cdd1fb52e22d88933fd191d8/langsmith-0.1.59-py3-none-any.whl (121 kB)
+Collecting neo4j==6.1.0 (from -r requirements_online.txt (line 72))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/70/5c/ee71e2dd955045425ef44283f40ba1da67673cf06404916ca2950ac0cd39/neo4j-6.1.0-py3-none-any.whl (325 kB)
+Requirement already satisfied: transformers==4.41.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 76)) (4.41.2)
+Collecting huggingface-hub==0.23.4 (from -r requirements_online.txt (line 77))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/69/d6/73f9d1b7c4da5f0544bc17680d0fa9932445423b90cd38e1ee77d001a4f5/huggingface_hub-0.23.4-py3-none-any.whl (402 kB)
+Collecting accelerate==0.30.1 (from -r requirements_online.txt (line 78))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/e9/bb/1edd2c836071e91d2bd331b9542bbd592e23d1474645b9c6fd56232caace/accelerate-0.30.1-py3-none-any.whl (302 kB)
+Collecting peft==0.11.1 (from -r requirements_online.txt (line 79))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/19/99/c5e0292a6d2a62e95c3dfe674ce9e8f8a9fe5d4835d3c9bb9b3e016f02ae/peft-0.11.1-py3-none-any.whl (251 kB)
+Requirement already satisfied: tokenizers==0.19.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 80)) (0.19.1)
+Collecting sentencepiece==0.2.0 (from -r requirements_online.txt (line 81))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/a6/27/33019685023221ca8ed98e8ceb7ae5e166032686fa3662c68f1f1edf334e/sentencepiece-0.2.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (1.3 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 22.8 MB/s  0:00:00
+Collecting protobuf==4.25.3 (from -r requirements_online.txt (line 82))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/15/db/7f731524fe0e56c6b2eb57d05b55d3badd80ef7d1f1ed59db191b2fdd8ab/protobuf-4.25.3-cp37-abi3-manylinux2014_x86_64.whl (294 kB)
+Collecting rouge-score==0.1.2 (from -r requirements_online.txt (line 85))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/e2/c5/9136736c37022a6ad27fea38f3111eb8f02fe75d067f9a985cc358653102/rouge_score-0.1.2.tar.gz (17 kB)
+  Installing build dependencies ... done
+  Getting requirements to build wheel ... done
+  Preparing metadata (pyproject.toml) ... done
+Collecting sacrebleu==2.4.2 (from -r requirements_online.txt (line 86))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/df/d5/f07d3c37bd98db883330276d77e7b04b6c50564c68fb95a76e05422a2850/sacrebleu-2.4.2-py3-none-any.whl (106 kB)
+Collecting bert-score==0.3.13 (from -r requirements_online.txt (line 87))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/c6/8c/bc5457de4c004b1a623b31f7bc8d0375fb699b7d67df11879098b4b7b7c8/bert_score-0.3.13-py3-none-any.whl (61 kB)
+Collecting tensorboard==2.17.0 (from -r requirements_online.txt (line 90))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/0a/32/2e8545fb0592f33e3aca5951e8b01008b76d61b440658cbdc37b4eaebf0b/tensorboard-2.17.0-py3-none-any.whl (5.5 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.5/5.5 MB 11.4 MB/s  0:00:00
+Collecting pydantic==2.7.4 (from -r requirements_online.txt (line 93))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/17/ba/1b65c9cbc49e0c7cd1be086c63209e9ad883c2a409be4746c21db4263f41/pydantic-2.7.4-py3-none-any.whl (409 kB)
+Collecting pydantic-settings==2.3.4 (from -r requirements_online.txt (line 94))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/e8/4f/aad03d5f711717d94d7de9684cb542343b392df1ad6889118636674fc983/pydantic_settings-2.3.4-py3-none-any.whl (22 kB)
+Collecting blinker>=1.9.0 (from -r requirements_online.txt (line 97))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/10/cb/f2ad4230dc2eb1a74edf38f1a38b9b52277f75bef262d8908e60d957e13c/blinker-1.9.0-py3-none-any.whl (8.5 kB)
+Collecting click==8.1.7 (from -r requirements_online.txt (line 98))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl (97 kB)
+Collecting itsdangerous==2.2.0 (from -r requirements_online.txt (line 99))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/04/96/92447566d16df59b2a776c0fb82dbc4d9e07cd95062562af01e408583fc4/itsdangerous-2.2.0-py3-none-any.whl (16 kB)
+Collecting jinja2==3.1.4 (from -r requirements_online.txt (line 100))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/31/80/3a54838c3fb461f6fec263ebf3a3a41771bd05190238de3486aae8540c36/jinja2-3.1.4-py3-none-any.whl (133 kB)
+Collecting markupsafe==2.1.5 (from -r requirements_online.txt (line 101))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/7c/52/2b1b570f6b8b803cef5ac28fdf78c0da318916c7d2fe9402a84d591b394c/MarkupSafe-2.1.5-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (25 kB)
+Collecting sqlalchemy==2.0.31 (from -r requirements_online.txt (line 102))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/bf/90/0ce8c76cd2ef8a5e0838d61d6648a1193859e1990bc1d65c8b0fd1f77ca8/SQLAlchemy-2.0.31-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.1 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.1/3.1 MB 19.9 MB/s  0:00:00
+Collecting aiohttp==3.9.5 (from -r requirements_online.txt (line 103))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/a0/09/e7637f4f0760cad4d67347bbd8311c6ad0259a3fc01f04555af9e84bd378/aiohttp-3.9.5-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (1.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 18.8 MB/s  0:00:00
+Collecting aiosignal==1.3.1 (from -r requirements_online.txt (line 104))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/76/ac/a7305707cb852b7e16ff80eaf5692309bde30e2b1100a1fcacdc8f731d97/aiosignal-1.3.1-py3-none-any.whl (7.6 kB)
+Collecting async-timeout==4.0.3 (from -r requirements_online.txt (line 105))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/a7/fa/e01228c2938de91d47b307831c62ab9e4001e747789d0b05baf779a6488c/async_timeout-4.0.3-py3-none-any.whl (5.7 kB)
+Collecting attrs==23.2.0 (from -r requirements_online.txt (line 106))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/e0/44/827b2a91a5816512fcaf3cc4ebc465ccd5d598c45cefa6703fcf4a79018f/attrs-23.2.0-py3-none-any.whl (60 kB)
+Collecting charset-normalizer==3.3.2 (from -r requirements_online.txt (line 107))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/da/f1/3702ba2a7470666a62fd81c58a4c40be00670e5006a67f4d626e57f013ae/charset_normalizer-3.3.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (142 kB)
+Collecting dataclasses-json==0.6.7 (from -r requirements_online.txt (line 108))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/c3/be/d0d44e092656fe7a06b55e6103cbce807cdbdee17884a5367c68c9860853/dataclasses_json-0.6.7-py3-none-any.whl (28 kB)
+Collecting frozenlist==1.4.1 (from -r requirements_online.txt (line 109))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/ec/25/0c87df2e53c0c5d90f7517ca0ff7aca78d050a8ec4d32c4278e8c0e52e51/frozenlist-1.4.1-cp310-cp310-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl (239 kB)
+Collecting fsspec==2024.6.1 (from -r requirements_online.txt (line 110))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/5e/44/73bea497ac69bafde2ee4269292fa3b41f1198f4bb7bbaaabde30ad29d4a/fsspec-2024.6.1-py3-none-any.whl (177 kB)
+Collecting idna==3.7 (from -r requirements_online.txt (line 111))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/e5/3e/741d8c82801c347547f8a2a06aa57dbb1992be9e948df2ea0eda2c8b79e8/idna-3.7-py3-none-any.whl (66 kB)
+Collecting jsonpatch==1.33 (from -r requirements_online.txt (line 112))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/73/07/02e16ed01e04a374e644b575638ec7987ae846d25ad97bcc9945a3ee4b0e/jsonpatch-1.33-py2.py3-none-any.whl (12 kB)
+Collecting jsonpointer==3.0.0 (from -r requirements_online.txt (line 113))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/71/92/5e77f98553e9e75130c78900d000368476aed74276eb8ae8796f65f00918/jsonpointer-3.0.0-py2.py3-none-any.whl (7.6 kB)
+Collecting marshmallow==3.21.3 (from -r requirements_online.txt (line 114))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/96/d7/f318261e6ccbba86bdf626e07cd850981508fdaec52cfcdc4ac1030327ab/marshmallow-3.21.3-py3-none-any.whl (49 kB)
+Collecting multidict==6.0.5 (from -r requirements_online.txt (line 115))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/33/62/2c9085e571318d51212a6914566fe41dd0e33d7f268f7e2f23dcd3f06c56/multidict-6.0.5-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (124 kB)
+Collecting mypy-extensions==1.0.0 (from -r requirements_online.txt (line 116))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/2a/e2/5d3f6ada4297caebe1a2add3b126fe800c96f56dbe5d1988a2cbe0b267aa/mypy_extensions-1.0.0-py3-none-any.whl (4.7 kB)
+Collecting packaging==23.2 (from -r requirements_online.txt (line 117))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/ec/1a/610693ac4ee14fcdf2d9bf3c493370e4f2ef7ae2e19217d7a237ff42367d/packaging-23.2-py3-none-any.whl (53 kB)
+Collecting regex==2024.5.15 (from -r requirements_online.txt (line 118))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/07/17/5d92509b4dccacf9767d8607112c19667e15db2428014440bae4356b8aff/regex-2024.5.15-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (775 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 775.1/775.1 kB 14.8 MB/s  0:00:00
+Collecting safetensors==0.4.3 (from -r requirements_online.txt (line 119))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/8f/05/969e1a976b84283285181b00028cf73d78434b77a6627fc2a94194cca265/safetensors-0.4.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (1.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 16.6 MB/s  0:00:00
+Collecting scipy==1.13.1 (from -r requirements_online.txt (line 120))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/a3/ba/7255e5dc82a65adbe83771c72f384d99c43063648456796436c9a5585ec3/scipy-1.13.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (38.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 38.6/38.6 MB 11.2 MB/s  0:00:03
+Collecting sympy==1.12.1 (from -r requirements_online.txt (line 121))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/61/53/e18c8c97d0b2724d85c9830477e3ebea3acf1dcdc6deb344d5d9c93a9946/sympy-1.12.1-py3-none-any.whl (5.7 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.7/5.7 MB 10.7 MB/s  0:00:00
+Collecting tenacity==8.4.2 (from -r requirements_online.txt (line 122))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/e3/ee/b179c3ab5cb842d75c65339c4b86b572eaf8f43407890bd1d2c7b72eb829/tenacity-8.4.2-py3-none-any.whl (28 kB)
+Collecting tiktoken==0.7.0 (from -r requirements_online.txt (line 123))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/e7/8c/7d1007557b343d5cf18349802e94d3a14397121e9105b4661f8cd753f9bf/tiktoken-0.7.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (1.1 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.1/1.1 MB 10.8 MB/s  0:00:00
+Collecting typing-inspect==0.9.0 (from -r requirements_online.txt (line 124))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/65/f3/107a22063bf27bdccf2024833d3445f4eea42b2e598abfbd46f6a63b6cb0/typing_inspect-0.9.0-py3-none-any.whl (8.8 kB)
+Collecting typing_extensions==4.12.2 (from -r requirements_online.txt (line 125))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl (37 kB)
+Collecting urllib3==2.2.2 (from -r requirements_online.txt (line 126))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/ca/1c/89ffc63a9605b583d5df2be791a27bc1a42b7c32bab68d3c8f2f73a98cd4/urllib3-2.2.2-py3-none-any.whl (121 kB)
+Collecting yarl==1.9.4 (from -r requirements_online.txt (line 127))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/c3/a0/0ade1409d184cbc9e85acd403a386a7c0563b92ff0f26d138ff9e86e48b4/yarl-1.9.4-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (301 kB)
+Collecting filelock==3.15.4 (from -r requirements_online.txt (line 128))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/ae/f0/48285f0262fe47103a4a45972ed2f9b93e4c80b8fd609fa98da78b2a5706/filelock-3.15.4-py3-none-any.whl (16 kB)
+Collecting networkx==3.3 (from -r requirements_online.txt (line 129))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/38/e9/5f72929373e1a0e8d142a130f3f97e6ff920070f87f91c4e13e40e0fba5a/networkx-3.3-py3-none-any.whl (1.7 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.7/1.7 MB 7.5 MB/s  0:00:00
+Collecting joblib==1.4.2 (from -r requirements_online.txt (line 130))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/91/29/df4b9b42f2be0b623cbd5e2140cafcaa2bef0759a00b7b70104dcfe2fb51/joblib-1.4.2-py3-none-any.whl (301 kB)
+Collecting threadpoolctl==3.5.0 (from -r requirements_online.txt (line 131))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/4b/2c/ffbf7a134b9ab11a67b0cf0726453cedd9c5043a4fe7a35d1cefa9a1bcfb/threadpoolctl-3.5.0-py3-none-any.whl (18 kB)
+Collecting scikit-learn==1.5.0 (from -r requirements_online.txt (line 132))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/1e/7d/1a2ea8eb5b4df373c30c7418cf26305a4a05e2a0e56c80a8043b791595f3/scikit_learn-1.5.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (13.3 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 13.3/13.3 MB 13.7 MB/s  0:00:00
+Collecting pillow==10.3.0 (from -r requirements_online.txt (line 133))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/b5/a2/7a09695dc636bf8d0a1b63022f58701177b7dc6fad30f6d6bc343e5473a4/pillow-10.3.0-cp310-cp310-manylinux_2_28_x86_64.whl (4.5 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.5/4.5 MB 12.9 MB/s  0:00:00
+Collecting python-dateutil>=2.8.2 (from pandas==2.3.3->-r requirements_online.txt (line 36))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+Collecting pytz>=2020.1 (from pandas==2.3.3->-r requirements_online.txt (line 36))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/10/99/781fe0c827be2742bcc775efefccb3b048a3a9c6ce9aec0cbf4a101677e5/pytz-2026.1.post1-py2.py3-none-any.whl (510 kB)
+Collecting tzdata>=2022.7 (from pandas==2.3.3->-r requirements_online.txt (line 36))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/c7/b0/003792df09decd6849a5e39c28b513c06e84436a54440380862b5aeff25d/tzdata-2025.3-py2.py3-none-any.whl (348 kB)
+Requirement already satisfied: certifi>=2017.4.17 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from requests==2.31.0->-r requirements_online.txt (line 39)) (2026.2.25)
+Collecting PyMuPDFb==1.24.3 (from pymupdf==1.24.5->-r requirements_online.txt (line 47))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/ed/77/8a25d8e9189f2c7f9f1c20c77dc74927630cb46e59d999056039142cce50/PyMuPDFb-1.24.3-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (15.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 15.8/15.8 MB 14.4 MB/s  0:00:01
+Collecting pdfminer.six==20231228 (from pdfplumber==0.11.0->-r requirements_online.txt (line 48))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/eb/9c/e46fe7502b32d7db6af6e36a9105abb93301fa1ec475b5ddcba8b35ae23a/pdfminer.six-20231228-py3-none-any.whl (5.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.6/5.6 MB 8.5 MB/s  0:00:00
+Collecting pypdfium2>=4.18.0 (from pdfplumber==0.11.0->-r requirements_online.txt (line 48))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/ff/49/a640b288a48dab1752281dd9b72c0679fccea107874e80a65a606b00efa9/pypdfium2-5.6.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.6/3.6 MB 7.4 MB/s  0:00:00
+Collecting lxml>=3.1.0 (from python-docx==1.1.2->-r requirements_online.txt (line 49))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/20/cf/cab09478699b003857ed6ebfe95e9fb9fa3d3c25f1353b905c9b73cfb624/lxml-6.0.2-cp310-cp310-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl (5.3 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.3/5.3 MB 6.0 MB/s  0:00:00
+Collecting et-xmlfile (from openpyxl==3.1.5->-r requirements_online.txt (line 50))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/c1/8b/5fe2cc11fee489817272089c4203e679c63b570a5aaeb18d852ae3cbba6a/et_xmlfile-2.0.0-py3-none-any.whl (18 kB)
+Collecting pyclipper>=1.2.0 (from rapidocr-onnxruntime==1.4.4->-r requirements_online.txt (line 54))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/3b/0a/bea9102d1d75634b1a5702b0e92982451a1eafca73c4845d3dbe27eba13d/pyclipper-1.4.0-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (970 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 971.0/971.0 kB 2.1 MB/s  0:00:00
+Collecting six>=1.15.0 (from rapidocr-onnxruntime==1.4.4->-r requirements_online.txt (line 54))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl (11 kB)
+Collecting Shapely!=2.0.4,>=1.7.1 (from rapidocr-onnxruntime==1.4.4->-r requirements_online.txt (line 54))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/50/8a/0ab1f7433a2a85d9e9aea5b1fbb333f3b09b309e7817309250b4b7b2cc7a/shapely-2.1.2-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (3.1 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.1/3.1 MB 4.3 MB/s  0:00:00
+Collecting onnxruntime>=1.7.0 (from rapidocr-onnxruntime==1.4.4->-r requirements_online.txt (line 54))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/fb/56/179bf90679984c85b417664c26aae4f427cba7514bd2d65c43b181b7b08b/onnxruntime-1.23.2-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (17.4 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 17.4/17.4 MB 971.3 kB/s  0:00:17
+Collecting coloredlogs (from onnxruntime-gpu==1.17.1->-r requirements_online.txt (line 55))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/a7/06/3d6badcf13db419e25b07041d9c7b4a2c331d3f4e7134445ec5df57714cd/coloredlogs-15.0.1-py2.py3-none-any.whl (46 kB)
+Collecting flatbuffers (from onnxruntime-gpu==1.17.1->-r requirements_online.txt (line 55))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl (26 kB)
+Collecting orjson<4.0.0,>=3.9.14 (from langsmith==0.1.59->-r requirements_online.txt (line 69))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/bf/d3/1bbf2fc3ffcc4b829ade554b574af68cec898c9b5ad6420a923c75a073d3/orjson-3.11.8-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (133 kB)
+Collecting annotated-types>=0.4.0 (from pydantic==2.7.4->-r requirements_online.txt (line 93))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/78/b6/6307fbef88d9b5ee7421e68d78a9f162e0da4900bc5f5793f6d3d0e34fb8/annotated_types-0.7.0-py3-none-any.whl (13 kB)
+Collecting pydantic-core==2.18.4 (from pydantic==2.7.4->-r requirements_online.txt (line 93))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/be/44/18eec2ac121e195662ac0f48c9c2a7bc9e2175edf408004b42adfadfc095/pydantic_core-2.18.4-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.0 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.0/2.0 MB 2.7 MB/s  0:00:00
+Collecting greenlet!=0.4.17 (from sqlalchemy==2.0.31->-r requirements_online.txt (line 102))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/ad/55/9f1ebb5a825215fadcc0f7d5073f6e79e3007e3282b14b22d6aba7ca6cb8/greenlet-3.3.2-cp310-cp310-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (591 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 591.7/591.7 kB 3.0 MB/s  0:00:00
+Collecting sentence-transformers>=2.6.0 (from langchain-huggingface==0.0.1->-r requirements_online.txt (line 66))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/e2/9c/2fa7224058cad8df68d84bafee21716f30892cecc7ad1ad73bde61d23754/sentence_transformers-5.3.0-py3-none-any.whl (512 kB)
+Collecting text-generation<0.8.0,>=0.7.0 (from langchain-huggingface==0.0.1->-r requirements_online.txt (line 66))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/7b/79/8fc351fd919a41287243c998a47692c7eb0fa5acded13db0080f2c6f1852/text_generation-0.7.0-py3-none-any.whl (12 kB)
+Collecting openai<2.0.0,>=1.10.0 (from langchain-openai==0.1.3->-r requirements_online.txt (line 67))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/1d/2a/7dd3d207ec669cacc1f186fd856a0f61dbc255d24f6fdc1a6715d6051b0f/openai-1.109.1-py3-none-any.whl (948 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 948.6/948.6 kB 2.4 MB/s  0:00:00
+Collecting psutil (from accelerate==0.30.1->-r requirements_online.txt (line 78))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/b5/70/5d8df3b09e25bce090399cf48e452d25c935ab72dad19406c77f4e828045/psutil-7.2.2-cp36-abi3-manylinux2010_x86_64.manylinux_2_12_x86_64.manylinux_2_28_x86_64.whl (155 kB)
+Requirement already satisfied: torch>=1.10.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from accelerate==0.30.1->-r requirements_online.txt (line 78)) (2.1.2+cu118)
+Collecting absl-py (from rouge-score==0.1.2->-r requirements_online.txt (line 85))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/18/a6/907a406bb7d359e6a63f99c313846d9eec4f7e6f7437809e03aa00fa3074/absl_py-2.4.0-py3-none-any.whl (135 kB)
+Collecting nltk (from rouge-score==0.1.2->-r requirements_online.txt (line 85))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/9d/91/04e965f8e717ba0ab4bdca5c112deeab11c9e750d94c4d4602f050295d39/nltk-3.9.4-py3-none-any.whl (1.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.6/1.6 MB 1.8 MB/s  0:00:00
+Collecting portalocker (from sacrebleu==2.4.2->-r requirements_online.txt (line 86))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/4b/a6/38c8e2f318bf67d338f4d629e93b0b4b9af331f455f0390ea8ce4a099b26/portalocker-3.2.0-py3-none-any.whl (22 kB)
+Collecting tabulate>=0.8.9 (from sacrebleu==2.4.2->-r requirements_online.txt (line 86))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/99/55/db07de81b5c630da5cbf5c7df646580ca26dfaefa593667fc6f2fe016d2e/tabulate-0.10.0-py3-none-any.whl (39 kB)
+Collecting colorama (from sacrebleu==2.4.2->-r requirements_online.txt (line 86))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl (25 kB)
+Collecting matplotlib (from bert-score==0.3.13->-r requirements_online.txt (line 87))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/cb/aa/7ab67f2b729ae6a91bcf9dcac0affb95fb8c56f7fd2b2af894ae0b0cf6fa/matplotlib-3.10.8-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (8.7 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8.7/8.7 MB 761.1 kB/s  0:00:11
+Collecting grpcio>=1.48.2 (from tensorboard==2.17.0->-r requirements_online.txt (line 90))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/f9/96/f28660fe2fe0f153288bf4a04e4910b7309d442395135c88ed4f5b3b8b40/grpcio-1.80.0-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (6.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.8/6.8 MB 3.2 MB/s  0:00:02
+Collecting markdown>=2.6.8 (from tensorboard==2.17.0->-r requirements_online.txt (line 90))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/de/1f/77fa3081e4f66ca3576c896ae5d31c3002ac6607f9747d2e3aa49227e464/markdown-3.10.2-py3-none-any.whl (108 kB)
+Requirement already satisfied: setuptools>=41.0.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from tensorboard==2.17.0->-r requirements_online.txt (line 90)) (82.0.1)
+Collecting tensorboard-data-server<0.8.0,>=0.7.0 (from tensorboard==2.17.0->-r requirements_online.txt (line 90))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/73/c6/825dab04195756cf8ff2e12698f22513b3db2f64925bdd41671bfb33aaa5/tensorboard_data_server-0.7.2-py3-none-manylinux_2_31_x86_64.whl (6.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.6/6.6 MB 7.0 MB/s  0:00:00
+Requirement already satisfied: mpmath<1.4.0,>=1.1.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from sympy==1.12.1->-r requirements_online.txt (line 121)) (1.3.0)
+Collecting cryptography>=36.0.0 (from pdfminer.six==20231228->pdfplumber==0.11.0->-r requirements_online.txt (line 48))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/8b/65/5bf43286d566f8171917cae23ac6add941654ccf085d739195a4eacf1674/cryptography-46.0.6-cp38-abi3-manylinux_2_34_x86_64.whl (4.4 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.4/4.4 MB 7.0 MB/s  0:00:00
+Collecting anyio<5,>=3.5.0 (from openai<2.0.0,>=1.10.0->langchain-openai==0.1.3->-r requirements_online.txt (line 67))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/da/42/e921fccf5015463e32a3cf6ee7f980a6ed0f395ceeaa45060b61d86486c2/anyio-4.13.0-py3-none-any.whl (114 kB)
+Collecting distro<2,>=1.7.0 (from openai<2.0.0,>=1.10.0->langchain-openai==0.1.3->-r requirements_online.txt (line 67))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/12/b3/231ffd4ab1fc9d679809f356cebee130ac7daa00d6d6f3206dd4fd137e9e/distro-1.9.0-py3-none-any.whl (20 kB)
+Collecting httpx<1,>=0.23.0 (from openai<2.0.0,>=1.10.0->langchain-openai==0.1.3->-r requirements_online.txt (line 67))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/2a/39/e50c7c3a983047577ee07d2a9e53faf5a69493943ec3f6a384bdc792deb2/httpx-0.28.1-py3-none-any.whl (73 kB)
+Collecting jiter<1,>=0.4.0 (from openai<2.0.0,>=1.10.0->langchain-openai==0.1.3->-r requirements_online.txt (line 67))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/fe/c9/b0489a01329ab07a83812d9ebcffe7820a38163c6d9e7da644f926ff877c/jiter-0.13.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (362 kB)
+Collecting sniffio (from openai<2.0.0,>=1.10.0->langchain-openai==0.1.3->-r requirements_online.txt (line 67))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl (10 kB)
+Collecting exceptiongroup>=1.0.2 (from anyio<5,>=3.5.0->openai<2.0.0,>=1.10.0->langchain-openai==0.1.3->-r requirements_online.txt (line 67))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/8a/0e/97c33bf5009bdbac74fd2beace167cab3f978feb69cc36f1ef79360d6c4e/exceptiongroup-1.3.1-py3-none-any.whl (16 kB)
+Collecting httpcore==1.* (from httpx<1,>=0.23.0->openai<2.0.0,>=1.10.0->langchain-openai==0.1.3->-r requirements_online.txt (line 67))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/7e/f5/f66802a942d491edb555dd61e3a9961140fd64c90bce1eafd741609d334d/httpcore-1.0.9-py3-none-any.whl (78 kB)
+Collecting h11>=0.16 (from httpcore==1.*->httpx<1,>=0.23.0->openai<2.0.0,>=1.10.0->langchain-openai==0.1.3->-r requirements_online.txt (line 67))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl (37 kB)
+Collecting cffi>=2.0.0 (from cryptography>=36.0.0->pdfminer.six==20231228->pdfplumber==0.11.0->-r requirements_online.txt (line 48))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/98/29/9b366e70e243eb3d14a5cb488dfd3a0b6b2f1fb001a203f653b93ccfac88/cffi-2.0.0-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (216 kB)
+INFO: pip is looking at multiple versions of cryptography to determine which version is compatible with other requirements. This could take a while.
+Collecting cryptography>=36.0.0 (from pdfminer.six==20231228->pdfplumber==0.11.0->-r requirements_online.txt (line 48))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/99/0f/a3076874e9c88ecb2ecc31382f6e7c21b428ede6f55aafa1aa272613e3cd/cryptography-46.0.5-cp38-abi3-manylinux_2_34_x86_64.whl (4.5 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.5/4.5 MB 4.2 MB/s  0:00:01
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/03/c3/c90a2cb358de4ac9309b26acf49b2a100957e1ff5cc1e98e6c4996576710/cryptography-46.0.4-cp38-abi3-manylinux_2_34_x86_64.whl (4.5 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.5/4.5 MB 4.8 MB/s  0:00:00
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/fc/59/873633f3f2dcd8a053b8dd1d38f783043b5fce589c0f6988bf55ef57e43e/cryptography-46.0.3-cp38-abi3-manylinux_2_34_x86_64.whl (4.5 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.5/4.5 MB 2.8 MB/s  0:00:01
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/f6/9e/6507dc048c1b1530d372c483dfd34e7709fc542765015425f0442b08547f/cryptography-46.0.2-cp38-abi3-manylinux_2_34_x86_64.whl (4.5 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.5/4.5 MB 2.2 MB/s  0:00:02
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/94/0f/f66125ecf88e4cb5b8017ff43f3a87ede2d064cb54a1c5893f9da9d65093/cryptography-46.0.1-cp38-abi3-manylinux_2_34_x86_64.whl (4.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.6/4.6 MB 1.2 MB/s  0:00:03
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/c4/0c/bc365287a97d28aa7feef8810884831b2a38a8dc4cf0f8d6927ad1568d27/cryptography-46.0.0-cp38-abi3-manylinux_2_34_x86_64.whl (4.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.6/4.6 MB 747.9 kB/s  0:00:06
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/5d/fa/1d5745d878048699b8eb87c984d4ccc5da4f5008dfd3ad7a94040caca23a/cryptography-45.0.7-cp37-abi3-manylinux_2_34_x86_64.whl (4.4 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.4/4.4 MB 785.4 kB/s  0:00:05
+Collecting pycparser (from cffi>=2.0.0->cryptography>=36.0.0->pdfminer.six==20231228->pdfplumber==0.11.0->-r requirements_online.txt (line 48))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/0c/c3/44f3fbbfa403ea2a7c779186dc20772604442dde72947e7d01069cbe98e3/pycparser-3.0-py3-none-any.whl (48 kB)
+Requirement already satisfied: triton==2.1.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from torch>=1.10.0->accelerate==0.30.1->-r requirements_online.txt (line 78)) (2.1.0)
+Collecting humanfriendly>=9.1 (from coloredlogs->onnxruntime-gpu==1.17.1->-r requirements_online.txt (line 55))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/f0/0f/310fb31e39e2d734ccaa2c0fb981ee41f7bd5056ce9bc29b2248bd569169/humanfriendly-10.0-py2.py3-none-any.whl (86 kB)
+Collecting contourpy>=1.0.1 (from matplotlib->bert-score==0.3.13->-r requirements_online.txt (line 87))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/32/5c/1ee32d1c7956923202f00cf8d2a14a62ed7517bdc0ee1e55301227fc273c/contourpy-1.3.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (325 kB)
+Collecting cycler>=0.10 (from matplotlib->bert-score==0.3.13->-r requirements_online.txt (line 87))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/e7/05/c19819d5e3d95294a6f5947fb9b9629efb316b96de511b418c53d245aae6/cycler-0.12.1-py3-none-any.whl (8.3 kB)
+Collecting fonttools>=4.22.0 (from matplotlib->bert-score==0.3.13->-r requirements_online.txt (line 87))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/42/09/7dbe3d7023f57d9b580cfa832109d521988112fd59dddfda3fddda8218f9/fonttools-4.62.1-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (4.9 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.9/4.9 MB 842.3 kB/s  0:00:05
+Collecting kiwisolver>=1.3.1 (from matplotlib->bert-score==0.3.13->-r requirements_online.txt (line 87))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/f1/0e/ba4ae25d03722f64de8b2c13e80d82ab537a06b30fc7065183c6439357e3/kiwisolver-1.5.0-cp310-cp310-manylinux_2_12_x86_64.manylinux2010_x86_64.whl (1.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.6/1.6 MB 759.8 kB/s  0:00:02
+Collecting pyparsing>=3 (from matplotlib->bert-score==0.3.13->-r requirements_online.txt (line 87))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/10/bd/c038d7cc38edc1aa5bf91ab8068b63d4308c66c4c8bb3cbba7dfbc049f9c/pyparsing-3.3.2-py3-none-any.whl (122 kB)
+Building wheels for collected packages: jieba, rouge-score
+  Building wheel for jieba (pyproject.toml) ... done
+  Created wheel for jieba: filename=jieba-0.42.1-py3-none-any.whl size=19314509 sha256=5217e856fad303f3523556c3532f98cb12efe5b587cdc005998250a56f95d2b2
+  Stored in directory: /root/.cache/pip/wheels/b2/9b/80/7537177f75993c29af08e0d00c753724c7f06c646352be50a3
+  Building wheel for rouge-score (pyproject.toml) ... done
+  Created wheel for rouge-score: filename=rouge_score-0.1.2-py3-none-any.whl size=24988 sha256=5c5b0b5d6c6e132ed85e94308d6ee94a5244f45698ed056245ec6119875fbc43
+  Stored in directory: /root/.cache/pip/wheels/81/78/38/125dd7761f58c20d80190e182ee76c29247621549f51e25329
+Successfully built jieba rouge-score
+Installing collected packages: sentencepiece, pytz, jieba, flatbuffers, faiss-gpu, urllib3, tzdata, typing_extensions, tqdm, threadpoolctl, tensorboard-data-server, tenacity, tabulate, sympy, sniffio, six, Shapely, scipy, safetensors, regex, rank-bm25, pyyaml, python-dotenv, pypdfium2, pyparsing, pymysql, PyMuPDFb, pycparser, pyclipper, psutil, protobuf, portalocker, pillow, packaging, orjson, opencv-python, networkx, neo4j, mypy-extensions, multidict, markupsafe, markdown, lxml, kiwisolver, jsonpointer, joblib, jiter, itsdangerous, idna, humanfriendly, h11, greenlet, fsspec, frozenlist, fonttools, filelock, et-xmlfile, distro, cycler, contourpy, colorama, click, charset-normalizer, chardet, blinker, attrs, async-timeout, annotated-types, absl-py, yarl, werkzeug, typing-inspect, sqlalchemy, scikit-learn, sacrebleu, requests, redis, python-docx, python-dateutil, pymupdf, pydantic-core, openpyxl, nltk, marshmallow, jsonpatch, jinja2, httpcore, gunicorn, grpcio, exceptiongroup, coloredlogs, cffi, aiosignal, tiktoken, tensorboard, rouge-score, pydantic, pandas, onnxruntime-gpu, onnxruntime, matplotlib, huggingface-hub, flask, dataclasses-json, cryptography, anyio, aiohttp, text-generation, rapidocr-onnxruntime, pydantic-settings, pdfminer.six, langsmith, httpx, flask-sqlalchemy, accelerate, pdfplumber, openai, langchain-core, sentence-transformers, peft, langchain-text-splitters, langchain-openai, langchain-community, bert-score, langchain-huggingface, langchain
+  Attempting uninstall: urllib3
+    Found existing installation: urllib3 2.6.3
+    Uninstalling urllib3-2.6.3:
+      Successfully uninstalled urllib3-2.6.3
+  Attempting uninstall: typing_extensions
+    Found existing installation: typing_extensions 4.15.0
+    Uninstalling typing_extensions-4.15.0:
+      Successfully uninstalled typing_extensions-4.15.0
+  Attempting uninstall: tqdm
+    Found existing installation: tqdm 4.67.3
+    Uninstalling tqdm-4.67.3:
+      Successfully uninstalled tqdm-4.67.3
+  Attempting uninstall: sympy
+    Found existing installation: sympy 1.14.0
+    Uninstalling sympy-1.14.0:
+      Successfully uninstalled sympy-1.14.0
+  Attempting uninstall: safetensors
+    Found existing installation: safetensors 0.7.0
+    Uninstalling safetensors-0.7.0:
+      Successfully uninstalled safetensors-0.7.0
+  Attempting uninstall: regex
+    Found existing installation: regex 2026.3.32
+    Uninstalling regex-2026.3.32:
+      Successfully uninstalled regex-2026.3.32
+  Attempting uninstall: pyyaml
+    Found existing installation: PyYAML 6.0.3
+    Uninstalling PyYAML-6.0.3:
+      Successfully uninstalled PyYAML-6.0.3
+  Attempting uninstall: pillow
+    Found existing installation: pillow 12.2.0
+    Uninstalling pillow-12.2.0:
+      Successfully uninstalled pillow-12.2.0
+  Attempting uninstall: packaging
+    Found existing installation: packaging 26.0
+    Uninstalling packaging-26.0:
+      Successfully uninstalled packaging-26.0
+  Attempting uninstall: networkx
+    Found existing installation: networkx 3.4.2
+    Uninstalling networkx-3.4.2:
+      Successfully uninstalled networkx-3.4.2
+  Attempting uninstall: markupsafe
+    Found existing installation: MarkupSafe 3.0.3
+    Uninstalling MarkupSafe-3.0.3:
+      Successfully uninstalled MarkupSafe-3.0.3
+  Attempting uninstall: idna
+    Found existing installation: idna 3.11
+    Uninstalling idna-3.11:
+      Successfully uninstalled idna-3.11
+  Attempting uninstall: fsspec
+    Found existing installation: fsspec 2026.3.0
+    Uninstalling fsspec-2026.3.0:
+      Successfully uninstalled fsspec-2026.3.0
+  Attempting uninstall: filelock
+    Found existing installation: filelock 3.25.2
+    Uninstalling filelock-3.25.2:
+      Successfully uninstalled filelock-3.25.2
+  Attempting uninstall: charset-normalizer
+    Found existing installation: charset-normalizer 3.4.7
+    Uninstalling charset-normalizer-3.4.7:
+      Successfully uninstalled charset-normalizer-3.4.7
+  Attempting uninstall: requests
+    Found existing installation: requests 2.33.1
+    Uninstalling requests-2.33.1:
+      Successfully uninstalled requests-2.33.1
+  Attempting uninstall: jinja2
+    Found existing installation: Jinja2 3.1.6
+    Uninstalling Jinja2-3.1.6:
+      Successfully uninstalled Jinja2-3.1.6
+  Attempting uninstall: huggingface-hub
+    Found existing installation: huggingface_hub 0.36.2
+    Uninstalling huggingface_hub-0.36.2:
+      Successfully uninstalled huggingface_hub-0.36.2
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+vllm 0.4.1+cu118 requires cmake>=3.21, which is not installed.
+vllm 0.4.1+cu118 requires fastapi, which is not installed.
+vllm 0.4.1+cu118 requires lm-format-enforcer==0.9.8, which is not installed.
+vllm 0.4.1+cu118 requires ninja, which is not installed.
+vllm 0.4.1+cu118 requires nvidia-ml-py, which is not installed.
+vllm 0.4.1+cu118 requires outlines==0.0.34, which is not installed.
+vllm 0.4.1+cu118 requires prometheus-client>=0.18.0, which is not installed.
+vllm 0.4.1+cu118 requires py-cpuinfo, which is not installed.
+vllm 0.4.1+cu118 requires ray>=2.9, which is not installed.
+vllm 0.4.1+cu118 requires uvicorn[standard], which is not installed.
+vllm 0.4.1+cu118 requires vllm-nccl-cu11<2.19,>=2.18, which is not installed.
+vllm 0.4.1+cu118 requires tiktoken==0.6.0, but you have tiktoken 0.7.0 which is incompatible.
+vllm 0.4.1+cu118 requires torch==2.2.1, but you have torch 2.1.2+cu118 which is incompatible.
+vllm 0.4.1+cu118 requires xformers==0.0.25, but you have xformers 0.0.23.post1 which is incompatible.
+wheel 0.46.3 requires packaging>=24.0, but you have packaging 23.2 which is incompatible.
+Successfully installed PyMuPDFb-1.24.3 Shapely-2.1.2 absl-py-2.4.0 accelerate-0.30.1 aiohttp-3.9.5 aiosignal-1.3.1 annotated-types-0.7.0 anyio-4.13.0 async-timeout-4.0.3 attrs-23.2.0 bert-score-0.3.13 blinker-1.9.0 cffi-2.0.0 chardet-5.2.0 charset-normalizer-3.3.2 click-8.1.7 colorama-0.4.6 coloredlogs-15.0.1 contourpy-1.3.2 cryptography-45.0.7 cycler-0.12.1 dataclasses-json-0.6.7 distro-1.9.0 et-xmlfile-2.0.0 exceptiongroup-1.3.1 faiss-gpu-1.7.2 filelock-3.15.4 flask-3.1.3 flask-sqlalchemy-3.1.1 flatbuffers-25.12.19 fonttools-4.62.1 frozenlist-1.4.1 fsspec-2024.6.1 greenlet-3.3.2 grpcio-1.80.0 gunicorn-25.1.0 h11-0.16.0 httpcore-1.0.9 httpx-0.28.1 huggingface-hub-0.23.4 humanfriendly-10.0 idna-3.7 itsdangerous-2.2.0 jieba-0.42.1 jinja2-3.1.4 jiter-0.13.0 joblib-1.4.2 jsonpatch-1.33 jsonpointer-3.0.0 kiwisolver-1.5.0 langchain-0.1.20 langchain-community-0.0.38 langchain-core-0.1.52 langchain-huggingface-0.0.1 langchain-openai-0.1.3 langchain-text-splitters-0.0.1 langsmith-0.1.59 lxml-6.0.2 markdown-3.10.2 markupsafe-2.1.5 marshmallow-3.21.3 matplotlib-3.10.8 multidict-6.0.5 mypy-extensions-1.0.0 neo4j-6.1.0 networkx-3.3 nltk-3.9.4 onnxruntime-1.23.2 onnxruntime-gpu-1.17.1 openai-1.109.1 opencv-python-4.9.0.80 openpyxl-3.1.5 orjson-3.11.8 packaging-23.2 pandas-2.3.3 pdfminer.six-20231228 pdfplumber-0.11.0 peft-0.11.1 pillow-10.3.0 portalocker-3.2.0 protobuf-4.25.3 psutil-7.2.2 pyclipper-1.4.0 pycparser-3.0 pydantic-2.7.4 pydantic-core-2.18.4 pydantic-settings-2.3.4 pymupdf-1.24.5 pymysql-1.1.2 pyparsing-3.3.2 pypdfium2-5.6.0 python-dateutil-2.9.0.post0 python-docx-1.1.2 python-dotenv-1.0.0 pytz-2026.1.post1 pyyaml-6.0.1 rank-bm25-0.2.2 rapidocr-onnxruntime-1.4.4 redis-5.0.1 regex-2024.5.15 requests-2.31.0 rouge-score-0.1.2 sacrebleu-2.4.2 safetensors-0.4.3 scikit-learn-1.5.0 scipy-1.13.1 sentence-transformers-5.3.0 sentencepiece-0.2.0 six-1.17.0 sniffio-1.3.1 sqlalchemy-2.0.31 sympy-1.12.1 tabulate-0.10.0 tenacity-8.4.2 tensorboard-2.17.0 tensorboard-data-server-0.7.2 text-generation-0.7.0 threadpoolctl-3.5.0 tiktoken-0.7.0 tqdm-4.66.1 typing-inspect-0.9.0 typing_extensions-4.12.2 tzdata-2025.3 urllib3-2.2.2 werkzeug-3.1.3 yarl-1.9.4
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+(RAG) root@autodl-container-vj4u8f00c5-5ffa0651:~/autodl-tmp/RAG# git pull
+^C
+(RAG) root@autodl-container-vj4u8f00c5-5ffa0651:~/autodl-tmp/RAG# ^C
+(RAG) root@autodl-container-vj4u8f00c5-5ffa0651:~/autodl-tmp/RAG# git pull
+^C
+(RAG) root@autodl-container-vj4u8f00c5-5ffa0651:~/autodl-tmp/RAG# ^C
+(RAG) root@autodl-container-vj4u8f00c5-5ffa0651:~/autodl-tmp/RAG# pip install ray==2.9.3 outlines==0.0.34 nvidia-ml-py pydantic==2.7.4 fastapi uvicorn tiktoken==0.6.0 prometheus-client sentencepiece lm-format-enforcer==0.9.8 msgpack cmake ninja psutil py-cpuinfo vllm-nccl-cu11
+Looking in indexes: https://mirrors.aliyun.com/pypi/simple/, https://pypi.tuna.tsinghua.edu.cn/simple/
+Collecting ray==2.9.3
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/37/0e/5e1c19ebe0d26328689a19d4360b51e670570366dbb9bde5deef5c1708c9/ray-2.9.3-cp310-cp310-manylinux2014_x86_64.whl (64.9 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 64.9/64.9 MB 15.1 MB/s  0:00:04
+Collecting outlines==0.0.34
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/58/fb/639f67a1a0288736dcdbc5a4fb1c822fcbc02c9fa79d1bca02056c653e76/outlines-0.0.34-py3-none-any.whl (76 kB)
+Collecting nvidia-ml-py
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/8a/24/fc256107d23597fa33d319505ce77160fa1a2349c096d01901ffc7cb7fc4/nvidia_ml_py-13.595.45-py3-none-any.whl (51 kB)
+Requirement already satisfied: pydantic==2.7.4 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (2.7.4)
+Collecting fastapi
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/84/a4/5caa2de7f917a04ada20018eccf60d6cc6145b0199d55ca3711b0fc08312/fastapi-0.135.3-py3-none-any.whl (117 kB)
+Collecting uvicorn
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/0a/89/f8827ccff89c1586027a105e5630ff6139a64da2515e24dafe860bd9ae4d/uvicorn-0.42.0-py3-none-any.whl (68 kB)
+Collecting tiktoken==0.6.0
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/16/05/5efbd91252ffb1301ea393d88ef736b33d41e75d4bcf0bd31d660050e400/tiktoken-0.6.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (1.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 MB 13.0 MB/s  0:00:00
+Collecting prometheus-client
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/74/c3/24a2f845e3917201628ecaba4f18bab4d18a337834c1df2a159ee9d22a42/prometheus_client-0.24.1-py3-none-any.whl (64 kB)
+Requirement already satisfied: sentencepiece in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (0.2.0)
+Collecting lm-format-enforcer==0.9.8
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/61/96/4e2aac5dfb4ba5002ede438fbf0065abe9772fd207721c3b387adbb58f7b/lm_format_enforcer-0.9.8-py3-none-any.whl (40 kB)
+Collecting msgpack
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/b7/09/2a06956383c0fdebaef5aa9246e2356776f12ea6f2a44bd1368abf0e46c4/msgpack-1.1.2-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (406 kB)
+Collecting cmake
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/87/32/542ed40b3393bced9af073402f75fb6ae3e57d6656cc38a9470942de7b8c/cmake-4.3.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (29.5 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 29.5/29.5 MB 14.9 MB/s  0:00:01
+Collecting ninja
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/ed/de/0e6edf44d6a04dabd0318a519125ed0415ce437ad5a1ec9b9be03d9048cf/ninja-1.13.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (180 kB)
+Requirement already satisfied: psutil in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (7.2.2)
+Collecting py-cpuinfo
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/e0/a9/023730ba63db1e494a271cb018dcd361bd2c917ba7004c3e49d5daf795a2/py_cpuinfo-9.0.0-py3-none-any.whl (22 kB)
+Collecting vllm-nccl-cu11
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/04/36/0c44b91575274bfe401e5605551d8644281b2c95e6572a2697dc2bee5bd3/vllm_nccl_cu11-2.18.1.0.4.0.tar.gz (6.3 kB)
+  Installing build dependencies ... done
+  Getting requirements to build wheel ... done
+  Preparing metadata (pyproject.toml) ... done
+Requirement already satisfied: click>=7.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from ray==2.9.3) (8.1.7)
+Requirement already satisfied: filelock in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from ray==2.9.3) (3.15.4)
+Collecting jsonschema (from ray==2.9.3)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/69/90/f63fb5873511e014207a475e2bb4e8b2e570d655b00ac19a9a0ca0a385ee/jsonschema-4.26.0-py3-none-any.whl (90 kB)
+Requirement already satisfied: packaging in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from ray==2.9.3) (23.2)
+Requirement already satisfied: protobuf!=3.19.5,>=3.15.3 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from ray==2.9.3) (4.25.3)
+Requirement already satisfied: pyyaml in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from ray==2.9.3) (6.0.1)
+Requirement already satisfied: aiosignal in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from ray==2.9.3) (1.3.1)
+Requirement already satisfied: frozenlist in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from ray==2.9.3) (1.4.1)
+Requirement already satisfied: requests in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from ray==2.9.3) (2.31.0)
+Collecting interegular (from outlines==0.0.34)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/c4/01/72d6472f80651673716d1deda2a5bbb633e563ecf94f4479da5519d69d25/interegular-0.3.3-py37-none-any.whl (23 kB)
+Requirement already satisfied: jinja2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from outlines==0.0.34) (3.1.4)
+Collecting lark (from outlines==0.0.34)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/82/3d/14ce75ef66813643812f3093ab17e46d3a206942ce7376d31ec2d36229e7/lark-1.3.1-py3-none-any.whl (113 kB)
+Collecting nest-asyncio (from outlines==0.0.34)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/a0/c4/c2971a3ba4c6103a3d10c4b0f24f461ddc027f0f09763220cf35ca1401b3/nest_asyncio-1.6.0-py3-none-any.whl (5.2 kB)
+Requirement already satisfied: numpy in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from outlines==0.0.34) (1.26.4)
+Collecting cloudpickle (from outlines==0.0.34)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/88/39/799be3f2f0f38cc727ee3b4f1445fe6d5e4133064ec2e4115069418a5bb6/cloudpickle-3.1.2-py3-none-any.whl (22 kB)
+Collecting diskcache (from outlines==0.0.34)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/3f/27/4570e78fc0bf5ea0ca45eb1de3818a23787af9b390c0b0a0033a1b8236f9/diskcache-5.6.3-py3-none-any.whl (45 kB)
+Requirement already satisfied: scipy in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from outlines==0.0.34) (1.13.1)
+Requirement already satisfied: torch>=2.1.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from outlines==0.0.34) (2.1.2+cu118)
+Collecting numba (from outlines==0.0.34)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/07/95/d6a2f0625e1092624228301eea11cdaff21ddcaf917ef3d631846a38b2f4/numba-0.65.0-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (3.7 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.7/3.7 MB 18.3 MB/s  0:00:00
+Requirement already satisfied: joblib in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from outlines==0.0.34) (1.4.2)
+Collecting referencing (from outlines==0.0.34)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/2c/58/ca301544e1fa93ed4f80d724bf5b194f6e4b945841c5bfd555878eea9fcb/referencing-0.37.0-py3-none-any.whl (26 kB)
+Requirement already satisfied: transformers in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from outlines==0.0.34) (4.41.2)
+Requirement already satisfied: annotated-types>=0.4.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from pydantic==2.7.4) (0.7.0)
+Requirement already satisfied: pydantic-core==2.18.4 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from pydantic==2.7.4) (2.18.4)
+Requirement already satisfied: typing-extensions>=4.6.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from pydantic==2.7.4) (4.12.2)
+Requirement already satisfied: regex>=2022.1.18 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from tiktoken==0.6.0) (2024.5.15)
+Collecting starlette>=0.46.0 (from fastapi)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/0b/c9/584bc9651441b4ba60cc4d557d8a547b5aff901af35bda3a4ee30c819b82/starlette-1.0.0-py3-none-any.whl (72 kB)
+INFO: pip is looking at multiple versions of fastapi to determine which version is compatible with other requirements. This could take a while.
+Collecting fastapi
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/8f/ea/18f6d0457f9efb2fc6fa594857f92810cadb03024975726db6546b3d6fcf/fastapi-0.135.2-py3-none-any.whl (117 kB)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/e4/72/42e900510195b23a56bde950d26a51f8b723846bfcaa0286e90287f0422b/fastapi-0.135.1-py3-none-any.whl (116 kB)
+Collecting typing-inspection>=0.4.2 (from fastapi)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/dc/9b/47798a6c91d8bdb567fe2698fe81e0c6b7cb7ef4d13da4114b41d239f65d/typing_inspection-0.4.2-py3-none-any.whl (14 kB)
+Collecting annotated-doc>=0.0.2 (from fastapi)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/1e/d3/26bf1008eb3d2daa8ef4cacc7f3bfdc11818d111f7e2d0201bc6e3b49d45/annotated_doc-0.0.4-py3-none-any.whl (5.3 kB)
+Requirement already satisfied: h11>=0.8 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from uvicorn) (0.16.0)
+Requirement already satisfied: charset-normalizer<4,>=2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from requests->ray==2.9.3) (3.3.2)
+Requirement already satisfied: idna<4,>=2.5 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from requests->ray==2.9.3) (3.7)
+Requirement already satisfied: urllib3<3,>=1.21.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from requests->ray==2.9.3) (2.2.2)
+Requirement already satisfied: certifi>=2017.4.17 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from requests->ray==2.9.3) (2026.2.25)
+Requirement already satisfied: anyio<5,>=3.6.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from starlette>=0.46.0->fastapi) (4.13.0)
+Requirement already satisfied: exceptiongroup>=1.0.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from anyio<5,>=3.6.2->starlette>=0.46.0->fastapi) (1.3.1)
+Requirement already satisfied: sympy in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from torch>=2.1.0->outlines==0.0.34) (1.12.1)
+Requirement already satisfied: networkx in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from torch>=2.1.0->outlines==0.0.34) (3.3)
+Requirement already satisfied: fsspec in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from torch>=2.1.0->outlines==0.0.34) (2024.6.1)
+Requirement already satisfied: triton==2.1.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from torch>=2.1.0->outlines==0.0.34) (2.1.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from jinja2->outlines==0.0.34) (2.1.5)
+Requirement already satisfied: attrs>=22.2.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from jsonschema->ray==2.9.3) (23.2.0)
+Collecting jsonschema-specifications>=2023.03.6 (from jsonschema->ray==2.9.3)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/41/45/1a4ed80516f02155c51f51e8cedb3c1902296743db0bbc66608a0db2814f/jsonschema_specifications-2025.9.1-py3-none-any.whl (18 kB)
+Collecting rpds-py>=0.25.0 (from jsonschema->ray==2.9.3)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/61/b5/707f6cf0066a6412aacc11d17920ea2e19e5b2f04081c64526eb35b5c6e7/rpds_py-0.30.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (390 kB)
+Collecting llvmlite<0.48,>=0.47.0dev0 (from numba->outlines==0.0.34)
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/7c/fb/76d88fc05ee1f9c1a6efe39eb493c4a727e5d1690412469017cd23bcb776/llvmlite-0.47.0-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (56.3 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 56.3/56.3 MB 15.2 MB/s  0:00:03
+Requirement already satisfied: mpmath<1.4.0,>=1.1.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from sympy->torch>=2.1.0->outlines==0.0.34) (1.3.0)
+Requirement already satisfied: huggingface-hub<1.0,>=0.23.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from transformers->outlines==0.0.34) (0.23.4)
+Requirement already satisfied: tokenizers<0.20,>=0.19 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from transformers->outlines==0.0.34) (0.19.1)
+Requirement already satisfied: safetensors>=0.4.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from transformers->outlines==0.0.34) (0.4.3)
+Requirement already satisfied: tqdm>=4.27 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from transformers->outlines==0.0.34) (4.66.1)
+Building wheels for collected packages: vllm-nccl-cu11
+  Building wheel for vllm-nccl-cu11 (pyproject.toml) ... done
+  Created wheel for vllm-nccl-cu11: filename=vllm_nccl_cu11-2.18.1.0.4.0-py3-none-any.whl size=5459 sha256=e46df7dd1d428bfffb8eabf9d77e5805616af500383de8def6686a54cd85167b
+  Stored in directory: /root/.cache/pip/wheels/b7/de/94/3520537e3248167b9138bb5b2daac7ec02b148da683d07b8f7
+Successfully built vllm-nccl-cu11
+Installing collected packages: vllm-nccl-cu11, py-cpuinfo, nvidia-ml-py, uvicorn, typing-inspection, rpds-py, prometheus-client, ninja, nest-asyncio, msgpack, llvmlite, lark, interegular, diskcache, cmake, cloudpickle, annotated-doc, tiktoken, referencing, numba, starlette, lm-format-enforcer, jsonschema-specifications, jsonschema, fastapi, ray, outlines
+  Attempting uninstall: tiktoken
+    Found existing installation: tiktoken 0.7.0
+    Uninstalling tiktoken-0.7.0:
+      Successfully uninstalled tiktoken-0.7.0
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+vllm 0.4.1+cu118 requires torch==2.2.1, but you have torch 2.1.2+cu118 which is incompatible.
+vllm 0.4.1+cu118 requires xformers==0.0.25, but you have xformers 0.0.23.post1 which is incompatible.
+Successfully installed annotated-doc-0.0.4 cloudpickle-3.1.2 cmake-4.3.1 diskcache-5.6.3 fastapi-0.135.1 interegular-0.3.3 jsonschema-4.26.0 jsonschema-specifications-2025.9.1 lark-1.3.1 llvmlite-0.47.0 lm-format-enforcer-0.9.8 msgpack-1.1.2 nest-asyncio-1.6.0 ninja-1.13.0 numba-0.65.0 nvidia-ml-py-13.595.45 outlines-0.0.34 prometheus-client-0.24.1 py-cpuinfo-9.0.0 ray-2.9.3 referencing-0.37.0 rpds-py-0.30.0 starlette-1.0.0 tiktoken-0.6.0 typing-inspection-0.4.2 uvicorn-0.42.0 vllm-nccl-cu11-2.18.1.0.4.0
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+(RAG) root@autodl-container-vj4u8f00c5-5ffa0651:~/autodl-tmp/RAG# pip install xformers==0.0.23.post1 --no-deps
+Looking in indexes: https://mirrors.aliyun.com/pypi/simple/, https://pypi.tuna.tsinghua.edu.cn/simple/
+Requirement already satisfied: xformers==0.0.23.post1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (0.0.23.post1)
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+(RAG) root@autodl-container-vj4u8f00c5-5ffa0651:~/autodl-tmp/RAG# python -c "import vllm; print('vLLM OK')"
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/__init__.py", line 3, in <module>
+    from vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/engine/arg_utils.py", line 6, in <module>
+    from vllm.config import (CacheConfig, DecodingConfig, DeviceConfig,
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/config.py", line 12, in <module>
+    from vllm.model_executor.layers.quantization import QUANTIZATION_METHODS
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/model_executor/layers/quantization/__init__.py", line 3, in <module>
+    from vllm.model_executor.layers.quantization.aqlm import AQLMConfig
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/model_executor/layers/quantization/aqlm.py", line 11, in <module>
+    from vllm._C import ops
+ImportError: /root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/_C.cpython-310-x86_64-linux-gnu.so: undefined symbol: _ZN2at4_ops19empty_memory_format4callEN3c108ArrayRefINS2_6SymIntEEESt8optionalINS2_10ScalarTypeEES6_INS2_6LayoutEES6_INS2_6DeviceEES6_IbES6_INS2_12MemoryFormatEE
+(RAG) root@autodl-container-vj4u8f00c5-5ffa0651:~/autodl-tmp/RAG# pip install -r requirements_online.txt
+adding trusted host: 'mirrors.aliyun.com' (from line 8 of requirements_online.txt)
+Looking in indexes: https://mirrors.aliyun.com/pypi/simple/, https://pypi.tuna.tsinghua.edu.cn/simple/
+Requirement already satisfied: flask==3.1.3 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 25)) (3.1.3)
+Requirement already satisfied: flask-sqlalchemy==3.1.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 26)) (3.1.1)
+Requirement already satisfied: gunicorn==25.1.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 27)) (25.1.0)
+Requirement already satisfied: werkzeug==3.1.3 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 28)) (3.1.3)
+Requirement already satisfied: pymysql==1.1.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 31)) (1.1.2)
+Requirement already satisfied: redis==5.0.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 32)) (5.0.1)
+Requirement already satisfied: numpy==1.26.4 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 35)) (1.26.4)
+Requirement already satisfied: pandas==2.3.3 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 36)) (2.3.3)
+Requirement already satisfied: pyyaml==6.0.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 37)) (6.0.1)
+Requirement already satisfied: python-dotenv==1.0.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 38)) (1.0.0)
+Requirement already satisfied: requests==2.31.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 39)) (2.31.0)
+Requirement already satisfied: tqdm==4.66.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 40)) (4.66.1)
+Requirement already satisfied: faiss-gpu==1.7.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 44)) (1.7.2)
+Requirement already satisfied: pymupdf==1.24.5 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 47)) (1.24.5)
+Requirement already satisfied: pdfplumber==0.11.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 48)) (0.11.0)
+Requirement already satisfied: python-docx==1.1.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 49)) (1.1.2)
+Requirement already satisfied: openpyxl==3.1.5 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 50)) (3.1.5)
+Requirement already satisfied: chardet==5.2.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 51)) (5.2.0)
+Requirement already satisfied: rapidocr-onnxruntime==1.4.4 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 54)) (1.4.4)
+Requirement already satisfied: onnxruntime-gpu==1.17.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 55)) (1.17.1)
+Requirement already satisfied: opencv-python==4.9.0.80 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 56)) (4.9.0.80)
+Requirement already satisfied: rank-bm25==0.2.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 59)) (0.2.2)
+Requirement already satisfied: jieba==0.42.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 60)) (0.42.1)
+Requirement already satisfied: langchain==0.1.20 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 63)) (0.1.20)
+Requirement already satisfied: langchain-community==0.0.38 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 64)) (0.0.38)
+Requirement already satisfied: langchain-core==0.1.52 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 65)) (0.1.52)
+Requirement already satisfied: langchain-huggingface==0.0.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 66)) (0.0.1)
+Requirement already satisfied: langchain-openai==0.1.3 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 67)) (0.1.3)
+Requirement already satisfied: langchain-text-splitters==0.0.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 68)) (0.0.1)
+Requirement already satisfied: langsmith==0.1.59 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 69)) (0.1.59)
+Requirement already satisfied: neo4j==6.1.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 72)) (6.1.0)
+Requirement already satisfied: transformers==4.41.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 76)) (4.41.2)
+Requirement already satisfied: huggingface-hub==0.23.4 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 77)) (0.23.4)
+Requirement already satisfied: accelerate==0.30.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 78)) (0.30.1)
+Requirement already satisfied: peft==0.11.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 79)) (0.11.1)
+Requirement already satisfied: tokenizers==0.19.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 80)) (0.19.1)
+Requirement already satisfied: sentencepiece==0.2.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 81)) (0.2.0)
+Requirement already satisfied: protobuf==4.25.3 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 82)) (4.25.3)
+Requirement already satisfied: rouge-score==0.1.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 85)) (0.1.2)
+Requirement already satisfied: sacrebleu==2.4.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 86)) (2.4.2)
+Requirement already satisfied: bert-score==0.3.13 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 87)) (0.3.13)
+Requirement already satisfied: tensorboard==2.17.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 90)) (2.17.0)
+Requirement already satisfied: pydantic==2.7.4 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 93)) (2.7.4)
+Requirement already satisfied: pydantic-settings==2.3.4 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 94)) (2.3.4)
+Requirement already satisfied: blinker>=1.9.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 97)) (1.9.0)
+Requirement already satisfied: click==8.1.7 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 98)) (8.1.7)
+Requirement already satisfied: itsdangerous==2.2.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 99)) (2.2.0)
+Requirement already satisfied: jinja2==3.1.4 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 100)) (3.1.4)
+Requirement already satisfied: markupsafe==2.1.5 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 101)) (2.1.5)
+Requirement already satisfied: sqlalchemy==2.0.31 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 102)) (2.0.31)
+Requirement already satisfied: aiohttp==3.9.5 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 103)) (3.9.5)
+Requirement already satisfied: aiosignal==1.3.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 104)) (1.3.1)
+Requirement already satisfied: async-timeout==4.0.3 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 105)) (4.0.3)
+Requirement already satisfied: attrs==23.2.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 106)) (23.2.0)
+Requirement already satisfied: charset-normalizer==3.3.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 107)) (3.3.2)
+Requirement already satisfied: dataclasses-json==0.6.7 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 108)) (0.6.7)
+Requirement already satisfied: frozenlist==1.4.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 109)) (1.4.1)
+Requirement already satisfied: fsspec==2024.6.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 110)) (2024.6.1)
+Requirement already satisfied: idna==3.7 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 111)) (3.7)
+Requirement already satisfied: jsonpatch==1.33 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 112)) (1.33)
+Requirement already satisfied: jsonpointer==3.0.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 113)) (3.0.0)
+Requirement already satisfied: marshmallow==3.21.3 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 114)) (3.21.3)
+Requirement already satisfied: multidict==6.0.5 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 115)) (6.0.5)
+Requirement already satisfied: mypy-extensions==1.0.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 116)) (1.0.0)
+Requirement already satisfied: packaging==23.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 117)) (23.2)
+Requirement already satisfied: regex==2024.5.15 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 118)) (2024.5.15)
+Requirement already satisfied: safetensors==0.4.3 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 119)) (0.4.3)
+Requirement already satisfied: scipy==1.13.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 120)) (1.13.1)
+Requirement already satisfied: sympy==1.12.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 121)) (1.12.1)
+Requirement already satisfied: tenacity==8.4.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 122)) (8.4.2)
+Collecting tiktoken==0.7.0 (from -r requirements_online.txt (line 123))
+  Using cached https://pypi.tuna.tsinghua.edu.cn/packages/e7/8c/7d1007557b343d5cf18349802e94d3a14397121e9105b4661f8cd753f9bf/tiktoken-0.7.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (1.1 MB)
+Requirement already satisfied: typing-inspect==0.9.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 124)) (0.9.0)
+Requirement already satisfied: typing_extensions==4.12.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 125)) (4.12.2)
+Requirement already satisfied: urllib3==2.2.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 126)) (2.2.2)
+Requirement already satisfied: yarl==1.9.4 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 127)) (1.9.4)
+Requirement already satisfied: filelock==3.15.4 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 128)) (3.15.4)
+Requirement already satisfied: networkx==3.3 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 129)) (3.3)
+Requirement already satisfied: joblib==1.4.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 130)) (1.4.2)
+Requirement already satisfied: threadpoolctl==3.5.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 131)) (3.5.0)
+Requirement already satisfied: scikit-learn==1.5.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 132)) (1.5.0)
+Requirement already satisfied: pillow==10.3.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from -r requirements_online.txt (line 133)) (10.3.0)
+Requirement already satisfied: python-dateutil>=2.8.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from pandas==2.3.3->-r requirements_online.txt (line 36)) (2.9.0.post0)
+Requirement already satisfied: pytz>=2020.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from pandas==2.3.3->-r requirements_online.txt (line 36)) (2026.1.post1)
+Requirement already satisfied: tzdata>=2022.7 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from pandas==2.3.3->-r requirements_online.txt (line 36)) (2025.3)
+Requirement already satisfied: certifi>=2017.4.17 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from requests==2.31.0->-r requirements_online.txt (line 39)) (2026.2.25)
+Requirement already satisfied: PyMuPDFb==1.24.3 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from pymupdf==1.24.5->-r requirements_online.txt (line 47)) (1.24.3)
+Requirement already satisfied: pdfminer.six==20231228 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from pdfplumber==0.11.0->-r requirements_online.txt (line 48)) (20231228)
+Requirement already satisfied: pypdfium2>=4.18.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from pdfplumber==0.11.0->-r requirements_online.txt (line 48)) (5.6.0)
+Requirement already satisfied: lxml>=3.1.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from python-docx==1.1.2->-r requirements_online.txt (line 49)) (6.0.2)
+Requirement already satisfied: et-xmlfile in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from openpyxl==3.1.5->-r requirements_online.txt (line 50)) (2.0.0)
+Requirement already satisfied: pyclipper>=1.2.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from rapidocr-onnxruntime==1.4.4->-r requirements_online.txt (line 54)) (1.4.0)
+Requirement already satisfied: six>=1.15.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from rapidocr-onnxruntime==1.4.4->-r requirements_online.txt (line 54)) (1.17.0)
+Requirement already satisfied: Shapely!=2.0.4,>=1.7.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from rapidocr-onnxruntime==1.4.4->-r requirements_online.txt (line 54)) (2.1.2)
+Requirement already satisfied: onnxruntime>=1.7.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from rapidocr-onnxruntime==1.4.4->-r requirements_online.txt (line 54)) (1.23.2)
+Requirement already satisfied: coloredlogs in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from onnxruntime-gpu==1.17.1->-r requirements_online.txt (line 55)) (15.0.1)
+Requirement already satisfied: flatbuffers in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from onnxruntime-gpu==1.17.1->-r requirements_online.txt (line 55)) (25.12.19)
+Requirement already satisfied: orjson<4.0.0,>=3.9.14 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from langsmith==0.1.59->-r requirements_online.txt (line 69)) (3.11.8)
+Requirement already satisfied: annotated-types>=0.4.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from pydantic==2.7.4->-r requirements_online.txt (line 93)) (0.7.0)
+Requirement already satisfied: pydantic-core==2.18.4 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from pydantic==2.7.4->-r requirements_online.txt (line 93)) (2.18.4)
+Requirement already satisfied: greenlet!=0.4.17 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from sqlalchemy==2.0.31->-r requirements_online.txt (line 102)) (3.3.2)
+Requirement already satisfied: sentence-transformers>=2.6.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from langchain-huggingface==0.0.1->-r requirements_online.txt (line 66)) (5.3.0)
+Requirement already satisfied: text-generation<0.8.0,>=0.7.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from langchain-huggingface==0.0.1->-r requirements_online.txt (line 66)) (0.7.0)
+Requirement already satisfied: openai<2.0.0,>=1.10.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from langchain-openai==0.1.3->-r requirements_online.txt (line 67)) (1.109.1)
+Requirement already satisfied: psutil in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from accelerate==0.30.1->-r requirements_online.txt (line 78)) (7.2.2)
+Requirement already satisfied: torch>=1.10.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from accelerate==0.30.1->-r requirements_online.txt (line 78)) (2.1.2+cu118)
+Requirement already satisfied: absl-py in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from rouge-score==0.1.2->-r requirements_online.txt (line 85)) (2.4.0)
+Requirement already satisfied: nltk in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from rouge-score==0.1.2->-r requirements_online.txt (line 85)) (3.9.4)
+Requirement already satisfied: portalocker in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from sacrebleu==2.4.2->-r requirements_online.txt (line 86)) (3.2.0)
+Requirement already satisfied: tabulate>=0.8.9 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from sacrebleu==2.4.2->-r requirements_online.txt (line 86)) (0.10.0)
+Requirement already satisfied: colorama in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from sacrebleu==2.4.2->-r requirements_online.txt (line 86)) (0.4.6)
+Requirement already satisfied: matplotlib in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from bert-score==0.3.13->-r requirements_online.txt (line 87)) (3.10.8)
+Requirement already satisfied: grpcio>=1.48.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from tensorboard==2.17.0->-r requirements_online.txt (line 90)) (1.80.0)
+Requirement already satisfied: markdown>=2.6.8 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from tensorboard==2.17.0->-r requirements_online.txt (line 90)) (3.10.2)
+Requirement already satisfied: setuptools>=41.0.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from tensorboard==2.17.0->-r requirements_online.txt (line 90)) (82.0.1)
+Requirement already satisfied: tensorboard-data-server<0.8.0,>=0.7.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from tensorboard==2.17.0->-r requirements_online.txt (line 90)) (0.7.2)
+Requirement already satisfied: mpmath<1.4.0,>=1.1.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from sympy==1.12.1->-r requirements_online.txt (line 121)) (1.3.0)
+Requirement already satisfied: cryptography>=36.0.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from pdfminer.six==20231228->pdfplumber==0.11.0->-r requirements_online.txt (line 48)) (45.0.7)
+Requirement already satisfied: anyio<5,>=3.5.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from openai<2.0.0,>=1.10.0->langchain-openai==0.1.3->-r requirements_online.txt (line 67)) (4.13.0)
+Requirement already satisfied: distro<2,>=1.7.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from openai<2.0.0,>=1.10.0->langchain-openai==0.1.3->-r requirements_online.txt (line 67)) (1.9.0)
+Requirement already satisfied: httpx<1,>=0.23.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from openai<2.0.0,>=1.10.0->langchain-openai==0.1.3->-r requirements_online.txt (line 67)) (0.28.1)
+Requirement already satisfied: jiter<1,>=0.4.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from openai<2.0.0,>=1.10.0->langchain-openai==0.1.3->-r requirements_online.txt (line 67)) (0.13.0)
+Requirement already satisfied: sniffio in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from openai<2.0.0,>=1.10.0->langchain-openai==0.1.3->-r requirements_online.txt (line 67)) (1.3.1)
+Requirement already satisfied: exceptiongroup>=1.0.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from anyio<5,>=3.5.0->openai<2.0.0,>=1.10.0->langchain-openai==0.1.3->-r requirements_online.txt (line 67)) (1.3.1)
+Requirement already satisfied: httpcore==1.* in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from httpx<1,>=0.23.0->openai<2.0.0,>=1.10.0->langchain-openai==0.1.3->-r requirements_online.txt (line 67)) (1.0.9)
+Requirement already satisfied: h11>=0.16 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from httpcore==1.*->httpx<1,>=0.23.0->openai<2.0.0,>=1.10.0->langchain-openai==0.1.3->-r requirements_online.txt (line 67)) (0.16.0)
+Requirement already satisfied: cffi>=1.14 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from cryptography>=36.0.0->pdfminer.six==20231228->pdfplumber==0.11.0->-r requirements_online.txt (line 48)) (2.0.0)
+Requirement already satisfied: pycparser in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from cffi>=1.14->cryptography>=36.0.0->pdfminer.six==20231228->pdfplumber==0.11.0->-r requirements_online.txt (line 48)) (3.0)
+Requirement already satisfied: triton==2.1.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from torch>=1.10.0->accelerate==0.30.1->-r requirements_online.txt (line 78)) (2.1.0)
+Requirement already satisfied: humanfriendly>=9.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from coloredlogs->onnxruntime-gpu==1.17.1->-r requirements_online.txt (line 55)) (10.0)
+Requirement already satisfied: contourpy>=1.0.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from matplotlib->bert-score==0.3.13->-r requirements_online.txt (line 87)) (1.3.2)
+Requirement already satisfied: cycler>=0.10 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from matplotlib->bert-score==0.3.13->-r requirements_online.txt (line 87)) (0.12.1)
+Requirement already satisfied: fonttools>=4.22.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from matplotlib->bert-score==0.3.13->-r requirements_online.txt (line 87)) (4.62.1)
+Requirement already satisfied: kiwisolver>=1.3.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from matplotlib->bert-score==0.3.13->-r requirements_online.txt (line 87)) (1.5.0)
+Requirement already satisfied: pyparsing>=3 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from matplotlib->bert-score==0.3.13->-r requirements_online.txt (line 87)) (3.3.2)
+Installing collected packages: tiktoken
+  Attempting uninstall: tiktoken
+    Found existing installation: tiktoken 0.6.0
+    Uninstalling tiktoken-0.6.0:
+      Successfully uninstalled tiktoken-0.6.0
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+vllm 0.4.1+cu118 requires tiktoken==0.6.0, but you have tiktoken 0.7.0 which is incompatible.
+vllm 0.4.1+cu118 requires torch==2.2.1, but you have torch 2.1.2+cu118 which is incompatible.
+vllm 0.4.1+cu118 requires xformers==0.0.25, but you have xformers 0.0.23.post1 which is incompatible.
+Successfully installed tiktoken-0.7.0
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+(RAG) root@autodl-container-vj4u8f00c5-5ffa0651:~/autodl-tmp/RAG# pip install ray==2.9.3 outlines==0.0.34 nvidia-ml-py pydantic==2.7.4 fastapi uvicorn tiktoken==0.6.0 prometheus-client sentencepiece lm-format-enforcer==0.9.8 msgpack cmake ninja psutil py-cpuinfo vllm-nccl-cu11
+Looking in indexes: https://mirrors.aliyun.com/pypi/simple/, https://pypi.tuna.tsinghua.edu.cn/simple/
+Requirement already satisfied: ray==2.9.3 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (2.9.3)
+Requirement already satisfied: outlines==0.0.34 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (0.0.34)
+Requirement already satisfied: nvidia-ml-py in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (13.595.45)
+Requirement already satisfied: pydantic==2.7.4 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (2.7.4)
+Requirement already satisfied: fastapi in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (0.135.1)
+Requirement already satisfied: uvicorn in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (0.42.0)
+Collecting tiktoken==0.6.0
+  Using cached https://pypi.tuna.tsinghua.edu.cn/packages/16/05/5efbd91252ffb1301ea393d88ef736b33d41e75d4bcf0bd31d660050e400/tiktoken-0.6.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (1.8 MB)
+Requirement already satisfied: prometheus-client in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (0.24.1)
+Requirement already satisfied: sentencepiece in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (0.2.0)
+Requirement already satisfied: lm-format-enforcer==0.9.8 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (0.9.8)
+Requirement already satisfied: msgpack in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (1.1.2)
+Requirement already satisfied: cmake in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (4.3.1)
+Requirement already satisfied: ninja in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (1.13.0)
+Requirement already satisfied: psutil in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (7.2.2)
+Requirement already satisfied: py-cpuinfo in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (9.0.0)
+Requirement already satisfied: vllm-nccl-cu11 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (2.18.1.0.4.0)
+Requirement already satisfied: click>=7.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from ray==2.9.3) (8.1.7)
+Requirement already satisfied: filelock in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from ray==2.9.3) (3.15.4)
+Requirement already satisfied: jsonschema in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from ray==2.9.3) (4.26.0)
+Requirement already satisfied: packaging in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from ray==2.9.3) (23.2)
+Requirement already satisfied: protobuf!=3.19.5,>=3.15.3 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from ray==2.9.3) (4.25.3)
+Requirement already satisfied: pyyaml in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from ray==2.9.3) (6.0.1)
+Requirement already satisfied: aiosignal in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from ray==2.9.3) (1.3.1)
+Requirement already satisfied: frozenlist in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from ray==2.9.3) (1.4.1)
+Requirement already satisfied: requests in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from ray==2.9.3) (2.31.0)
+Requirement already satisfied: interegular in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from outlines==0.0.34) (0.3.3)
+Requirement already satisfied: jinja2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from outlines==0.0.34) (3.1.4)
+Requirement already satisfied: lark in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from outlines==0.0.34) (1.3.1)
+Requirement already satisfied: nest-asyncio in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from outlines==0.0.34) (1.6.0)
+Requirement already satisfied: numpy in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from outlines==0.0.34) (1.26.4)
+Requirement already satisfied: cloudpickle in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from outlines==0.0.34) (3.1.2)
+Requirement already satisfied: diskcache in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from outlines==0.0.34) (5.6.3)
+Requirement already satisfied: scipy in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from outlines==0.0.34) (1.13.1)
+Requirement already satisfied: torch>=2.1.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from outlines==0.0.34) (2.1.2+cu118)
+Requirement already satisfied: numba in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from outlines==0.0.34) (0.65.0)
+Requirement already satisfied: joblib in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from outlines==0.0.34) (1.4.2)
+Requirement already satisfied: referencing in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from outlines==0.0.34) (0.37.0)
+Requirement already satisfied: transformers in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from outlines==0.0.34) (4.41.2)
+Requirement already satisfied: annotated-types>=0.4.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from pydantic==2.7.4) (0.7.0)
+Requirement already satisfied: pydantic-core==2.18.4 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from pydantic==2.7.4) (2.18.4)
+Requirement already satisfied: typing-extensions>=4.6.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from pydantic==2.7.4) (4.12.2)
+Requirement already satisfied: regex>=2022.1.18 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from tiktoken==0.6.0) (2024.5.15)
+Requirement already satisfied: starlette>=0.46.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from fastapi) (1.0.0)
+Requirement already satisfied: typing-inspection>=0.4.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from fastapi) (0.4.2)
+Requirement already satisfied: annotated-doc>=0.0.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from fastapi) (0.0.4)
+Requirement already satisfied: h11>=0.8 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from uvicorn) (0.16.0)
+Requirement already satisfied: charset-normalizer<4,>=2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from requests->ray==2.9.3) (3.3.2)
+Requirement already satisfied: idna<4,>=2.5 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from requests->ray==2.9.3) (3.7)
+Requirement already satisfied: urllib3<3,>=1.21.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from requests->ray==2.9.3) (2.2.2)
+Requirement already satisfied: certifi>=2017.4.17 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from requests->ray==2.9.3) (2026.2.25)
+Requirement already satisfied: anyio<5,>=3.6.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from starlette>=0.46.0->fastapi) (4.13.0)
+Requirement already satisfied: exceptiongroup>=1.0.2 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from anyio<5,>=3.6.2->starlette>=0.46.0->fastapi) (1.3.1)
+Requirement already satisfied: sympy in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from torch>=2.1.0->outlines==0.0.34) (1.12.1)
+Requirement already satisfied: networkx in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from torch>=2.1.0->outlines==0.0.34) (3.3)
+Requirement already satisfied: fsspec in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from torch>=2.1.0->outlines==0.0.34) (2024.6.1)
+Requirement already satisfied: triton==2.1.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from torch>=2.1.0->outlines==0.0.34) (2.1.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from jinja2->outlines==0.0.34) (2.1.5)
+Requirement already satisfied: attrs>=22.2.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from jsonschema->ray==2.9.3) (23.2.0)
+Requirement already satisfied: jsonschema-specifications>=2023.03.6 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from jsonschema->ray==2.9.3) (2025.9.1)
+Requirement already satisfied: rpds-py>=0.25.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from jsonschema->ray==2.9.3) (0.30.0)
+Requirement already satisfied: llvmlite<0.48,>=0.47.0dev0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from numba->outlines==0.0.34) (0.47.0)
+Requirement already satisfied: mpmath<1.4.0,>=1.1.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from sympy->torch>=2.1.0->outlines==0.0.34) (1.3.0)
+Requirement already satisfied: huggingface-hub<1.0,>=0.23.0 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from transformers->outlines==0.0.34) (0.23.4)
+Requirement already satisfied: tokenizers<0.20,>=0.19 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from transformers->outlines==0.0.34) (0.19.1)
+Requirement already satisfied: safetensors>=0.4.1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from transformers->outlines==0.0.34) (0.4.3)
+Requirement already satisfied: tqdm>=4.27 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (from transformers->outlines==0.0.34) (4.66.1)
+Installing collected packages: tiktoken
+  Attempting uninstall: tiktoken
+    Found existing installation: tiktoken 0.7.0
+    Uninstalling tiktoken-0.7.0:
+      Successfully uninstalled tiktoken-0.7.0
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+vllm 0.4.1+cu118 requires torch==2.2.1, but you have torch 2.1.2+cu118 which is incompatible.
+vllm 0.4.1+cu118 requires xformers==0.0.25, but you have xformers 0.0.23.post1 which is incompatible.
+Successfully installed tiktoken-0.6.0
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+(RAG) root@autodl-container-vj4u8f00c5-5ffa0651:~/autodl-tmp/RAG# pip install xformers==0.0.23.post1 --no-deps
+Looking in indexes: https://mirrors.aliyun.com/pypi/simple/, https://pypi.tuna.tsinghua.edu.cn/simple/
+Requirement already satisfied: xformers==0.0.23.post1 in /root/miniconda3/envs/RAG/lib/python3.10/site-packages (0.0.23.post1)
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+(RAG) root@autodl-container-vj4u8f00c5-5ffa0651:~/autodl-tmp/RAG# python -c "import vllm; print('vLLM OK')"
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/__init__.py", line 3, in <module>
+    from vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/engine/arg_utils.py", line 6, in <module>
+    from vllm.config import (CacheConfig, DecodingConfig, DeviceConfig,
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/config.py", line 12, in <module>
+    from vllm.model_executor.layers.quantization import QUANTIZATION_METHODS
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/model_executor/layers/quantization/__init__.py", line 3, in <module>
+    from vllm.model_executor.layers.quantization.aqlm import AQLMConfig
+  File "/root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/model_executor/layers/quantization/aqlm.py", line 11, in <module>
+    from vllm._C import ops
+ImportError: /root/miniconda3/envs/RAG/lib/python3.10/site-packages/vllm/_C.cpython-310-x86_64-linux-gnu.so: undefined symbol: _ZN2at4_ops19empty_memory_format4callEN3c108ArrayRefINS2_6SymIntEEESt8optionalINS2_10ScalarTypeEES6_INS2_6LayoutEES6_INS2_6DeviceEES6_IbES6_INS2_12MemoryFormatEE
+(RAG) root@autodl-container-vj4u8f00c5-5ffa0651:~/autodl-tmp/RAG# 

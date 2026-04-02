@@ -1,136 +1,113 @@
 # ==============================================================
-# RAG 线上部署专用环境依赖 (基于 PyTorch 2.3.0 + CUDA 12.1 + Python 3.12)
-# 【稳定版 | 无依赖冲突 | 适配 LLaMA-Factory 0.8.3】
-# ==============================================================
-
-# --- 镜像源配置 (阿里云加速) ---
--i https://mirrors.aliyun.com/pypi/simple/
---trusted-host mirrors.aliyun.com
---extra-index-url https://pypi.tuna.tsinghua.edu.cn/simple/
-
-# ==============================================================
-# 核心依赖说明（不由 pip 安装，需单独处理）
-# ==============================================================
-# ⚠️ torch: 由 conda 安装 (PyTorch 2.3.0 + CUDA 12.1)
-#    conda install pytorch==2.3.0 torchvision==0.18.0 torchaudio==2.3.0 pytorch-cuda=12.1 -c pytorch -c nvidia
-#
-# ⚠️ vllm: 需单独安装 CUDA 12.1 + Python 3.12 预编译版
-#    pip install https://github.com/vllm-project/vllm/releases/download/v0.4.1/vllm-0.4.1+cu121-cp312-cp312-manylinux1_x86_64.whl --no-deps
-#
-# ⚠️ xformers: 需安装 CUDA 12.1 匹配版本
-#    pip install xformers==0.0.26.post1 --index-url https://download.pytorch.org/whl/cu121
-#
-# ⚠️ llamafactory: 需 --no-deps 安装避免依赖冲突
-#    pip install llamafactory==0.8.3 --no-deps
+# RAG 线上部署专用环境依赖 (基于 Python 3.12 + PyTorch 2.3.0 + CUDA 12.1)
+# 说明：PyTorch、vLLM、xformers 由脚本单独安装，不在此文件中
 # ==============================================================
 
 # --- 基础 Web 框架 ---
-flask==3.1.3
-flask-sqlalchemy==3.1.1
-gunicorn==25.1.0
-werkzeug==3.1.3
+flask>=3.1.0
+flask-sqlalchemy>=3.1.0
+gunicorn>=25.0.0
+werkzeug>=3.1.0
 
 # --- 数据库与缓存 ---
-pymysql==1.1.2
-redis==5.0.1
+pymysql>=1.1.0
+redis>=5.0.0
 
 # --- 数据处理与科学计算 ---
-numpy==1.26.4
-pandas==2.3.3
-pyyaml==6.0.1
-python-dotenv==1.0.0
-requests==2.31.0
-tqdm==4.66.1
+numpy>=1.26.0
+pandas>=2.3.0
+pyyaml>=6.0.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+tqdm>=4.66.0
 
 # --- RAG 检索核心组件 ---
-# FAISS GPU 版本 (CUDA 12.1 兼容)
-faiss-gpu==1.7.2
+faiss-gpu>=1.7.0
 
 # --- 文档解析组件 ---
-pymupdf==1.24.5
-pdfplumber==0.11.0
-python-docx==1.1.2
-openpyxl==3.1.5
-chardet==5.2.0
+pymupdf>=1.24.0
+pdfplumber>=0.11.0
+python-docx>=1.1.0
+openpyxl>=3.1.0
+chardet>=5.2.0
 
 # --- OCR 组件 (GPU 加速) ---
-rapidocr-onnxruntime==1.4.4
-onnxruntime-gpu==1.17.1
-opencv-python==4.9.0.80
+rapidocr-onnxruntime>=1.4.0
+onnxruntime-gpu>=1.17.0
+opencv-python>=4.9.0
 
 # --- 文本处理与检索 ---
-rank-bm25==0.2.2
-jieba==0.42.1
+rank-bm25>=0.2.0
+jieba>=0.42.0
 
-# --- LangChain 生态 (版本锁定，确保兼容) ---
-langchain==0.1.20
-langchain-community==0.0.38
-langchain-core==0.1.52
-langchain-huggingface==0.0.1
-langchain-openai==0.1.3
-langchain-text-splitters==0.0.1
-langsmith==0.1.59
+# --- LangChain 生态 ---
+langchain>=0.1.0
+langchain-community>=0.0.38
+langchain-core>=0.1.0
+langchain-huggingface>=0.0.1
+langchain-openai>=0.1.0
+langchain-text-splitters>=0.0.1
+langsmith>=0.1.0
 
 # --- 图数据库 ---
-neo4j==6.1.0
+neo4j>=6.1.0
 
 # --- 大模型与深度学习组件 ---
-# transformers 版本需与 LLaMA-Factory 0.8.3 兼容
-transformers==4.41.2
-huggingface-hub==0.23.4
-accelerate==0.30.1
-peft==0.11.1
-tokenizers==0.19.1
-sentencepiece==0.2.0
-protobuf==4.25.3
+transformers>=4.41.0
+huggingface-hub>=0.23.0
+accelerate>=0.30.0
+peft>=0.11.0
+tokenizers>=0.19.0
+sentencepiece>=0.2.0
+protobuf>=4.25.0
 
 # --- 模型评估指标 ---
-rouge-score==0.1.2
-sacrebleu==2.4.2
-bert-score==0.3.13
+rouge-score>=0.1.0
+sacrebleu>=2.4.0
+bert-score>=0.3.0
 
 # --- 可视化与日志 ---
-tensorboard==2.17.0
+tensorboard>=2.17.0
 
-# --- Pydantic (数据验证) ---
-pydantic==2.7.4
-pydantic-settings==2.3.4
+# --- Pydantic ---
+pydantic>=2.7.0
+pydantic-settings>=2.3.0
 
 # --- 其他工具依赖 ---
 blinker>=1.9.0
-click==8.1.7
-itsdangerous==2.2.0
-jinja2==3.1.4
-markupsafe==2.1.5
-sqlalchemy==2.0.31
-aiohttp==3.9.5
-aiosignal==1.3.1
-async-timeout==4.0.3
-attrs==23.2.0
-charset-normalizer==3.3.2
-dataclasses-json==0.6.7
-frozenlist==1.4.1
-fsspec==2024.6.1
-idna==3.7
-jsonpatch==1.33
-jsonpointer==3.0.0
-marshmallow==3.21.3
-multidict==6.0.5
-mypy-extensions==1.0.0
-packaging==23.2
-regex==2024.5.15
-safetensors==0.4.3
-scipy==1.13.1
-sympy==1.12.1
-tenacity==8.4.2
-tiktoken==0.7.0
-typing-inspect==0.9.0
-typing_extensions==4.12.2
-urllib3==2.2.2
-yarl==1.9.4
-filelock==3.15.4
-networkx==3.3
-joblib==1.4.2
-threadpoolctl==3.5.0
-scikit-learn==1.5.0
-pillow==10.3.0
+click>=8.1.0
+itsdangerous>=2.2.0
+jinja2>=3.1.0
+markupsafe>=2.1.0
+sqlalchemy>=2.0.0
+aiohttp>=3.9.0
+aiosignal>=1.3.0
+async-timeout>=4.0.0
+attrs>=23.2.0
+charset-normalizer>=3.3.0
+dataclasses-json>=0.6.0
+frozenlist>=1.4.0
+fsspec>=2024.6.0
+idna>=3.7
+jsonpatch>=1.33
+jsonpointer>=3.0.0
+marshmallow>=3.21.0
+multidict>=6.0.0
+mypy-extensions>=1.0.0
+packaging>=23.2
+regex>=2024.5.0
+safetensors>=0.4.0
+scipy>=1.13.0
+sympy>=1.12.0
+tenacity>=8.4.0
+tiktoken>=0.7.0
+typing-inspect>=0.9.0
+typing_extensions>=4.12.0
+urllib3>=2.2.0
+yarl>=1.9.0
+filelock>=3.15.0
+networkx>=3.3
+joblib>=1.4.0
+threadpoolctl>=3.5.0
+scikit-learn>=1.5.0
+pillow>=10.3.0

@@ -1,24 +1,6 @@
 # ==============================================================
-# RAG 线上部署专用环境依赖 (基于 PyTorch 2.1.2 + CUDA 11.8 + Python 3.10)
-# 【稳定版 | 无依赖冲突 | 适配 LLaMA-Factory 0.8.3】
-# ==============================================================
-
-# --- 镜像源配置 (阿里云加速) ---
--i https://mirrors.aliyun.com/pypi/simple/
---trusted-host mirrors.aliyun.com
---extra-index-url https://pypi.tuna.tsinghua.edu.cn/simple/
-
-# ==============================================================
-# 核心依赖说明（不由 pip 安装，需单独处理）
-# ==============================================================
-# ⚠️ torch: 由 conda 安装 (PyTorch 2.1.2 + CUDA 11.8)
-#    conda install pytorch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 pytorch-cuda=11.8 -c pytorch -c nvidia
-#
-# ⚠️ vllm: 需单独安装 CUDA 11.8 预编译版
-#    pip install https://github.com/vllm-project/vllm/releases/download/v0.4.1/vllm-0.4.1+cu118-cp310-cp310-manylinux1_x86_64.whl --no-deps
-#
-# ⚠️ llamafactory: 需 --no-deps 安装避免依赖冲突
-#    pip install llamafactory==0.8.3 --no-deps
+# RAG 线上部署专用环境依赖 (基于 Python 3.12 + PyTorch 2.3.0 + CUDA 12.1)
+# 说明：PyTorch、vLLM、xformers 由脚本单独安装，不在此文件中
 # ==============================================================
 
 # --- 基础 Web 框架 ---
@@ -40,7 +22,6 @@ requests==2.31.0
 tqdm==4.66.1
 
 # --- RAG 检索核心组件 ---
-# FAISS GPU 版本 (CUDA 11.8 兼容)
 faiss-gpu==1.7.2
 
 # --- 文档解析组件 ---
@@ -59,7 +40,7 @@ opencv-python==4.9.0.80
 rank-bm25==0.2.2
 jieba==0.42.1
 
-# --- LangChain 生态 (版本锁定，确保兼容) ---
+# --- LangChain 生态 ---
 langchain==0.1.20
 langchain-community==0.0.38
 langchain-core==0.1.52
@@ -72,7 +53,6 @@ langsmith==0.1.59
 neo4j==6.1.0
 
 # --- 大模型与深度学习组件 ---
-# transformers 版本需与 LLaMA-Factory 0.8.3 兼容
 transformers==4.41.2
 huggingface-hub==0.23.4
 accelerate==0.30.1
@@ -89,7 +69,7 @@ bert-score==0.3.13
 # --- 可视化与日志 ---
 tensorboard==2.17.0
 
-# --- Pydantic (数据验证) ---
+# --- Pydantic ---
 pydantic==2.7.4
 pydantic-settings==2.3.4
 
