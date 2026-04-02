@@ -102,161 +102,207 @@
                         <p class="text-muted small mb-1">使用高质量标注数据对教师模型进行微调，生成领域专家模型。</p>
                     </div>
                     <div class="card-body py-2">
-                        <div class="row g-2">
-                            <div class="col-md-5">
-                                <label class="form-label small mb-1">教师基座模型：</label>
-                                <div class="input-group input-group-sm mb-1">
-                                    <select class="form-select" id="modelCategorySelect" style="max-width: 120px;">
-                                        <option value="ollama">Ollama</option>
-                                        <option value="vllm">vLLM</option>
-                                        <option value="hf">HuggingFace</option>
-                                    </select>
-                                    <input type="text" class="form-control" id="baseModelSelect" list="baseModelDatalist" placeholder="选择或输入模型...">
-                                    <datalist id="baseModelDatalist"></datalist>
-                                    <button class="btn btn-outline-secondary" type="button" id="refreshModelBtn" onclick="loadModels()">🔄</button>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">教师基座模型：</label>
+                                <select class="form-select mb-2" id="modelCategorySelect">
+                                    <option value="ollama">本地模型 (Ollama)</option>
+                                    <option value="vllm">本地模型 (vLLM)</option>
+                                    <option value="hf">本地模型 (Hugging Face)</option>
+                                    <option value="online">在线模型 (支持下载)</option>
+                                </select>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="baseModelSelect" list="baseModelDatalist" placeholder="请选择或输入模型ID...">
+                                    <datalist id="baseModelDatalist">
+                                    </datalist>
+                                    <button class="btn btn-outline-info" type="button" id="searchModelBtn" title="搜索在线模型" onclick="searchOnlineModels()" style="display:none;">
+                                        🔍
+                                    </button>
+                                    <button class="btn btn-outline-primary" type="button" id="downloadModelBtn" title="下载选中的模型" style="display:none;">
+                                        ⬇️
+                                    </button>
+                                    <button class="btn btn-outline-danger" type="button" id="deleteModelBtn" title="删除选中的本地模型" onclick="deleteBaseModel()" style="display:none;">
+                                        🗑️
+                                    </button>
+                                    <button class="btn btn-outline-secondary" type="button" id="refreshModelBtn" title="刷新本地缓存" onclick="loadModels()">
+                                        🔄
+                                    </button>
                                 </div>
                             </div>
-                            <div class="col-md-4">
-                                <label class="form-label small mb-1">训练数据集：</label>
-                                <div class="input-group input-group-sm">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">训练数据集：</label>
+                                <div class="input-group">
                                     <select class="form-select" id="datasetSelect">
                                         <option value="">加载中...</option>
                                     </select>
-                                    <button class="btn btn-outline-secondary" type="button" id="refreshDatasetBtn">🔄</button>
+                                    <button class="btn btn-outline-secondary" type="button" id="refreshDatasetBtn" title="刷新文件列表">
+                                        🔄
+                                    </button>
                                 </div>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label small mb-1">训练模式：</label>
-                                <select class="form-select form-select-sm" id="trainingModeSelect" onchange="applyTrainingPreset()">
-                                    <option value="local" selected>🖥️ 本地调试</option>
-                                    <option value="online">☁️ 线上训练</option>
-                                </select>
                             </div>
                         </div>
                         
                         <hr class="my-2">
                         
-                        <!-- 训练参数配置 -->
                         <div class="row g-2 mb-2">
-                            <div class="col">
-                                <label class="form-label mb-0 small">学习率</label>
-                                <input type="number" step="0.00001" id="learningRateInput" class="form-control form-control-sm" value="0.0002">
-                            </div>
-                            <div class="col">
-                                <label class="form-label mb-0 small">训练轮数</label>
-                                <input type="number" step="0.1" id="epochsInput" class="form-control form-control-sm" value="2.0">
-                            </div>
-                            <div class="col">
-                                <label class="form-label mb-0 small">批大小</label>
-                                <input type="number" id="batchSizeInput" class="form-control form-control-sm" value="1">
-                            </div>
-                            <div class="col">
-                                <label class="form-label mb-0 small">最大长度</label>
-                                <input type="number" id="maxLengthInput" class="form-control form-control-sm" value="256">
-                            </div>
-                            <div class="col">
-                                <label class="form-label mb-0 small">梯度累积</label>
-                                <input type="number" id="gradAccInput" class="form-control form-control-sm" value="2">
-                            </div>
-                            <div class="col">
-                                <label class="form-label mb-0 small">精度</label>
-                                <select class="form-select form-select-sm" id="precisionSelect">
-                                    <option value="fp16">FP16</option>
-                                    <option value="bf16">BF16</option>
-                                    <option value="fp32" selected>FP32</option>
-                                </select>
-                            </div>
-                            <div class="col">
-                                <label class="form-label mb-0 small">QLoRA</label>
-                                <select class="form-select form-select-sm" id="quantizationSelect">
-                                    <option value="none">不量化</option>
-                                    <option value="8">8-bit</option>
-                                    <option value="4" selected>4-bit</option>
-                                </select>
-                            </div>
-                            <div class="col">
-                                <label class="form-label mb-0 small">优化器</label>
-                                <select class="form-select form-select-sm" id="optimizerSelect">
-                                    <option value="adamw_torch" selected>adamw</option>
-                                    <option value="paged_adamw_32bit">paged</option>
-                                </select>
-                            </div>
-                        </div>
-                        
-                        <!-- 高级配置折叠区 -->
-                        <div class="mb-2">
-                            <a class="text-decoration-none small" data-bs-toggle="collapse" href="#advancedConfig" role="button" aria-expanded="false">
-                                ▶ 高级配置 (LoRA参数、预热、调度器等)
-                            </a>
-                        </div>
-                        <div class="collapse" id="advancedConfig">
-                            <div class="row g-2 mb-2">
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-0">LoRA Rank</label>
-                                    <input type="number" class="form-control form-control-sm" id="loraRankInput" value="8" min="1" max="256">
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-0">LoRA Alpha</label>
-                                    <input type="number" class="form-control form-control-sm" id="loraAlphaInput" value="16" min="1" max="512">
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-0">LoRA Dropout</label>
-                                    <input type="number" class="form-control form-control-sm" id="loraDropoutInput" value="0.1" min="0" max="1" step="0.01">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label small mb-0">LoRA Target</label>
-                                    <select class="form-select form-select-sm" id="loraTargetSelect">
-                                        <option value="all" selected>all</option>
-                                        <option value="q_proj,v_proj">q_proj,v_proj</option>
-                                        <option value="q_proj,k_proj,v_proj,o_proj">qkv</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label small mb-0">调度器</label>
-                                    <select class="form-select form-select-sm" id="lrSchedulerSelect">
-                                        <option value="cosine" selected>cosine</option>
-                                        <option value="linear">linear</option>
-                                        <option value="constant">constant</option>
+                            <div class="col-12">
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <label class="form-label mb-0 text-nowrap fw-bold">训练模式:</label>
+                                    <select class="form-select form-select-sm" id="trainingModeSelect" style="width: auto;" onchange="applyTrainingPreset()">
+                                        <option value="local" selected>🖥️ 本地调试 (流程验证，低资源)</option>
+                                        <option value="online">☁️ 线上训练 (正式训练，高质量)</option>
                                     </select>
                                 </div>
                             </div>
-                            <div class="row g-2 mb-2">
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-0">预热步数</label>
-                                    <input type="number" class="form-control form-control-sm" id="warmupStepsInput" value="0" min="0">
+                                <!-- 训练参数配置 -->
+                                <div class="row g-2 mb-2">
+                                    <div class="col">
+                                        <label class="form-label mb-0 small">学习率</label>
+                                        <input type="number" step="0.00001" id="learningRateInput" class="form-control form-control-sm" value="0.0002">
+                                    </div>
+                                    <div class="col">
+                                        <label class="form-label mb-0 small">训练轮数</label>
+                                        <input type="number" step="0.1" id="epochsInput" class="form-control form-control-sm" value="2.0">
+                                    </div>
+                                    <div class="col">
+                                        <label class="form-label mb-0 small">批大小</label>
+                                        <input type="number" id="batchSizeInput" class="form-control form-control-sm" value="1">
+                                    </div>
+                                    <div class="col">
+                                        <label class="form-label mb-0 small">最大长度</label>
+                                        <input type="number" id="maxLengthInput" class="form-control form-control-sm" value="256">
+                                    </div>
+                                    <div class="col">
+                                        <label class="form-label mb-0 small">梯度累积</label>
+                                        <input type="number" id="gradAccInput" class="form-control form-control-sm" value="2">
+                                    </div>
+                                    <div class="col">
+                                        <label class="form-label mb-0 small">精度</label>
+                                        <select class="form-select form-select-sm" id="precisionSelect">
+                                            <option value="fp16">FP16</option>
+                                            <option value="bf16">BF16</option>
+                                            <option value="fp32" selected>FP32</option>
+                                        </select>
+                                    </div>
+                                    <div class="col">
+                                        <label class="form-label mb-0 small">QLoRA</label>
+                                        <select class="form-select form-select-sm" id="quantizationSelect">
+                                            <option value="none">不量化</option>
+                                            <option value="8">8-bit</option>
+                                            <option value="4" selected>4-bit</option>
+                                        </select>
+                                    </div>
+                                    <div class="col">
+                                        <label class="form-label mb-0 small">优化器</label>
+                                        <select class="form-select form-select-sm" id="optimizerSelect">
+                                            <option value="adamw_torch" selected>adamw</option>
+                                            <option value="paged_adamw_32bit">paged</option>
+                                        </select>
+                                    </div>
                                 </div>
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-0">预热比率</label>
-                                    <input type="number" class="form-control form-control-sm" id="warmupRatioInput" value="0.1" min="0" max="1" step="0.01">
+                                <!-- 高级配置折叠区 -->
+                                <div class="mb-2">
+                                    <a class="text-decoration-none small" data-bs-toggle="collapse" href="#advancedConfig" role="button" aria-expanded="false">
+                                        ▶ 高级配置 (LoRA参数、预热、调度器等)
+                                    </a>
                                 </div>
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-0">日志步数</label>
-                                    <input type="number" class="form-control form-control-sm" id="loggingStepsInput" value="1" min="1">
+                                <div class="collapse" id="advancedConfig">
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-md-2">
+                                            <label class="form-label small mb-0">LoRA Rank</label>
+                                            <input type="number" class="form-control form-control-sm" id="loraRankInput" value="8" min="1" max="256">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label small mb-0">LoRA Alpha</label>
+                                            <input type="number" class="form-control form-control-sm" id="loraAlphaInput" value="16" min="1" max="512">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label small mb-0">LoRA Dropout</label>
+                                            <input type="number" class="form-control form-control-sm" id="loraDropoutInput" value="0.1" min="0" max="1" step="0.01">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label small mb-0">LoRA Target</label>
+                                            <select class="form-select form-select-sm" id="loraTargetSelect">
+                                                <option value="all" selected>all (推荐)</option>
+                                                <option value="q_proj,v_proj">q_proj,v_proj</option>
+                                                <option value="q_proj,k_proj,v_proj,o_proj">q_proj,k_proj,v_proj,o_proj</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label small mb-0">学习率调度器</label>
+                                            <select class="form-select form-select-sm" id="lrSchedulerSelect">
+                                                <option value="cosine" selected>cosine (推荐)</option>
+                                                <option value="linear">linear</option>
+                                                <option value="constant">constant</option>
+                                                <option value="constant_with_warmup">constant_with_warmup</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-md-2">
+                                            <label class="form-label small mb-0">预热步数</label>
+                                            <input type="number" class="form-control form-control-sm" id="warmupStepsInput" value="0" min="0">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label small mb-0">预热比率</label>
+                                            <input type="number" class="form-control form-control-sm" id="warmupRatioInput" value="0.1" min="0" max="1" step="0.01">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label small mb-0">日志步数</label>
+                                            <input type="number" class="form-control form-control-sm" id="loggingStepsInput" value="1" min="1">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label small mb-0">权重衰减</label>
+                                            <input type="number" class="form-control form-control-sm" id="weightDecayInput" value="0.0" min="0" max="1" step="0.001">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label small mb-0">梯度裁剪</label>
+                                            <input type="number" class="form-control form-control-sm" id="maxGradNormInput" value="1.0" min="0" step="0.1">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label small mb-0">随机种子</label>
+                                            <input type="number" class="form-control form-control-sm" id="seedInput" value="42" min="0">
+                                        </div>
+                                    </div>
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-md-3">
+                                            <label class="form-label small mb-0">序列打包</label>
+                                            <select class="form-select form-select-sm" id="packingSelect">
+                                                <option value="false" selected>关闭</option>
+                                                <option value="true">开启</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label small mb-0">RoPE缩放</label>
+                                            <select class="form-select form-select-sm" id="ropeScalingSelect">
+                                                <option value="none" selected>不使用</option>
+                                                <option value="linear">linear</option>
+                                                <option value="dynamic">dynamic</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label small mb-0">DeepSpeed</label>
+                                            <select class="form-select form-select-sm" id="deepspeedSelect">
+                                                <option value="none" selected>不使用</option>
+                                                <option value="zero2">ZeRO-2</option>
+                                                <option value="zero3">ZeRO-3</option>
+                                            </select>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-0">权重衰减</label>
-                                    <input type="number" class="form-control form-control-sm" id="weightDecayInput" value="0.0" min="0" max="1" step="0.001">
+                                <div class="d-flex gap-2 mb-2 align-items-center">
+                                    <button class="btn btn-primary btn-sm flex-grow-1" id="startFinetuneBtn" onclick="startFinetune()">开始教师微调任务</button>
+                                    <button class="btn btn-danger btn-sm d-none" id="stopFinetuneBtn" onclick="stopFinetune()">终止训练</button>
+                                    <button class="btn btn-sm btn-outline-info" type="button" id="openTbBtn" onclick="openTensorBoardModal()">
+                                        📈 实时监控 (TensorBoard)
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="$('#terminalOutput').empty()">清屏</button>
                                 </div>
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-0">梯度裁剪</label>
-                                    <input type="number" class="form-control form-control-sm" id="maxGradNormInput" value="1.0" min="0" step="0.1">
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-0">随机种子</label>
-                                    <input type="number" class="form-control form-control-sm" id="seedInput" value="42" min="0">
+                                
+                                <div class="flex-grow-1 bg-dark text-light p-2 rounded overflow-auto" id="terminalOutput" style="font-family: monospace; font-size: 0.85rem; height: 150px;">
+                                    > 准备就绪... 等待分配教师模型微调任务。
                                 </div>
                             </div>
-                        </div>
-                        
-                        <div class="d-flex gap-2 mb-2 align-items-center">
-                            <button class="btn btn-primary btn-sm flex-grow-1" id="startFinetuneBtn" onclick="startFinetune()">开始教师微调任务</button>
-                            <button class="btn btn-danger btn-sm d-none" id="stopFinetuneBtn" onclick="stopFinetune()">终止训练</button>
-                            <button class="btn btn-sm btn-outline-info" type="button" id="openTbBtn" onclick="openTensorBoardModal()">📈 TensorBoard</button>
-                            <button class="btn btn-sm btn-outline-secondary" onclick="$('#terminalOutput').empty()">清屏</button>
-                        </div>
-                        
-                        <div class="bg-dark text-light p-2 rounded overflow-auto" id="terminalOutput" style="font-family: monospace; font-size: 0.8rem; height: 120px;">
-                            > 准备就绪... 等待分配教师模型微调任务。
                         </div>
                     </div>
                 </div>
