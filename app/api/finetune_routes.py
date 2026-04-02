@@ -263,6 +263,8 @@ def get_finetuned_models():
     merged_models = []
     # LoRA 适配器模型（可用于量化）
     lora_models = []
+    # 量化模型（AWQ / GPTQ）
+    quantized_models = []
     # 其他模型
     other_models = []
 
@@ -274,24 +276,65 @@ def get_finetuned_models():
                 if d in ['base_models', 'runs']:
                     continue
                 # 分类模型（优先按后缀判断，保持向后兼容）
-                if d.endswith('_merged'):
-                    merged_models.append(d)
+                if d.endswith('_awq_4bit') or '_awq_' in d:
+                    quantized_models.append({
+                        'name': d,
+                        'type': 'quantized_awq',
+                        'path': full_path
+                    })
+                elif d.endswith('_gptq') or '_gptq_' in d:
+                    quantized_models.append({
+                        'name': d,
+                        'type': 'quantized_gptq',
+                        'path': full_path
+                    })
+                elif d.endswith('_merged'):
+                    merged_models.append({
+                        'name': d,
+                        'type': 'merged',
+                        'path': full_path
+                    })
                 elif d.endswith('_lora'):
-                    lora_models.append(d)
+                    lora_models.append({
+                        'name': d,
+                        'type': 'lora',
+                        'path': full_path
+                    })
                 else:
                     # 对无后缀的模型进行智能检测
                     if is_complete_model(full_path):
-                        merged_models.append(d)
+                        merged_models.append({
+                            'name': d,
+                            'type': 'merged',
+                            'path': full_path
+                        })
                     elif is_lora_adapter(full_path):
-                        lora_models.append(d)
+                        lora_models.append({
+                            'name': d,
+                            'type': 'lora',
+                            'path': full_path
+                        })
                     else:
-                        other_models.append(d)
+                        other_models.append({
+                            'name': d,
+                            'type': 'other',
+                            'path': full_path
+                        })
+
+    # 兼容旧接口：提取纯字符串名称列表
+    all_names = (
+        [m['name'] for m in merged_models]
+        + [m['name'] for m in lora_models]
+        + [m['name'] for m in quantized_models]
+        + [m['name'] for m in other_models]
+    )
 
     return jsonify({
-        'merged_models': merged_models,  # 已合并的完整模型（适合作为教师模型）
-        'lora_models': lora_models,      # LoRA 适配器模型
-        'other_models': other_models,    # 其他模型
-        'models': merged_models + lora_models + other_models  # 兼容旧接口
+        'merged_models': merged_models,      # 已合并的完整模型（适合作为教师模型）
+        'lora_models': lora_models,          # LoRA 适配器模型
+        'quantized_models': quantized_models, # 量化模型（AWQ/GPTQ）
+        'other_models': other_models,        # 其他模型
+        'models': all_names                  # 兼容旧接口（纯字符串列表）
     })
 
 
@@ -1338,8 +1381,10 @@ def start_distillation():
                 
                 yield f"data: > [INFO] 找到学生模型路径: {student_path}\n\n"
                 
-                # 生成蒸馏后模型名称
-                distilled_name = f"{student_name}_distilled_by_{teacher_model}"
+                # 生成蒸馏后模型名称（只使用模型名，不包含路径）
+                teacher_name = os.path.basename(teacher_path.rstrip('/\\'))
+                student_name_only = os.path.basename(student_path.rstrip('/\\'))
+                distilled_name = f"{student_name_only}_distilled_by_{teacher_name}"
                 output_dir = os.path.join(models_dir, distilled_name)
                 os.makedirs(output_dir, exist_ok=True)
                 
@@ -1581,13 +1626,23 @@ def start_distillation():
                     'report_to': 'none',
                     'low_cpu_mem_usage': True,
                     'trust_remote_code': True,
-                    # 蒸馏特定配置
+                    # 蒸馏特定配置 - 只保留 LLaMA-Factory 认识的标准参数
                     'temperature': temperature,
                     'do_train': True,
-                    # 添加蒸馏损失权重配置（如果 LLaMA-Factory 支持）
-                    'distill_loss_weight': loss_weight,
-                    'teacher_logits_path': logits_cache_path,  # 教师 logits 缓存路径
                 }
+                
+                # 保存蒸馏元数据（LLaMA-Factory 不认识的自定义参数）
+                distill_metadata = {
+                    'distill_loss_weight': loss_weight,
+                    'teacher_logits_path': logits_cache_path,
+                    'temperature': temperature,
+                    'teacher_model': teacher_model,
+                    'student_model': student_model,
+                    'strategy': strategy,
+                }
+                metadata_path = os.path.join(output_dir, 'distill_metadata.json')
+                with open(metadata_path, 'w', encoding='utf-8') as f:
+                    json.dump(distill_metadata, f, ensure_ascii=False, indent=2)
                 
                 # 创建自定义蒸馏训练脚本（如果需要完整的 KL 散度支持）
                 distill_script_path = os.path.join(output_dir, 'distill_train.py')
@@ -2295,3 +2350,49 @@ def list_deployments():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/api/task/status', methods=['GET'])
+def get_task_status():
+    """查询各阶段任务运行状态"""
+    from app.api.common import active_finetune_processes
+    
+    status = {
+        'finetune': {'running': False, 'details': None},
+        'distill': {'running': False, 'details': None},
+        'quantize': {'running': False, 'details': None},
+        'deploy': {'running': False, 'services': []}
+    }
+    
+    # 检查微调进程
+    if 'current' in active_finetune_processes:
+        proc = active_finetune_processes['current']
+        if proc and proc.poll() is None:  # 进程仍在运行
+            status['finetune'] = {
+                'running': True,
+                'details': {
+                    'task_id': 'current',
+                    'model': active_finetune_processes.get('model_name', ''),
+                    'start_time': active_finetune_processes.get('start_time', '')
+                }
+            }
+    
+    # 检查vLLM部署进程
+    dead_services = []
+    for service_id, info in list(active_vllm_processes.items()):
+        proc = info.get('process')
+        if proc and proc.poll() is None:  # 运行中
+            status['deploy']['running'] = True
+            status['deploy']['services'].append({
+                'service_id': service_id,
+                'model': info.get('model', ''),
+                'port': info.get('port', 8000)
+            })
+        else:
+            dead_services.append(service_id)
+    
+    # 清理已死进程
+    for sid in dead_services:
+        del active_vllm_processes[sid]
+    
+    return jsonify(status)

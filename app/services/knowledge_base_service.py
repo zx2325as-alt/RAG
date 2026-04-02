@@ -54,6 +54,10 @@ class KnowledgeBaseService:
         self.reranker_model.to(self.device)
         self.reranker_model.eval()
         
+        # 打印GPU设备信息
+        print(f"[KnowledgeBase] Embedding device: {'cuda' if torch.cuda.is_available() else 'cpu'}")
+        print(f"[KnowledgeBase] Reranker device: {self.device}")
+        
         self.vector_store = None
         self.bm25 = None
         self.chunk_map = {} # Map chunk_id to Chunk object for BM25
@@ -148,6 +152,18 @@ class KnowledgeBaseService:
     def build_bm25_index(self, db_name='default'):
         """Build BM25 index from DB chunks for specific db_name."""
         from app.db.models import Document, Chunk
+        from flask import has_app_context
+        
+        # 确保在应用上下文中执行数据库查询
+        if not has_app_context():
+            from app.main import app
+            with app.app_context():
+                return self._build_bm25_index_impl(db_name)
+        return self._build_bm25_index_impl(db_name)
+    
+    def _build_bm25_index_impl(self, db_name='default'):
+        """BM25索引构建的实际实现"""
+        from app.db.models import Document, Chunk
         try:
             chunks = Chunk.query.join(Document).filter(Document.db_name == db_name).all()
             if not chunks:
@@ -183,6 +199,17 @@ class KnowledgeBaseService:
             doc_id: 要移除的文档ID
             db_name: 知识库名称
         """
+        from flask import has_app_context
+        
+        # 确保在应用上下文中执行数据库查询
+        if not has_app_context():
+            from app.main import app
+            with app.app_context():
+                return self._remove_from_bm25_index_impl(doc_id, db_name)
+        return self._remove_from_bm25_index_impl(doc_id, db_name)
+    
+    def _remove_from_bm25_index_impl(self, doc_id, db_name='default'):
+        """从BM25索引中移除文档的实际实现"""
         from app.db.models import Document, Chunk
         try:
             # 获取该知识库下当前所有有效的chunks（排除被删除文档的chunks）
@@ -218,6 +245,17 @@ class KnowledgeBaseService:
 
     def build_index(self, db_name='default'):
         """Build index from all chunks in specific DB."""
+        from flask import has_app_context
+        
+        # 确保在应用上下文中执行数据库查询
+        if not has_app_context():
+            from app.main import app
+            with app.app_context():
+                return self._build_index_impl(db_name)
+        return self._build_index_impl(db_name)
+    
+    def _build_index_impl(self, db_name='default'):
+        """构建索引的实际实现"""
         from app.db.models import Document, Chunk
         chunks = Chunk.query.join(Document).filter(Document.db_name == db_name).all()
         if not chunks:
@@ -275,6 +313,18 @@ class KnowledgeBaseService:
         }
         
         db_index_path = self.get_index_path(db_name)
+        
+        # FAISS GPU索引需转回CPU才能保存
+        try:
+            import faiss
+            if hasattr(faiss, 'index_gpu_to_cpu') and hasattr(vs.index, 'getDevice'):
+                try:
+                    vs.index = faiss.index_gpu_to_cpu(vs.index)
+                except:
+                    pass  # 已在CPU上，忽略
+        except Exception:
+            pass
+        
         vs.save_local(db_index_path)
         print(f"Index saved to {db_index_path}")
         
@@ -303,6 +353,12 @@ class KnowledgeBaseService:
         - > 10000条: IndexIVFPQ (乘积量化，大幅降低内存)
         """
         import faiss
+        
+        # 检测FAISS GPU支持
+        try:
+            faiss_gpu_available = hasattr(faiss, 'get_num_gpus') and faiss.get_num_gpus() > 0
+        except:
+            faiss_gpu_available = False
         
         num_docs = len(documents)
         print(f"Building adaptive FAISS index for {num_docs} documents...")
@@ -340,6 +396,15 @@ class KnowledgeBaseService:
             # 替换索引
             vs.index = ivf_index
             
+            # 尝试将索引转移到GPU
+            if faiss_gpu_available:
+                try:
+                    res = faiss.StandardGpuResources()
+                    vs.index = faiss.index_cpu_to_gpu(res, 0, vs.index)
+                    print(f"FAISS index transferred to GPU")
+                except Exception as e:
+                    print(f"FAISS GPU transfer failed, keeping CPU: {e}")
+            
         else:
             # 大数据量：使用PQ乘积量化
             print(f"Using IndexIVFPQ (product quantization) for large dataset")
@@ -365,6 +430,15 @@ class KnowledgeBaseService:
             ivfpq_index.add(embeddings)
             
             vs.index = ivfpq_index
+            
+            # 尝试将索引转移到GPU
+            if faiss_gpu_available:
+                try:
+                    res = faiss.StandardGpuResources()
+                    vs.index = faiss.index_cpu_to_gpu(res, 0, vs.index)
+                    print(f"FAISS index transferred to GPU")
+                except Exception as e:
+                    print(f"FAISS GPU transfer failed, keeping CPU: {e}")
         
         return vs
     
@@ -790,7 +864,7 @@ class KnowledgeBaseService:
             if doc_key in self._query_embedding_cache:
                 doc_embedding = self._query_embedding_cache[doc_key]
             else:
-                doc_embedding = self.embeddings.embed_query(doc.page_content[:500])
+                doc_embedding = self.embeddings.embed_query(doc.page_content[:1000])
                 self._query_embedding_cache[doc_key] = doc_embedding
             
             # 检查是否与已有结果相似
@@ -855,7 +929,7 @@ class KnowledgeBaseService:
         elif intent['is_troubleshooting']:
             vector_k, bm25_k = 50, 40  # 故障排查：平衡两者
         else:
-            vector_k, bm25_k = 60, 30  # 默认：多向量，少BM25
+            vector_k, bm25_k = 60, 50  # 默认：多向量，多BM25
         
         for db_name in db_names:
             vs = self.vector_stores.get(db_name)
@@ -931,11 +1005,11 @@ class KnowledgeBaseService:
                         doc = LangchainDocument(page_content=chunk.content, metadata=meta)
                         all_bm25_results.append((doc, float(doc_scores[idx])))
                         
-        # 3. 语义去重：对各自检索结果先去重（降低阈值以更积极地去除近重复结果）
+        # 3. 语义去重：对各自检索结果先去重（阈值设为0.95，只去掉真正重复的，保留相关但不同的）
         vector_before = len(all_vector_results)
         bm25_before = len(all_bm25_results)
-        all_vector_results = self._semantic_deduplicate(all_vector_results, threshold=0.90)
-        all_bm25_results = self._semantic_deduplicate(all_bm25_results, threshold=0.90)
+        all_vector_results = self._semantic_deduplicate(all_vector_results, threshold=0.95)
+        all_bm25_results = self._semantic_deduplicate(all_bm25_results, threshold=0.95)
         print(f"Semantic dedup: Vector {vector_before} -> {len(all_vector_results)}, BM25 {bm25_before} -> {len(all_bm25_results)}")
         
         # 4. 自适应 RRF Fusion (Reciprocal Rank Fusion) - 使用动态权重
@@ -1007,7 +1081,7 @@ class KnowledgeBaseService:
         # 提取图谱结果（已在融合中）
         graph_items = [item for item in sorted_results if "graph" in item.get("sources", [])]
         # 统一格式为 (doc, score) 元组，score 使用融合的 RR F 分数
-        graph_docs = [(item["doc"], item["score"]) for item in graph_items[:5]]  # 最多保留5个图谱结果
+        graph_docs = [(item["doc"], item["score"]) for item in graph_items[:10]]  # 最多保留10个图谱结果
         
         # Reranker 缓存机制 (简单的内存缓存，生产环境可用 Redis)
         if hasattr(self, 'reranker_cache') is False:
@@ -1024,13 +1098,13 @@ class KnowledgeBaseService:
         reranked_results = []
         if top_fused:
             # 上下文动态截断：智能保留关键信息，避免Token超限
-            max_tokens = 400  # 约500字符
+            max_tokens = 600  # 约750字符
             truncated_docs = []
             for doc in top_fused:
                 truncated_content = self._smart_truncate_text(
-                    doc.page_content, 
+                    doc.page_content,
                     max_tokens=max_tokens,
-                    preserve_ratio=0.3  # 保留30%开头
+                    preserve_ratio=0.4  # 保留40%开头
                 )
                 # 创建新文档对象（不修改原对象）
                 truncated_doc = LangchainDocument(
@@ -1093,7 +1167,7 @@ class KnowledgeBaseService:
                 if content_hash not in seen_content:
                     seen_content.add(content_hash)
                     final_results.append((doc, score))
-                if len(final_results) >= top_k * 2:  # 保留更多候选
+                if len(final_results) >= top_k * 3:  # 保留更多候选
                     break
             
             # 3. 如果结果太少，从融合结果中补充（统一为 (doc, score) 格式）

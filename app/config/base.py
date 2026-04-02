@@ -61,3 +61,8 @@ class BaseConfig:
     
     # Hugging Face 模型下载与存放目录
     HF_MODEL_DIR = os.getenv('HF_MODEL_DIR', os.path.join(BASE_DIR, 'hugface'))
+    
+    # GPU/CUDA 加速配置
+    CUDA_ENABLED = os.getenv('CUDA_ENABLED', 'true').lower() == 'true'
+    CUDA_DEVICE_ID = int(os.getenv('CUDA_DEVICE_ID', '0'))
+    FAISS_GPU_MODE = os.getenv('FAISS_GPU_MODE', 'true').lower() == 'true'

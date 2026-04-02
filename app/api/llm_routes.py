@@ -89,6 +89,20 @@ def download_model():
         return jsonify({'error': str(e)}), 500
 
 
+def _get_model_type(model_name):
+    """根据模型名称后缀识别模型类型"""
+    if '_awq_4bit' in model_name or '_awq_' in model_name:
+        return 'quantized_awq'
+    elif '_gptq' in model_name:
+        return 'quantized_gptq'
+    elif model_name.endswith('_merged'):
+        return 'merged'
+    elif model_name.endswith('_lora'):
+        return 'lora'
+    else:
+        return 'finetuned'
+
+
 @api_bp.route('/ollama/models', methods=['GET'])
 def get_ollama_models():
     """获取本地 Ollama 或 vLLM 或 HuggingFace 正在运行/缓存的模型列表"""
@@ -96,6 +110,21 @@ def get_ollama_models():
         ollama_models_list = []
         vllm_models_list = []
         hf_models_list = []
+        vllm_models_detail = []
+        hf_models_detail = []
+
+        # 尝试从 finetune_routes 导入 active_vllm_processes（懒导入）
+        deployed_models = set()
+        try:
+            from app.api.finetune_routes import active_vllm_processes
+            for service_id, info in active_vllm_processes.items():
+                model_path = info.get('model_path', '')
+                if model_path:
+                    # 从路径中提取模型名
+                    model_name = os.path.basename(model_path)
+                    deployed_models.add(model_name)
+        except Exception:
+            pass
 
         try:
             response = requests.get(f"{Config.OLLAMA_BASE_URL}/api/tags", timeout=1)
@@ -108,6 +137,8 @@ def get_ollama_models():
         except Exception as e:
             current_app.logger.debug(f"Ollama 模型列表解析异常: {e}")
 
+        # 从 vLLM API 获取已部署的模型
+        vllm_api_models = set()
         try:
             vllm_base = Config.VLLM_API_URL.split('/chat/completions')[0]
             if not vllm_base.endswith('/v1'):
@@ -117,22 +148,46 @@ def get_ollama_models():
             if vllm_resp.status_code == 200:
                 vllm_models = vllm_resp.json().get('data', [])
                 vllm_models_list.extend([f"vllm: {m['id']}" for m in vllm_models if 'id' in m])
+                vllm_api_models.update(m['id'] for m in vllm_models if 'id' in m)
+                # 添加 detail 信息
+                for m in vllm_models:
+                    if 'id' in m:
+                        model_name = m['id']
+                        vllm_models_detail.append({
+                            'name': f"vllm: {model_name}",
+                            'raw_name': model_name,
+                            'type': 'base',  # 从API获取的通常是基座模型
+                            'deployed': True
+                        })
         except requests.exceptions.RequestException:
             pass
         except Exception as e:
             current_app.logger.debug(f"vLLM 模型列表解析异常: {e}")
 
+        # 扫描本地 finetuned_models 目录
         try:
             models_dir = os.path.join(current_app.root_path, '..', 'finetuned_models')
             if os.path.exists(models_dir):
                 for d in os.listdir(models_dir):
-                    if os.path.isdir(os.path.join(models_dir, d)) and d not in ['base_models', 'runs'] and not d.endswith('_lora') and not d.endswith('_merged'):
+                    full_path = os.path.join(models_dir, d)
+                    if os.path.isdir(full_path) and d not in ['base_models', 'runs'] and not d.endswith('_lora') and not d.endswith('_merged'):
                         vllm_tag = f"vllm: {d}"
                         if vllm_tag not in vllm_models_list:
                             vllm_models_list.append(vllm_tag)
+                        
+                        # 添加 detail 信息
+                        model_type = _get_model_type(d)
+                        is_deployed = d in deployed_models or d in vllm_api_models
+                        vllm_models_detail.append({
+                            'name': vllm_tag,
+                            'raw_name': d,
+                            'type': model_type,
+                            'deployed': is_deployed
+                        })
         except Exception as e:
             current_app.logger.debug(f"扫描本地离线 vLLM 目录失败: {e}")
 
+        # 扫描本地 HuggingFace 目录
         try:
             hf_dir = os.path.join(current_app.root_path, '..', 'hugface')
             if os.path.exists(hf_dir):
@@ -142,6 +197,12 @@ def get_ollama_models():
                         if any(f.endswith('.json') or f.endswith('.safetensors') for f in os.listdir(model_path)):
                             original_id = d.replace('--', '/')
                             hf_models_list.append(original_id)
+                            # 添加 detail 信息
+                            hf_models_detail.append({
+                                'name': original_id,
+                                'type': 'hf_local',
+                                'path': f"hugface/{d}"
+                            })
         except Exception as e:
             current_app.logger.debug(f"扫描本地 HF 目录失败: {e}")
 
@@ -188,13 +249,24 @@ def get_ollama_models():
             'ollama_models': ollama_models_list,
             'vllm_models': vllm_models_list,
             'hf_models': hf_models_list,
+            'vllm_models_detail': vllm_models_detail,
+            'hf_models_detail': hf_models_detail,
             'online_models': online_models,
             'query_online_models': Config.ONLINE_QUERY_MODELS
         })
 
     except Exception as e:
         current_app.logger.error(f'Error fetching models: {str(e)}')
-        return jsonify({'models': [], 'ollama_models': [], 'vllm_models': [], 'hf_models': [], 'online_models': [], 'query_online_models': Config.ONLINE_QUERY_MODELS})
+        return jsonify({
+            'models': [],
+            'ollama_models': [],
+            'vllm_models': [],
+            'hf_models': [],
+            'vllm_models_detail': [],
+            'hf_models_detail': [],
+            'online_models': [],
+            'query_online_models': Config.ONLINE_QUERY_MODELS
+        })
 
 
 @api_bp.route('/api/search_models', methods=['GET'])

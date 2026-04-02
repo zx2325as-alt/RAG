@@ -16,8 +16,8 @@
                 displayMath: [['$$', '$$'], ['\\[', '\\]']],
                 packages: {'[+]': ['ams', 'amsmath', 'amssymbols']},
                 macros: {
-                    text: ['\\text{#1}', 1],
-                    mathbb: ['\\mathbb{#1}', 1]
+                    text: ['\\text{% raw %}{#1}{% endraw %}', 1],
+                    mathbb: ['\\mathbb{% raw %}{#1}{% endraw %}', 1]
                 },
                 processEscapes: true,
                 processEnvironments: true

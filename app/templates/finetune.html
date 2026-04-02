@@ -607,6 +607,7 @@
             let cachedFinetuneModels = {
                 ollama: [],
                 vllm: [],
+                vllm_detail: [],  // 新增：包含详细信息的vLLM模型列表
                 hf: [],
                 online: []
             };
@@ -619,32 +620,73 @@
                 var input = $('#baseModelSelect');
                 datalist.empty();
                 
-                var models = cachedFinetuneModels[category] || [];
-                
-                // 如果是 hf 类别，只显示已下载的模型
-                if (category === 'hf') {
-                    if (models.length > 0) {
-                        models.forEach(function(model) {
-                            datalist.append(`<option value="${model}">${model}</option>`);
-                        });
-                        input.attr('placeholder', '请选择已下载的模型...');
+                // 如果是 vllm 类别，使用带详细信息的列表
+                if (category === 'vllm') {
+                    var details = cachedFinetuneModels.vllm_detail || [];
+                    
+                    if (details.length > 0) {
+                        // 分组显示
+                        var deployedModels = details.filter(m => m.deployed);
+                        var localFinetuned = details.filter(m => !m.deployed && (m.type === 'finetuned' || m.type === 'merged'));
+                        var hfModels = details.filter(m => !m.deployed && m.type === 'base');
+                        
+                        // 已部署模型组
+                        if (deployedModels.length > 0) {
+                            deployedModels.forEach(function(model) {
+                                var typeLabel = MODEL_TYPE_LABELS[model.type] || '';
+                                var label = `🟢 ${model.name} ${typeLabel}`.trim();
+                                datalist.append(`<option value="${model.raw_name || model.name}" data-type="${model.type}">${label}</option>`);
+                            });
+                        }
+                        
+                        // 本地微调模型组
+                        if (localFinetuned.length > 0) {
+                            localFinetuned.forEach(function(model) {
+                                var typeLabel = MODEL_TYPE_LABELS[model.type] || '';
+                                var label = `${model.name} ${typeLabel}`.trim();
+                                datalist.append(`<option value="${model.raw_name || model.name}" data-type="${model.type}">${label}</option>`);
+                            });
+                        }
+                        
+                        // HuggingFace模型组
+                        if (hfModels.length > 0) {
+                            hfModels.forEach(function(model) {
+                                datalist.append(`<option value="${model.raw_name || model.name}" data-type="${model.type}">${model.name}</option>`);
+                            });
+                        }
+                        
+                        input.attr('placeholder', '请选择或输入模型ID...');
                     } else {
-                        input.attr('placeholder', '暂无本地模型，请到"在线模型"下载...');
+                        input.attr('placeholder', '无可用模型，可手动输入...');
                     }
-                } else if (category === 'online') {
-                    if (models.length > 0) {
+                } else {
+                    var models = cachedFinetuneModels[category] || [];
+                    
+                    // 如果是 hf 类别，只显示已下载的模型
+                    if (category === 'hf') {
+                        if (models.length > 0) {
+                            models.forEach(function(model) {
+                                datalist.append(`<option value="${model}">${model}</option>`);
+                            });
+                            input.attr('placeholder', '请选择已下载的模型...');
+                        } else {
+                            input.attr('placeholder', '暂无本地模型，请到"在线模型"下载...');
+                        }
+                    } else if (category === 'online') {
+                        if (models.length > 0) {
+                            models.forEach(function(model) {
+                                datalist.append(`<option value="${model}">${model}</option>`);
+                            });
+                        }
+                        input.attr('placeholder', '输入关键词搜索模型（如 Qwen、LLaMA）...');
+                    } else if (models.length > 0) {
                         models.forEach(function(model) {
                             datalist.append(`<option value="${model}">${model}</option>`);
                         });
+                        input.attr('placeholder', '请选择或输入模型ID...');
+                    } else {
+                        input.attr('placeholder', '无可用模型，可手动输入...');
                     }
-                    input.attr('placeholder', '输入关键词搜索模型（如 Qwen、LLaMA）...');
-                } else if (models.length > 0) {
-                    models.forEach(function(model) {
-                        datalist.append(`<option value="${model}">${model}</option>`);
-                    });
-                    input.attr('placeholder', '请选择或输入模型ID...');
-                } else {
-                    input.attr('placeholder', '无可用模型，可手动输入...');
                 }
                 
                 // 清空当前输入值，除非用户想保留
@@ -759,6 +801,7 @@
                     success: function(response) {
                         cachedFinetuneModels.ollama = response.ollama_models || [];
                         cachedFinetuneModels.vllm = response.vllm_models || [];
+                        cachedFinetuneModels.vllm_detail = response.vllm_models_detail || [];
                         cachedFinetuneModels.hf = response.hf_models || [];
                         cachedFinetuneModels.online = response.online_models || [];
                         updateBaseModelOptions();
@@ -766,6 +809,7 @@
                     error: function() {
                         cachedFinetuneModels.ollama = [];
                         cachedFinetuneModels.vllm = [];
+                        cachedFinetuneModels.vllm_detail = [];
                         cachedFinetuneModels.hf = [];
                         cachedFinetuneModels.online = [];
                         updateBaseModelOptions();
@@ -922,6 +966,7 @@
             
             // 加载微调过的模型列表，供第三、四阶段选择
             function loadFinetunedModels() {
+                // 同时获取微调模型列表和vLLM部署模型列表
                 $.ajax({
                     url: '/finetuned_models_list',
                     type: 'GET',
@@ -931,30 +976,114 @@
                         teacherSelect.empty();
                         quantizeSelect.empty();
                         
-                        // 教师模型：使用已合并的完整模型
-                        var mergedModels = res.merged_models || [];
-                        if (mergedModels.length > 0) {
-                            mergedModels.forEach(function(m) {
-                                teacherSelect.append(`<option value="${m}">${m} (完整模型)</option>`);
-                            });
-                        } else {
-                            teacherSelect.append('<option value="">未找到已合并的模型（请先完成微调并合并）</option>');
-                        }
+                        // ========== 教师模型选项 ==========
+                        // 1. 已部署的vLLM模型（从ollama/models获取）
+                        $.ajax({
+                            url: '/ollama/models',
+                            type: 'GET',
+                            success: function(vllmRes) {
+                                var vllmDetails = vllmRes.vllm_models_detail || [];
+                                var deployedModels = vllmDetails.filter(m => m.deployed);
+                                
+                                // 已部署模型组
+                                if (deployedModels.length > 0) {
+                                    var deployedGroup = $('<optgroup label="已部署模型"></optgroup>');
+                                    deployedModels.forEach(function(model) {
+                                        var typeLabel = MODEL_TYPE_LABELS[model.type] || '';
+                                        var label = `🟢 ${model.name} ${typeLabel}`.trim();
+                                        deployedGroup.append(`<option value="${model.raw_name || model.name}">${label}</option>`);
+                                    });
+                                    teacherSelect.append(deployedGroup);
+                                }
+                                
+                                // 2. 已合并的完整模型组
+                                var mergedModels = res.merged_models || [];
+                                if (mergedModels.length > 0) {
+                                    var mergedGroup = $('<optgroup label="已合并模型"></optgroup>');
+                                    mergedModels.forEach(function(m) {
+                                        var modelName = (typeof m === 'object') ? m.name : m;
+                                        var modelPath = (typeof m === 'object') ? (m.path || m.name) : m;
+                                        mergedGroup.append(`<option value="${modelPath}">${modelName} (完整模型)</option>`);
+                                    });
+                                    teacherSelect.append(mergedGroup);
+                                }
+                                
+                                // 3. 量化模型组
+                                var quantizedModels = res.quantized_models || [];
+                                if (quantizedModels.length > 0) {
+                                    var quantizedGroup = $('<optgroup label="量化模型"></optgroup>');
+                                    quantizedModels.forEach(function(m) {
+                                        var typeLabel = MODEL_TYPE_LABELS[m.type] || '';
+                                        quantizedGroup.append(`<option value="${m.path || m.name}">${m.name} ${typeLabel}</option>`);
+                                    });
+                                    teacherSelect.append(quantizedGroup);
+                                }
+                                
+                                // 4. LoRA模型组
+                                var loraModels = res.lora_models || [];
+                                if (loraModels.length > 0) {
+                                    var loraGroup = $('<optgroup label="LoRA模型"></optgroup>');
+                                    loraModels.forEach(function(m) {
+                                        var modelName = (typeof m === 'object') ? m.name : m;
+                                        var modelPath = (typeof m === 'object') ? (m.path || m.name) : m;
+                                        loraGroup.append(`<option value="${modelPath}">${modelName} (LoRA)</option>`);
+                                    });
+                                    teacherSelect.append(loraGroup);
+                                }
+                                
+                                if (teacherSelect.children().length === 0) {
+                                    teacherSelect.append('<option value="">未找到可用的教师模型</option>');
+                                }
+                            },
+                            error: function() {
+                                // 如果获取vLLM模型失败，只显示微调模型
+                                var mergedModels = res.merged_models || [];
+                                if (mergedModels.length > 0) {
+                                    mergedModels.forEach(function(m) {
+                                        var modelName = (typeof m === 'object') ? m.name : m;
+                                        var modelPath = (typeof m === 'object') ? (m.path || m.name) : m;
+                                        teacherSelect.append(`<option value="${modelPath}">${modelName} (完整模型)</option>`);
+                                    });
+                                } else {
+                                    teacherSelect.append('<option value="">未找到已合并的模型（请先完成微调并合并）</option>');
+                                }
+                            }
+                        });
                         
-                        // 量化模型：使用 LoRA 模型或其他模型
+                        // ========== 待量化模型选项 ==========
+                        // 量化模型：使用 LoRA 模型或其他模型（排除已量化的）
                         var loraModels = res.lora_models || [];
                         var otherModels = res.other_models || [];
-                        var allQuantizeModels = loraModels.concat(otherModels);
+                        var quantizedModels = res.quantized_models || [];
+                        var quantizedNames = quantizedModels.map(m => m.name);
                         
-                        if (allQuantizeModels.length > 0) {
-                            loraModels.forEach(function(m) {
-                                quantizeSelect.append(`<option value="${m}">${m} (LoRA)</option>`);
-                            });
-                            otherModels.forEach(function(m) {
-                                quantizeSelect.append(`<option value="${m}">${m}</option>`);
+                        // 过滤掉已经量化的模型
+                        var availableForQuantize = [];
+                        loraModels.forEach(function(m) {
+                            var modelName = (typeof m === 'object') ? m.name : m;
+                            var modelPath = (typeof m === 'object') ? (m.path || m.name) : m;
+                            if (!quantizedNames.some(qn => modelName.includes(qn) || qn.includes(modelName))) {
+                                availableForQuantize.push({name: modelName, path: modelPath, type: 'lora'});
+                            }
+                        });
+                        otherModels.forEach(function(m) {
+                            var modelName = (typeof m === 'object') ? m.name : m;
+                            var modelPath = (typeof m === 'object') ? (m.path || m.name) : m;
+                            if (!quantizedNames.some(qn => modelName.includes(qn) || qn.includes(modelName))) {
+                                availableForQuantize.push({name: modelName, path: modelPath, type: 'other'});
+                            }
+                        });
+                        
+                        if (availableForQuantize.length > 0) {
+                            availableForQuantize.forEach(function(m) {
+                                if (m.type === 'lora') {
+                                    quantizeSelect.append(`<option value="${m.path}">${m.name} (LoRA)</option>`);
+                                } else {
+                                    quantizeSelect.append(`<option value="${m.path}">${m.name}</option>`);
+                                }
                             });
                         } else {
-                            quantizeSelect.append('<option value="">未找到可量化的模型</option>');
+                            quantizeSelect.append('<option value="">未找到可量化的模型（所有模型已量化）</option>');
                         }
                     }
                 });
@@ -1218,9 +1347,36 @@
         let dataPrepCachedModels = {
             ollama_models: [],
             vllm_models: [],
+            vllm_models_detail: [],  // 新增：包含详细信息的vLLM模型列表
             query_online_models: []
         };
         let selectedDataPrepModel = null;  // 存储选择的模型
+
+        // 标签映射规则
+        const MODEL_TYPE_LABELS = {
+            'quantized_awq': '(AWQ-4bit)',
+            'quantized_gptq': '(GPTQ-4bit)',
+            'finetuned': '(微调)',
+            'merged': '(合并)',
+            'base': ''
+        };
+
+        // 生成模型显示文本
+        function getModelDisplayText(model) {
+            if (typeof model === 'string') {
+                return model;
+            }
+            // 处理带detail的对象
+            if (model.name && model.type) {
+                var typeLabel = MODEL_TYPE_LABELS[model.type] || '';
+                var deployedPrefix = model.deployed ? '🟢 ' : '';
+                return `${deployedPrefix}${model.name} ${typeLabel}`.trim();
+            }
+            if (model.name) {
+                return model.name;
+            }
+            return model.id || model;
+        }
 
         // 监听模型类别变化
         $('#dataPrepModelCategorySelect').change(function() {
@@ -1228,36 +1384,79 @@
             updateDataPrepModelOptions(category);
         });
 
-        // 更新模型选项 - 与问答系统updateLLMModelOptions逻辑一致
+        // 更新模型选项 - 使用optgroup分组显示
         function updateDataPrepModelOptions(category) {
             var select = $('#dataPrepModelSelect');
             var currentValue = select.val() || select.data('target-value');
             select.empty();
             
-            var models = [];
-            if (category === 'ollama') {
-                models = dataPrepCachedModels.ollama_models;
-            } else if (category === 'vllm') {
-                models = dataPrepCachedModels.vllm_models;
-            } else if (category === 'online') {
-                models = dataPrepCachedModels.query_online_models;
-            }
-            
-            if (models && models.length > 0) {
-                models.forEach(function(model) {
-                    if (typeof model === 'object') {
-                        select.append(`<option value="${model.id}">${model.name}</option>`);
-                    } else {
-                        select.append(`<option value="${model}">${model}</option>`);
-                    }
-                });
+            if (category === 'vllm') {
+                // vLLM模型使用optgroup分组显示
+                var details = dataPrepCachedModels.vllm_models_detail || [];
                 
-                if (currentValue && select.find(`option[value="${currentValue}"]`).length > 0) {
-                    select.val(currentValue);
-                    select.removeData('target-value');
+                // 分组模型
+                var deployedModels = details.filter(m => m.deployed);
+                var localFinetuned = details.filter(m => !m.deployed && (m.type === 'finetuned' || m.type === 'merged'));
+                var hfModels = details.filter(m => !m.deployed && m.type === 'base');
+                
+                // 已部署模型组
+                if (deployedModels.length > 0) {
+                    var deployedGroup = $('<optgroup label="已部署模型"></optgroup>');
+                    deployedModels.forEach(function(model) {
+                        var displayText = getModelDisplayText(model);
+                        deployedGroup.append(`<option value="${model.raw_name || model.name}">${displayText}</option>`);
+                    });
+                    select.append(deployedGroup);
+                }
+                
+                // 本地微调模型组
+                if (localFinetuned.length > 0) {
+                    var localGroup = $('<optgroup label="本地微调模型"></optgroup>');
+                    localFinetuned.forEach(function(model) {
+                        var displayText = getModelDisplayText(model);
+                        localGroup.append(`<option value="${model.raw_name || model.name}">${displayText}</option>`);
+                    });
+                    select.append(localGroup);
+                }
+                
+                // HuggingFace模型组
+                if (hfModels.length > 0) {
+                    var hfGroup = $('<optgroup label="HuggingFace模型"></optgroup>');
+                    hfModels.forEach(function(model) {
+                        var displayText = getModelDisplayText(model);
+                        hfGroup.append(`<option value="${model.raw_name || model.name}">${displayText}</option>`);
+                    });
+                    select.append(hfGroup);
+                }
+                
+                if (details.length === 0) {
+                    select.append('<option value="">暂无可用模型</option>');
                 }
             } else {
-                select.append('<option value="">暂无可用模型</option>');
+                // Ollama和在线模型保持原有逻辑
+                var models = [];
+                if (category === 'ollama') {
+                    models = dataPrepCachedModels.ollama_models;
+                } else if (category === 'online') {
+                    models = dataPrepCachedModels.query_online_models;
+                }
+                
+                if (models && models.length > 0) {
+                    models.forEach(function(model) {
+                        if (typeof model === 'object') {
+                            select.append(`<option value="${model.id}">${model.name}</option>`);
+                        } else {
+                            select.append(`<option value="${model}">${model}</option>`);
+                        }
+                    });
+                } else {
+                    select.append('<option value="">暂无可用模型</option>');
+                }
+            }
+            
+            if (currentValue && select.find(`option[value="${currentValue}"]`).length > 0) {
+                select.val(currentValue);
+                select.removeData('target-value');
             }
         }
 
@@ -1269,6 +1468,7 @@
                 success: function(response) {
                     dataPrepCachedModels.ollama_models = response.ollama_models || [];
                     dataPrepCachedModels.vllm_models = response.vllm_models || [];
+                    dataPrepCachedModels.vllm_models_detail = response.vllm_models_detail || [];
                     dataPrepCachedModels.query_online_models = response.query_online_models || [];
                     
                     var currentCategory = $('#dataPrepModelCategorySelect').val();
@@ -1538,7 +1738,115 @@
                 loadStudentModels();
                 loadDistillDatasets();
             }
+            
+            // 页面加载时检查任务状态和已部署服务
+            checkTaskStatus();
+            loadDeployedServices();
         });
+
+        // Tab切换时检查任务状态
+        document.querySelectorAll('#pipelineTabs button[data-bs-toggle="tab"]').forEach(function(tab) {
+            tab.addEventListener('shown.bs.tab', function(event) {
+                checkTaskStatus();
+            });
+        });
+
+        // 查询各阶段任务运行状态
+        function checkTaskStatus() {
+            fetch('/api/task/status')
+                .then(r => r.json())
+                .then(status => {
+                    // 阶段2：微调状态
+                    if (status.finetune && status.finetune.running) {
+                        var output = document.getElementById('terminalOutput');
+                        if (output && !window._finetuneStreaming) {
+                            // 检查是否已经显示过运行中提示
+                            if (!output.dataset.runningShown) {
+                                output.innerHTML += '<div class="text-warning">⏳ 训练任务正在后台运行中（模型: ' + 
+                                    (status.finetune.details.model || 'Unknown') + '）...</div>';
+                                output.dataset.runningShown = 'true';
+                            }
+                            // 启动轮询
+                            startStatusPolling();
+                        }
+                    }
+                    // 阶段4：部署状态
+                    if (status.deploy) {
+                        updateDeployStatus(status.deploy);
+                    }
+                })
+                .catch(err => console.log('Status check failed:', err));
+        }
+
+        // 轮询任务状态
+        function startStatusPolling() {
+            if (window._statusPollingTimer) return;
+            window._statusPollingTimer = setInterval(function() {
+                fetch('/api/task/status')
+                    .then(r => r.json())
+                    .then(status => {
+                        if (!status.finetune.running) {
+                            clearInterval(window._statusPollingTimer);
+                            window._statusPollingTimer = null;
+                            // 训练完成，更新UI
+                            var output = document.getElementById('terminalOutput');
+                            if (output) {
+                                output.innerHTML += '<div class="text-success">✅ 训练任务已完成</div>';
+                                delete output.dataset.runningShown;
+                            }
+                            // 刷新模型列表
+                            if (typeof loadFinetunedModels === 'function') loadFinetunedModels();
+                            if (typeof loadModels === 'function') loadModels();
+                        }
+                    })
+                    .catch(err => console.log('Status polling error:', err));
+            }, 5000); // 每5秒轮询
+        }
+
+        // 加载已部署的vLLM服务列表
+        function loadDeployedServices() {
+            fetch('/api/deploy/list')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.services && data.services.length > 0) {
+                        updateDeployStatus({running: true, services: data.services});
+                    }
+                })
+                .catch(err => console.log('Deploy list check failed:', err));
+        }
+
+        // 更新部署状态显示
+        function updateDeployStatus(deployInfo) {
+            // 在阶段4的部署区域显示运行中的服务
+            var deploySection = document.querySelector('#step4 .stage-card');
+            if (!deploySection) return;
+            
+            // 查找或创建状态显示区
+            var statusDiv = document.getElementById('deploy-running-status');
+            if (!statusDiv) {
+                statusDiv = document.createElement('div');
+                statusDiv.id = 'deploy-running-status';
+                statusDiv.className = 'alert alert-success mt-2';
+                // 插入到card-body开头
+                var cardBody = deploySection.querySelector('.card-body');
+                if (cardBody) {
+                    cardBody.insertBefore(statusDiv, cardBody.firstChild);
+                }
+            }
+            
+            if (deployInfo.running && deployInfo.services.length > 0) {
+                var html = '<strong>🟢 运行中的服务:</strong><ul class="mb-0 mt-1">';
+                deployInfo.services.forEach(function(svc) {
+                    html += '<li>' + (svc.model || 'Unknown') + 
+                            ' - 端口: ' + (svc.port || 8000) + '</li>';
+                });
+                html += '</ul>';
+                statusDiv.innerHTML = html;
+                statusDiv.style.display = 'block';
+            } else {
+                statusDiv.style.display = 'none';
+            }
+        }
 
         // 新增的阶段 4: 量化 API 交互
         function startQuantization() {

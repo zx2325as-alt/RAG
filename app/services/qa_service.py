@@ -337,7 +337,7 @@ class QAService:
         yield json.dumps({"type": "chunk", "content": f">   📊 索引状态: {' | '.join(index_status)}\n"}) + "\n"
         yield json.dumps({"type": "chunk", "content": f">   📊 总文档数: {total_chunks} 个片段\n"}) + "\n"
         
-        results = self.kb_service.search(search_query, top_k=5, db_names=db_names)
+        results = self.kb_service.search(search_query, top_k=15, db_names=db_names)
         t2 = time.time()
         
         # 步骤5: 结果融合与重排序
@@ -387,17 +387,13 @@ class QAService:
             yield json.dumps({"type": "sources", "sources": []}) + "\n"
             return
 
-        # 新增：质量兜底检查 - 结果太少且分数太低时拦截
-        if not enable_tools and len(results) > 0:
-            # results是(Document, score)元组列表，从第370行可以看到top_score = float(results[0][1])
-            top_score = float(results[0][1]) if results else 0.0
-            
-            if len(results) < 2 and top_score < 0.6:
-                yield json.dumps({"type": "chunk", "content": ">   ❌ 检查未通过: 相关资料置信度不足\n"}) + "\n"
-                yield json.dumps({"type": "chunk", "content": "> ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"}) + "\n"
-                yield json.dumps({"type": "chunk", "content": "当前知识库中的相关资料置信度不足，无法准确回答此问题。建议补充更多相关文档或换一种方式提问。"}) + "\n"
-                yield json.dumps({"type": "sources", "sources": []}) + "\n"
-                return
+        # 质量兜底检查 - 只在完全为空时拦截，不在分数低时拦截
+        if not enable_tools and len(results) == 0:
+            yield json.dumps({"type": "chunk", "content": ">   ❌ 检查未通过: 未检索到任何相关资料\n"}) + "\n"
+            yield json.dumps({"type": "chunk", "content": "> ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"}) + "\n"
+            yield json.dumps({"type": "chunk", "content": "抱歉，当前知识库中未找到相关资料。建议检查知识库是否已导入相关文档。"}) + "\n"
+            yield json.dumps({"type": "sources", "sources": []}) + "\n"
+            return
         
         if not enable_tools or len(results) > 0:
             yield json.dumps({"type": "chunk", "content": f">   ✅ 检查通过: 获取 {len(results)} 条有效资料\n"}) + "\n"
@@ -409,11 +405,21 @@ class QAService:
         context_parts = []
         sources = []
         source_index = 1
+        MAX_CONTEXT_LENGTH = 12000  # 字符上限保护
+        current_context_length = 0
             
         for doc, score in results:
             # 解决 ChatPromptTemplate 变量缺失报错：转义检索内容中的单大括号
             safe_content = doc.page_content.replace("{", "{{").replace("}", "}}")
-            context_parts.append(f"资料 [{source_index}]:\n{safe_content}")
+            content_to_add = f"资料 [{source_index}]:\n{safe_content}"
+            
+            # 检查字符上限
+            if current_context_length + len(content_to_add) > MAX_CONTEXT_LENGTH:
+                context_parts.append("> ⚠️ 上下文长度已达上限，部分资料已省略")
+                break
+            
+            context_parts.append(content_to_add)
+            current_context_length += len(content_to_add)
             doc_name = doc.metadata.get("doc_name", "Unknown")
             
             # 增加返回的参考内容长度，原来是 100 字符，现在扩大到 600 字符，方便前端展示更完整的片段

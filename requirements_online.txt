@@ -1,60 +1,133 @@
 # ==============================================================
-# RAG 线上部署专用环境依赖 (基于 PyTorch 2.1.2 + CUDA 11.8)
-# 【最终稳定版 | 无依赖冲突 | 不升级 CUDA | 不破坏环境】
+# RAG 线上部署专用环境依赖 (基于 PyTorch 2.1.2 + CUDA 11.8 + Python 3.10)
+# 【稳定版 | 无依赖冲突 | 适配 LLaMA-Factory 0.8.3】
 # ==============================================================
 
-# --- 镜像源配置 (加速下载) ---
+# --- 镜像源配置 (阿里云加速) ---
 -i https://mirrors.aliyun.com/pypi/simple/
 --trusted-host mirrors.aliyun.com
 --extra-index-url https://pypi.tuna.tsinghua.edu.cn/simple/
 
-# --- 基础与 Web 框架 ---
+# ==============================================================
+# 核心依赖说明（不由 pip 安装，需单独处理）
+# ==============================================================
+# ⚠️ torch: 由 conda 安装 (PyTorch 2.1.2 + CUDA 11.8)
+#    conda install pytorch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 pytorch-cuda=11.8 -c pytorch -c nvidia
+#
+# ⚠️ vllm: 需单独安装 CUDA 11.8 预编译版
+#    pip install https://github.com/vllm-project/vllm/releases/download/v0.4.1/vllm-0.4.1+cu118-cp310-cp310-manylinux1_x86_64.whl --no-deps
+#
+# ⚠️ llamafactory: 需 --no-deps 安装避免依赖冲突
+#    pip install llamafactory==0.8.3 --no-deps
+# ==============================================================
+
+# --- 基础 Web 框架 ---
 flask==3.1.3
 flask-sqlalchemy==3.1.1
+gunicorn==25.1.0
+werkzeug==3.1.3
+
+# --- 数据库与缓存 ---
 pymysql==1.1.2
-redis==7.3.0
-requests==2.32.5
+redis==5.0.1
+
+# --- 数据处理与科学计算 ---
 numpy==1.26.4
 pandas==2.3.3
-gunicorn==25.1.0
+pyyaml==6.0.1
+python-dotenv==1.0.0
+requests==2.31.0
+tqdm==4.66.1
 
-# --- RAG 检索与解析组件 (启用 GPU 加速) ---
+# --- RAG 检索核心组件 ---
+# FAISS GPU 版本 (CUDA 11.8 兼容)
 faiss-gpu==1.7.2
+
+# --- 文档解析组件 ---
+pymupdf==1.24.5
+pdfplumber==0.11.0
+python-docx==1.1.2
+openpyxl==3.1.5
+chardet==5.2.0
+
+# --- OCR 组件 (GPU 加速) ---
 rapidocr-onnxruntime==1.4.4
 onnxruntime-gpu==1.17.1
-pymupdf==1.27.2.2
-pdfplumber==0.11.9
-python-docx==1.2.0
-openpyxl==3.1.5
-rank_bm25==0.2.2
+opencv-python==4.9.0.80
 
-# ================================
-# ✅ 锁定无冲突版本（核心修复）
-# ================================
+# --- 文本处理与检索 ---
+rank-bm25==0.2.2
+jieba==0.42.1
+
+# --- LangChain 生态 (版本锁定，确保兼容) ---
 langchain==0.1.20
 langchain-community==0.0.38
+langchain-core==0.1.52
 langchain-huggingface==0.0.1
 langchain-openai==0.1.3
-langchain-core==0.1.52
+langchain-text-splitters==0.0.1
 langsmith==0.1.59
 
 # --- 图数据库 ---
 neo4j==6.1.0
 
-# --- 微调与大模型核心组件 ---
-# 🔥 重要：这里 **绝对不写 torch**，使用平台自带 CUDA11.8 版本
-# torch
-transformers==4.37.4
+# --- 大模型与深度学习组件 ---
+# transformers 版本需与 LLaMA-Factory 0.8.3 兼容
+transformers==4.41.2
+huggingface-hub==0.23.4
+accelerate==0.30.1
+peft==0.11.1
+tokenizers==0.19.1
+sentencepiece==0.2.0
+protobuf==5.27.2
+
+# --- 模型评估指标 ---
+rouge-score==0.1.2
+sacrebleu==2.4.2
+bert-score==0.3.13
+
+# --- 可视化与日志 ---
 tensorboard==2.17.0
 
-# 🔥 重要：llamafactory 必须 --no-deps 安装，不能在这里直接装
-# llamafactory==0.8.3
+# --- Pydantic (数据验证) ---
+pydantic==2.7.4
+pydantic-settings==2.3.4
 
-# ==============================================================
-# vLLM 兼容性安装说明
-# ==============================================================
-# 注意：您的环境是 CUDA 11.8。如果直接 pip install vllm==0.4.1，
-# 默认会拉取 CUDA 12 的扩展包（如 vllm-nccl-cu12）并在本地编译，导致卡死或报错。
-# 
-# 解决方案：不要在 requirements_online.txt 中安装 vllm。
-# 脚本 start_all_linux.sh 已配置好使用 --no-deps 跳过依赖检查安装预编译包。
+# --- 其他工具依赖 ---
+blinker==1.8.2
+click==8.1.7
+itsdangerous==2.2.0
+jinja2==3.1.4
+markupsafe==2.1.5
+sqlalchemy==2.0.31
+aiohttp==3.9.5
+aiosignal==1.3.1
+async-timeout==4.0.3
+attrs==23.2.0
+charset-normalizer==3.3.2
+dataclasses-json==0.6.7
+frozenlist==1.4.1
+fsspec==2024.6.1
+idna==3.7
+jsonpatch==1.33
+jsonpointer==3.0.0
+marshmallow==3.21.3
+multidict==6.0.5
+mypy-extensions==1.0.0
+packaging==24.1
+regex==2024.5.15
+safetensors==0.4.3
+scipy==1.13.1
+sympy==1.12.1
+tenacity==8.4.2
+tiktoken==0.7.0
+typing-inspect==0.9.0
+typing_extensions==4.12.2
+urllib3==2.2.2
+yarl==1.9.4
+filelock==3.15.4
+networkx==3.3
+joblib==1.4.2
+threadpoolctl==3.5.0
+scikit-learn==1.5.0
+pillow==10.3.0
