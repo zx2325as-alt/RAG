@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==============================================================================
 # RAG 系统 - Linux 自动化部署与启动脚本
-# 环境: Ubuntu 22.04 + Python 3.10 + PyTorch 2.1.2 + CUDA 11.8
+# 环境: Ubuntu 22.04 + Python 3.12 + PyTorch 2.3.0 + CUDA 12.1
 # 说明: 支持幂等执行，已安装/已启动的服务会自动跳过
 # ==============================================================================
 
@@ -34,7 +34,7 @@ echo "========================================" >> "$LOGS_DIR/setup.log"
 # ==============================================================================
 echo -e "${GREEN}=======================================================${NC}"
 echo -e "${GREEN}        RAG 知识库问答系统 - 自动化部署脚本          ${NC}"
-echo -e "${GREEN}        Python 3.10 + PyTorch 2.1.2 + CUDA 11.8       ${NC}"
+echo -e "${GREEN}        Python 3.12 + PyTorch 2.3.0 + CUDA 12.1       ${NC}"
 echo -e "${GREEN}=======================================================${NC}"
 
 # ==============================================================================
@@ -105,14 +105,14 @@ check_env_exists() {
 # ==============================================================================
 create_conda_env() {
     local env_name=$1
-    log_step "创建 Conda 环境: ${env_name} (Python 3.10)"
+    log_step "创建 Conda 环境: ${env_name} (Python 3.12)"
     
     # 使用阿里云镜像加速
     conda config --add channels https://mirrors.aliyun.com/anaconda/pkgs/main/ 2>/dev/null || true
     conda config --add channels https://mirrors.aliyun.com/anaconda/pkgs/free/ 2>/dev/null || true
     conda config --set show_channel_urls yes 2>/dev/null || true
     
-    conda create -n "$env_name" python=3.10 -y
+    conda create -n "$env_name" python=3.12 -y
     log_info "Conda 环境 ${env_name} 创建完成"
 }
 
@@ -120,21 +120,21 @@ create_conda_env() {
 # 函数: 检查 PyTorch CUDA 版本
 # ==============================================================================
 check_pytorch_cuda() {
-    python -c "import torch; assert torch.cuda.is_available(), 'CUDA not available'; assert torch.version.cuda.startswith('11.8'), 'CUDA version mismatch'" 2>/dev/null
+    python -c "import torch; assert torch.cuda.is_available(), 'CUDA not available'; assert torch.version.cuda.startswith('12.1'), 'CUDA version mismatch'" 2>/dev/null
 }
 
 # ==============================================================================
-# 函数: 安装 PyTorch (CUDA 11.8)
+# 函数: 安装 PyTorch (CUDA 12.1)
 # ==============================================================================
 install_pytorch() {
-    log_step "安装 PyTorch 2.1.2 + CUDA 11.8..."
+    log_step "安装 PyTorch 2.3.0 + CUDA 12.1..."
     
     # 使用阿里云镜像
-    conda install pytorch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 pytorch-cuda=11.8 -c pytorch -c nvidia -y
+    conda install pytorch==2.3.0 torchvision==0.18.0 torchaudio==2.3.0 pytorch-cuda=12.1 -c pytorch -c nvidia -y
     
     # 验证安装
     if check_pytorch_cuda; then
-        log_info "PyTorch 2.1.2 + CUDA 11.8 安装成功"
+        log_info "PyTorch 2.3.0 + CUDA 12.1 安装成功"
         python -c "import torch; print(f'PyTorch version: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA version: {torch.version.cuda}')"
     else
         log_error "PyTorch CUDA 安装验证失败"
@@ -172,10 +172,10 @@ show_vllm_error() {
 }
 
 # ==============================================================================
-# 函数: 安装 vLLM (CUDA 11.8 预编译版)
+# 函数: 安装 vLLM (CUDA 12.1 + Python 3.12 预编译版)
 # ==============================================================================
 install_vllm() {
-    log_step "安装 vLLM 0.4.1 (CUDA 11.8 预编译版)..."
+    log_step "安装 vLLM 0.4.1 (CUDA 12.1 + Python 3.12 预编译版)..."
     
     # 设置环境变量避免编译
     export VLLM_INSTALL_PUNICA_DROP_IN=0
@@ -187,12 +187,13 @@ install_vllm() {
         fastapi uvicorn tiktoken prometheus-client sentencepiece \
         lm-format-enforcer==0.9.8 msgpack
     
-    # 2. 安装 vLLM 预编译版（--no-deps 防止拉取 torch 2.2.1 覆盖已有的 2.1.2+cu118）
-    log_step "安装 vLLM 0.4.1+cu118 (--no-deps)..."
-    pip install --no-deps https://github.com/vllm-project/vllm/releases/download/v0.4.1/vllm-0.4.1+cu118-cp310-cp310-manylinux1_x86_64.whl
+    # 2. 安装 vLLM 预编译版（--no-deps 防止拉取默认 torch 覆盖 cu121 版本）
+    log_step "安装 vLLM 0.4.1+cu121 (--no-deps)..."
+    pip install --no-deps https://github.com/vllm-project/vllm/releases/download/v0.4.1/vllm-0.4.1+cu121-cp312-cp312-manylinux1_x86_64.whl
     
-    # 3. 安装与 PyTorch 2.1.2 匹配的 xformers（--no-deps）
-    pip install xformers==0.0.23.post1 --no-deps
+    # 3. 安装与 PyTorch 2.3.0 + CUDA 12.1 匹配的 xformers
+    log_step "安装 xformers (CUDA 12.1 版本)..."
+    pip install xformers==0.0.26.post1 --index-url https://download.pytorch.org/whl/cu121 --no-deps
     
     if check_vllm; then
         log_info "vLLM 安装成功"
@@ -478,7 +479,7 @@ conda activate "$ENV_NAME" || source activate "$ENV_NAME"
 
 # 检查并安装 PyTorch
 if check_pytorch_cuda; then
-    log_info "PyTorch + CUDA 11.8 已安装"
+    log_info "PyTorch + CUDA 12.1 已安装"
     python -c "import torch; print(f'  PyTorch: {torch.__version__}'); print(f'  CUDA: {torch.version.cuda}')"
 else
     install_pytorch
