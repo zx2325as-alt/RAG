@@ -166,6 +166,11 @@ check_vllm() {
     python -c "import vllm" 2>/dev/null
 }
 
+# 调试用: 显示 vLLM 导入错误
+show_vllm_error() {
+    python -c "import vllm" 2>&1 || true
+}
+
 # ==============================================================================
 # 函数: 安装 vLLM (CUDA 11.8 预编译版)
 # ==============================================================================
@@ -192,7 +197,8 @@ install_vllm() {
     if check_vllm; then
         log_info "vLLM 安装成功"
     else
-        log_error "vLLM 安装失败"
+        log_error "vLLM 导入失败，错误信息:"
+        show_vllm_error
         exit 1
     fi
 }
