@@ -660,7 +660,10 @@ function appendChunkToMessage(msgId, textChunk) {
                     {left: '$', right: '$', display: false}
                 ],
                 throwOnError: false,
-                output: 'html' // 强制输出 HTML 避免控制台警告
+                output: 'html', // 强制输出 HTML 避免控制台警告
+                trust: true,
+                strict: false,
+                errorColor: '#cc0000'
             });
         }
         
@@ -755,7 +758,8 @@ function appendMessage(sender, text, sources) {
                     {left: '\\(', right: '\\)', display: false},
                     {left: '\\[', right: '\\]', display: true}
                 ],
-                throwOnError: false
+                throwOnError: false,
+                trust: true
             });
         }
         if (typeof hljs !== 'undefined') {
@@ -803,7 +807,9 @@ function loadChatHistory() {
                         {left: "\\[", right: "\\]", display: true},
                         {left: "$", right: "$", display: false},
                         {left: "\\(", right: "\\)", display: false}
-                    ]
+                    ],
+                    throwOnError: false,
+                    trust: true
                 });
             });
         }

@@ -6,6 +6,12 @@ import logging
 # 忽略 pdfminer 的 FontBBox 警告
 logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
+# 忽略 onnxruntime 的执行提供者警告
+import os
+os.environ["ONNXRUNTIME_WARNINGS"] = "0"
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="onnxruntime")
+
 try:
     from docx import Document as DocxDocument
 except ImportError:
@@ -17,20 +23,35 @@ try:
     from rapidocr_onnxruntime import RapidOCR
     import numpy as np
     import torch
+    import sys
+    import os
+    
+    # 彻底屏蔽 OrtInferSession 在底层硬编码的 logging
+    import logging
+    logging.getLogger('OrtInferSession').setLevel(logging.FATAL)
     
     # 检测是否有 GPU，如果可用，通过 onnxruntime 开启 GPU 推理支持
     # 这需要环境中安装了 onnxruntime-gpu
     use_gpu = torch.cuda.is_available()
+    
+    # 暂时重定向 stderr 以彻底屏蔽 onnxruntime 底层硬编码的 WARNING 和 INFO 刷屏
+    _stderr = sys.stderr
+    sys.stderr = open(os.devnull, 'w')
+    
     if use_gpu:
         try:
             # 尝试初始化带 CUDA Execution Provider 的 OCR
             ocr = RapidOCR(det_use_cuda=True, cls_use_cuda=True, rec_use_cuda=True)
+            sys.stderr = _stderr
             print("RapidOCR initialized with GPU (CUDA) support.")
         except Exception as gpu_e:
+            sys.stderr = _stderr
             print(f"Failed to initialize RapidOCR with GPU: {gpu_e}. Falling back to CPU.")
             ocr = RapidOCR()
     else:
         ocr = RapidOCR()
+        sys.stderr = _stderr
+        
 except Exception as e:
     ocr = None
     print(f"Warning: OCR initialization failed ({e}). OCR fallback will be disabled.")

@@ -47,9 +47,11 @@ def create_app(config_class=Config):
     log.setLevel(logging.DEBUG)
     log.addHandler(file_handler)
     
-    app.logger.info('='*50)
-    app.logger.info('RAG System startup - Detailed Logging Enabled')
-    app.logger.info('='*50)
+    # 避免在 Flask debug 重载器子进程中重复输出启动日志
+    if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+        app.logger.info('='*50)
+        app.logger.info('RAG System startup - Detailed Logging Enabled')
+        app.logger.info('='*50)
 
     db.init_app(app)
 
@@ -58,6 +60,8 @@ def create_app(config_class=Config):
         from app.db import models
         db.create_all()
         from app.api.routes import api_bp
-        app.register_blueprint(api_bp, url_prefix='/') # Mount at root for simplicity or keep /api for API and another for UI
+        from app.api.eval_routes import eval_bp
+        app.register_blueprint(api_bp, url_prefix='/')
+        app.register_blueprint(eval_bp, url_prefix='/')
 
     return app

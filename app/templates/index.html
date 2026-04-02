@@ -16,16 +16,13 @@
             <div class="collapse navbar-collapse">
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a class="nav-link active" href="javascript:void(0);" onclick="showMainContent()">问答系统</a>
+                        <a class="nav-link active" href="/">问答系统</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/finetune">模型微调(Ollama)</a>
+                        <a class="nav-link" href="/finetune">模型训练与部署</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="javascript:void(0);" onclick="openAutoDLUrl(6006)">原生LLaMA-Factory</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/eval_report">评估报告</a>
+                        <a class="nav-link" href="/eval_system">评估系统</a>
                     </li>
                 </ul>
             </div>
@@ -224,6 +221,7 @@
     <script src="/static/vendor/js/marked.min.js"></script>
     <script src="/static/vendor/js/highlight.min.js"></script>
     <script src="/static/vendor/js/katex.min.js"></script>
+    <script src="/static/vendor/js/katex/contrib/mhchem.min.js"></script>
     <script src="/static/vendor/js/auto-render.min.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     <script>
