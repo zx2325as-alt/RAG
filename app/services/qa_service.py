@@ -150,6 +150,59 @@ class QAService:
 
     def get_cache_key(self, question):
         return hashlib.md5(question.encode('utf-8')).hexdigest()
+    
+    def _check_needs_rewrite(self, question, history_messages):
+        """
+        启发式判断是否需要问题重构
+        返回True表示需要重构，False表示可以直接使用原问题
+        """
+        if not history_messages:
+            return False
+        
+        # 指代词列表
+        pronouns = ['它', '他', '她', '这个', '那个', '这些', '那些', '这里', '那里', '这样', '那样']
+        
+        # 如果包含指代词，需要重构
+        if any(p in question for p in pronouns):
+            return True
+        
+        # 如果问题太短（<5字），可能需要上下文
+        # 注意：调用处已检查历史消息，只有存在历史消息时才会执行到这里
+        if len(question) < 5:
+            return True
+        
+        # 如果包含"为什么"、"怎么办"等，且历史中有相关内容
+        follow_up_keywords = ['为什么', '怎么办', '然后呢', '还有呢', '除此之外']
+        if any(kw in question for kw in follow_up_keywords):
+            return True
+        
+        return False
+    
+    def _post_process_rewrite(self, original, rewritten, history_text=None):
+        """
+        问题重构后处理：防止过度发散
+        """
+        # 如果改写结果过长（超过原问题5倍），可能过度发散
+        if len(rewritten) > len(original) * 5:
+            print(f"Warning: Rewritten query too long, falling back to original. Original: {original}, Rewritten: {rewritten}")
+            return original
+        
+        # 如果改写结果包含原问题中没有的关键词（可能是幻觉）
+        original_words = set(original.lower().split())
+        rewritten_words = set(rewritten.lower().split())
+        new_words = list(rewritten_words - original_words)
+        
+        # 在检查新词比例之前，过滤掉来自历史对话的词
+        if history_text:
+            history_words = set(history_text.lower().split())
+            new_words = [w for w in new_words if w not in history_words]
+        
+        # 如果新增词汇过多（超过70%），可能过度发散
+        if len(new_words) > len(original_words) * 0.7 and len(original_words) > 3:
+            print(f"Warning: Rewritten query has too many new words, using original.")
+            return original
+        
+        return rewritten
 
     def stream_answer_question(self, question, user_id="anonymous", db_names=['default'], enable_tools=True):
         start_time = datetime.utcnow()
@@ -169,9 +222,19 @@ class QAService:
             except Exception as e:
                 print(f"Redis get error: {e}")
 
-        yield json.dumps({"type": "chunk", "content": "> 🧠 **思考过程:**\n> - [x] 收到用户请求...\n"}) + "\n"
-
-        # 1.5 改写用户问题 (Standalone Question) & 历史裁剪
+        # ========== 思考过程开始 ==========
+        yield json.dumps({"type": "chunk", "content": "> 🧠 **思考过程**\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": "> ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"}) + "\n"
+        
+        # 步骤1: 接收请求
+        yield json.dumps({"type": "chunk", "content": "> **步骤 1/6: 接收用户请求** ✅\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": f">   📌 原始问题: `{question}`\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": f">   📌 查询范围: {', '.join(db_names)}\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": f">   📌 工具模式: {'开启' if enable_tools else '关闭'}\n"}) + "\n"
+        
+        # 步骤2: 历史上下文处理
+        yield json.dumps({"type": "chunk", "content": "> **步骤 2/6: 历史上下文处理**\n"}) + "\n"
+        
         search_query = question
         try:
             history_obj = self.get_session_history(user_id)
@@ -186,59 +249,161 @@ class QAService:
             # 保留最近 4 条消息（2轮对话）
             if len(filtered_messages) > 4:
                 filtered_messages = filtered_messages[-4:]
-                
-            if len(filtered_messages) > 0 and not enable_tools:
-                yield json.dumps({"type": "chunk", "content": "> - [x] 结合历史上下文重构问题...\n"}) + "\n"
+            
+            yield json.dumps({"type": "chunk", "content": f">   📜 历史消息数: {len(messages)} 条\n"}) + "\n"
+            yield json.dumps({"type": "chunk", "content": f">   📜 有效上下文: {len(filtered_messages)} 条\n"}) + "\n"
+            
+            # 问题重构优化：先进行启发式判断，减少不必要的LLM调用
+            needs_rewrite = self._check_needs_rewrite(question, filtered_messages)
+            
+            if needs_rewrite and len(filtered_messages) > 0 and not enable_tools:
+                yield json.dumps({"type": "chunk", "content": ">   🔄 执行问题重构...\n"}) + "\n"
                 history_text = "\n".join([f"{msg.type}: {msg.content}" for msg in filtered_messages])
+                
+                # 显示历史上下文摘要
+                history_summary = " | ".join([f"{msg.type[:1].upper()}: {msg.content[:30]}..." for msg in filtered_messages[-2:]])
+                yield json.dumps({"type": "chunk", "content": f">   💭 上下文摘要: {history_summary}\n"}) + "\n"
+                
+                # 优化后的重构提示词，增加意图保持约束
                 rewrite_prompt = f"""请根据以下对话历史记录，将用户的最新问题改写为一个独立、完整且没有歧义的问题。
-改写要求：
-1. 仅补全必要的指代词（如将“它”替换为上文的具体名词）。
-2. **严禁过度发散、严禁添加任何额外的推理逻辑、严禁扩展用户的原始问题**。
-3. 如果用户的最新问题是一个明确的系统指令（例如：ping www.baidu.com），请直接原样返回。
-4. 如果问题已经是完整清晰的，直接原样返回。
-注意：只返回最终的纯文本，不要有任何其他解释词。
 
-对话历史：
+【改写要求 - 严格遵守】：
+1. **仅补全指代词**：将"它"、"这个"、"那个"等指代词替换为上文提到的具体实体名称。
+2. **保持原始意图**：严禁添加原问题中没有的信息、严禁扩展问题范围、严禁改变问题类型。
+3. **系统指令原样返回**：如果问题是明确的系统命令（如ping、curl、kubectl等），直接原样返回。
+4. **清晰问题无需改写**：如果问题已经完整清晰（不含指代词），直接原样返回。
+5. **输出格式**：只返回改写后的纯文本问题，不要有任何解释、引号或额外内容。
+
+【对话历史】：
 {history_text}
 
-最新问题：{question}
-独立完整的问题："""
+【最新问题】：{question}
+
+【独立完整的问题】："""
                 from langchain_core.messages import HumanMessage
-                rewrite_response = self.llm.invoke([HumanMessage(content=rewrite_prompt)])
-                search_query = rewrite_response.content.strip()
-                yield json.dumps({"type": "chunk", "content": f"> - [x] 问题重构完成: `{search_query}`\n"}) + "\n"
+                try:
+                    rewrite_response = self.llm.invoke([HumanMessage(content=rewrite_prompt)])
+                    search_query = rewrite_response.content.strip()
+                except Exception as e:
+                    logging.warning(f"问题重构LLM调用失败，使用原始问题: {e}")
+                    search_query = question
+                
+                # 后处理：确保改写不会过度发散
+                original_query = search_query
+                search_query = self._post_process_rewrite(question, search_query, history_text)
+                
+                if search_query != original_query:
+                    yield json.dumps({"type": "chunk", "content": ">   ⚠️ 重构结果被后处理修正\n"}) + "\n"
+                
+                if search_query != question:
+                    yield json.dumps({"type": "chunk", "content": f">   ✅ 重构完成\n"}) + "\n"
+                    yield json.dumps({"type": "chunk", "content": f">      原问题: `{question}`\n"}) + "\n"
+                    yield json.dumps({"type": "chunk", "content": f">      重构后: `{search_query}`\n"}) + "\n"
+                else:
+                    yield json.dumps({"type": "chunk", "content": ">   ✅ 问题已清晰，无需重构\n"}) + "\n"
             else:
-                yield json.dumps({"type": "chunk", "content": "> - [x] 跳过重构步骤。\n"}) + "\n"
+                reason = "无历史上下文" if len(filtered_messages) == 0 else "问题已完整清晰"
+                yield json.dumps({"type": "chunk", "content": f">   ⏭️ 跳过重构 ({reason})\n"}) + "\n"
         except Exception as e:
             print(f"Rewrite Query Error: {e}")
-            yield json.dumps({"type": "chunk", "content": "> - [!] 问题重构失败，将使用原始问题继续。\n"}) + "\n"
+            yield json.dumps({"type": "chunk", "content": f">   ❌ 重构失败: {str(e)}\n"}) + "\n"
+            yield json.dumps({"type": "chunk", "content": ">   ⏭️ 使用原始问题继续\n"}) + "\n"
 
-        yield json.dumps({"type": "chunk", "content": "> - [ ] 正在执行多路知识召回 (向量库 / BM25 / 图谱)...\n"}) + "\n"
+        # 步骤3: 查询意图分析
+        yield json.dumps({"type": "chunk", "content": "> **步骤 3/6: 查询意图分析**\n"}) + "\n"
+        intent = self.kb_service._analyze_query_intent(search_query)
+        intent_type = "精确查询" if intent['is_exact_query'] else ("故障排查" if intent['is_troubleshooting'] else "语义查询")
+        yield json.dumps({"type": "chunk", "content": f">   🔍 识别意图: {intent_type}\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": f">   ⚖️ 检索权重: 向量({intent['weights']['vector']}) | BM25({intent['weights']['bm25']}) | 图谱({intent['weights']['graph']})\n"}) + "\n"
 
-        # 3. Retrieval 
+        # 步骤4: 多路知识召回
+        yield json.dumps({"type": "chunk", "content": "> **步骤 4/6: 多路知识召回**\n"}) + "\n"
+        
         import time
         t1 = time.time()
+        
+        # 获取检索统计信息
+        total_chunks = 0
+        index_status = []
+        for db_name in db_names:
+            vs = self.kb_service.vector_stores.get(db_name)
+            if vs and hasattr(vs, 'index') and vs.index:
+                count = vs.index.ntotal if hasattr(vs.index, 'ntotal') else 0
+                total_chunks += count
+                index_status.append(f"{db_name}({count})")
+            else:
+                index_status.append(f"{db_name}(未加载)")
+        
+        yield json.dumps({"type": "chunk", "content": f">   📊 索引状态: {' | '.join(index_status)}\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": f">   📊 总文档数: {total_chunks} 个片段\n"}) + "\n"
+        
         results = self.kb_service.search(search_query, top_k=5, db_names=db_names)
         t2 = time.time()
         
+        # 步骤5: 结果融合与重排序
+        yield json.dumps({"type": "chunk", "content": "> **步骤 5/6: 结果融合与重排序**\n"}) + "\n"
+        
+        # 分析检索结果来源
+        vector_count = sum(1 for doc, _ in results if doc.metadata.get('db_name') != 'neo4j')
+        graph_count = sum(1 for doc, _ in results if doc.metadata.get('db_name') == 'neo4j')
+        
         search_details = f"耗时 {round(t2-t1, 2)}s"
+        
+        yield json.dumps({"type": "chunk", "content": f">   📈 向量检索: 召回 {vector_count} 条\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": f">   📈 图谱检索: 召回 {graph_count} 条\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": f">   📈 融合去重: 剩余 {len(results)} 条\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": f">   ⏱️ 检索耗时: {search_details}\n"}) + "\n"
+        
         if results:
-            docs_info = "\n>   - " + "\n>   - ".join([f"匹配度: {round(score, 3)} | 来源: {doc.metadata.get('doc_name', '未知')}" for doc, score in results[:3]])
+            # 重排序分数转换：将原始分数转换为0-1范围便于显示
+            def normalize_score(score):
+                import math
+                return 1 / (1 + math.exp(-score))
+            
+            yield json.dumps({"type": "chunk", "content": ">   🏆 Top 匹配结果:\n"}) + "\n"
+            for i, (doc, score) in enumerate(results[:3], 1):
+                match_score = round(normalize_score(score), 3)
+                source = doc.metadata.get('doc_name', '未知')
+                content_preview = doc.page_content[:50].replace('\n', ' ')
+                yield json.dumps({"type": "chunk", "content": f">      #{i} [匹配度:{match_score}] {source}\n"}) + "\n"
+                yield json.dumps({"type": "chunk", "content": f">         {content_preview}...\n"}) + "\n"
+            
             if len(results) > 3:
-                docs_info += f"\n>   - ...等共 {len(results)} 条片段"
+                yield json.dumps({"type": "chunk", "content": f">      ... 等共 {len(results)} 条片段\n"}) + "\n"
+            
             top_score = float(results[0][1])
         else:
-            docs_info = "\n>   - 未检索到强相关内容"
+            yield json.dumps({"type": "chunk", "content": ">   ⚠️ 未检索到相关内容\n"}) + "\n"
             top_score = 0.0
 
-        yield json.dumps({"type": "chunk", "content": f"> - [x] 检索完成 ({search_details})，召回并融合重排了 {len(results)} 条片段:{docs_info}\n"}) + "\n"
+        # 步骤6: 质量检查
+        yield json.dumps({"type": "chunk", "content": "> **步骤 6/6: 质量检查**\n"}) + "\n"
         
-        # 低质量资料导致发散: 在检索后增加阈值过滤
-        if not enable_tools and (top_score < 0.6 and len(results) < 2):
-            yield json.dumps({"type": "chunk", "content": "> - [!] 检索到的资料质量过低或为空，直接返回未找到。\n"}) + "\n"
+        print(f"[QA Debug] top_score={top_score}, results_count={len(results)}")
+        if not enable_tools and len(results) == 0:
+            yield json.dumps({"type": "chunk", "content": ">   ❌ 检查未通过: 检索结果为空\n"}) + "\n"
+            yield json.dumps({"type": "chunk", "content": "> ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"}) + "\n"
             yield json.dumps({"type": "chunk", "content": "抱歉，当前知识库中未找到相关资料，无法提供解答。"}) + "\n"
             yield json.dumps({"type": "sources", "sources": []}) + "\n"
             return
+
+        # 新增：质量兜底检查 - 结果太少且分数太低时拦截
+        if not enable_tools and len(results) > 0:
+            # results是(Document, score)元组列表，从第370行可以看到top_score = float(results[0][1])
+            top_score = float(results[0][1]) if results else 0.0
+            
+            if len(results) < 2 and top_score < 0.6:
+                yield json.dumps({"type": "chunk", "content": ">   ❌ 检查未通过: 相关资料置信度不足\n"}) + "\n"
+                yield json.dumps({"type": "chunk", "content": "> ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"}) + "\n"
+                yield json.dumps({"type": "chunk", "content": "当前知识库中的相关资料置信度不足，无法准确回答此问题。建议补充更多相关文档或换一种方式提问。"}) + "\n"
+                yield json.dumps({"type": "sources", "sources": []}) + "\n"
+                return
+        
+        if not enable_tools or len(results) > 0:
+            yield json.dumps({"type": "chunk", "content": f">   ✅ 检查通过: 获取 {len(results)} 条有效资料\n"}) + "\n"
+        
+        yield json.dumps({"type": "chunk", "content": "> ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"}) + "\n"
+        # ========== 思考过程结束 ==========
         
         # 4. Prepare Context
         context_parts = []
@@ -410,9 +575,9 @@ class QAService:
             "answer": full_answer,
             "sources": sources
         }
-        if self.use_redis and full_answer and "错误" not in full_answer:
+        if self.use_redis and full_answer and len(full_answer) > 50 and "未找到相关" not in full_answer:
             try:
-                self.redis_client.setex(cache_key, timedelta(seconds=3), json.dumps(result))
+                self.redis_client.setex(cache_key, timedelta(seconds=3600), json.dumps(result))
             except Exception as e:
                 print(f"Redis set error: {e}")
         

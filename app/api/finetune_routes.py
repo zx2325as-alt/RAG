@@ -346,7 +346,9 @@ def get_datasets():
 
 @api_bp.route('/finetune/start', methods=['POST'])
 def start_finetune():
-    """接收前端传来的微调任务参数，开始微调"""
+    """接收前端传来的微调任务参数，开始微调
+    支持本地调试模式(local)和线上训练模式(online)，两种模式的评估指标不同
+    """
     try:
         # 获取表单数据
         base_model = request.form.get('baseModel')
@@ -376,6 +378,8 @@ def start_finetune():
         seed = request.form.get('seed')
         warmup_steps = request.form.get('warmupSteps')
         warmup_ratio = request.form.get('warmupRatio')
+        # 训练模式：local(本地调试) 或 online(线上训练)
+        training_mode = request.form.get('trainingMode', 'local')
         
         # 获取选中的数据集文件名
         dataset_file_name = request.form.get('datasetFileName')
@@ -499,13 +503,21 @@ def start_finetune():
         # 为了在生成器中能够访问 current_app，我们需要提取出它需要的值
         root_path = current_app.root_path
         
-        def generate_finetune_logs(base_model_name):
+        def generate_finetune_logs(base_model_name, mode=training_mode):
             import time
             import subprocess
             
             yield f"data: > 接收到真实微调任务请求，准备初始化环境...\n\n"
             time.sleep(1)
             yield f"data: > 基座模型: [{base_model_name}], 目标模型: [{new_model}]\n\n"
+            
+            # 显示训练模式信息
+            if mode == 'local':
+                yield f"data: > [训练模式] 🖥️ 本地调试模式 - 低资源消耗，快速验证流程\n\n"
+                yield f"data: > [指标关注] 训练loss下降趋势、模型收敛性、无OOM错误\n\n"
+            else:
+                yield f"data: > [训练模式] ☁️ 线上训练模式 - 高质量正式训练\n\n"
+                yield f"data: > [指标关注] eval_loss、perplexity、BLEU/ROUGE、模型泛化能力\n\n"
             
             # 清理 vllm: 前缀
             is_vllm = False
@@ -945,6 +957,7 @@ def start_data_preparation():
     """
     数据准备/清洗 API
     接收原始数据文件，进行去重、质量评分、格式转换等处理
+    增加模型介入分析，复用问答系统的模型选择逻辑
     """
     try:
         data = request.get_json()
@@ -954,6 +967,10 @@ def start_data_preparation():
         score_threshold = data.get('score_threshold', 7.0)
         output_name = data.get('output_name', 'core_dataset.jsonl')
         conversion_strategy = data.get('conversion_strategy', 'keep_original')
+        # 新增：模型介入分析选项 - 与问答系统模型选择一致
+        enable_model_analysis = data.get('enable_model_analysis', True)
+        analysis_model = data.get('analysis_model', None)  # 可选指定模型，None则使用默认
+        analysis_model_category = data.get('analysis_model_category', None)  # 模型类别：online/ollama/vllm
         
         if not raw_dataset:
             return jsonify({'error': '未指定原始数据文件'}), 400
@@ -1062,16 +1079,116 @@ def start_data_preparation():
                     raw_data = filtered_data
                     yield f"data: > 质量过滤完成，剩余 {len(raw_data)} 条数据\n\n"
                 
-                # 格式转换
+                # 格式转换 - 增加模型介入分析
                 yield f"data: > 正在执行格式转换 ({conversion_strategy})...\n\n"
                 
+                # 如果启用模型分析且是知识问答转换策略，使用LLM进行更详细的分析
+                model_analysis_active = enable_model_analysis and conversion_strategy == 'knowledge_qa'
+                if model_analysis_active:
+                    yield f"data: > [模型介入] 启用LLM智能分析数据内容...\n\n"
+                    try:
+                        # 复用问答系统的模型选择逻辑 - 与问答系统完全一致
+                        from app.services.qa_service import QAService
+                        qa_service = QAService()
+                        
+                        # 如果用户指定了分析模型，根据类别创建对应的LLM
+                        original_llm = None
+                        if analysis_model and analysis_model_category:
+                            original_llm = qa_service.llm
+                            yield f"data: > [模型切换] 使用用户选择的模型: {analysis_model_category} / {analysis_model}\n\n"
+                            
+                            # 根据类别创建对应的LLM - 与问答系统逻辑一致
+                            from langchain_openai import ChatOpenAI
+                            if analysis_model_category == 'ollama':
+                                from langchain_community.chat_models import ChatOllama
+                                qa_service.llm = ChatOllama(
+                                    base_url=Config.OLLAMA_BASE_URL,
+                                    model=analysis_model,
+                                    temperature=0.1
+                                )
+                            elif analysis_model_category == 'vllm':
+                                base_url = Config.VLLM_API_URL
+                                if base_url.endswith('/chat/completions'):
+                                    base_url = base_url.replace('/chat/completions', '')
+                                qa_service.llm = ChatOpenAI(
+                                    base_url=base_url,
+                                    api_key=Config.VLLM_API_KEY,
+                                    model=analysis_model,
+                                    temperature=0.1,
+                                    max_retries=1,
+                                    timeout=60
+                                )
+                            elif analysis_model_category == 'online':
+                                # 在线模型处理
+                                if analysis_model == 'deepseek':
+                                    qa_service.llm = ChatOpenAI(
+                                        base_url=Config.DEEPSEEK_API_URL.replace('/chat/completions', ''),
+                                        api_key=Config.DEEPSEEK_API_KEY,
+                                        model=Config.DEEPSEEK_MODEL_NAME,
+                                        temperature=0.1,
+                                        max_retries=1,
+                                        timeout=60
+                                    )
+                                elif analysis_model == 'qwen':
+                                    qa_service.llm = ChatOpenAI(
+                                        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+                                        api_key=os.getenv('DASHSCOPE_API_KEY', Config.QWEN_API_KEY),
+                                        model="qwen-plus",
+                                        temperature=0.1,
+                                        max_retries=1,
+                                        timeout=60
+                                    )
+                                else:
+                                    # 使用默认配置
+                                    pass
+                        else:
+                            yield f"data: > 使用问答系统默认模型: {Config.ACTIVE_LLM} 进行分析\n\n"
+                        
+                    except Exception as e:
+                        yield f"data: > [WARNING] LLM分析初始化失败: {str(e)}，将使用启发式转换\n\n"
+                        model_analysis_active = False
+                
                 converted_data = []
-                for item in raw_data:
+                for idx, item in enumerate(raw_data):
                     if conversion_strategy == 'knowledge_qa':
                         # 转换为知识问答格式
                         text = item.get('text', '')
                         if text:
-                            # 简单启发式：第一句作为问题，剩余作为答案
+                            # 如果启用模型分析，使用LLM生成更准确的问答对
+                            if model_analysis_active and idx < 10:  # 只对前10条使用LLM分析，避免耗时过长
+                                try:
+                                    from langchain_core.messages import HumanMessage
+                                    analysis_prompt = f"""请分析以下运维知识文本，提取一个核心问题和详细答案。
+文本内容：
+{text[:500]}  # 限制长度避免过长
+
+请按以下JSON格式输出（只输出JSON，不要有其他内容）：
+{{
+    "question": "核心问题（简洁明了）",
+    "answer": "详细答案（专业完整）"
+}}
+"""
+                                    response = qa_service.llm.invoke([HumanMessage(content=analysis_prompt)])
+                                    # 尝试解析JSON响应
+                                    try:
+                                        import re
+                                        json_match = re.search(r'\{.*\}', response.content, re.DOTALL)
+                                        if json_match:
+                                            parsed = json.loads(json_match.group())
+                                            converted_data.append({
+                                                'instruction': parsed.get('question', '请解释以下内容'),
+                                                'input': '',
+                                                'output': parsed.get('answer', text)
+                                            })
+                                            if (idx + 1) % 5 == 0:
+                                                yield f"data: > LLM已分析 {idx + 1} 条数据...\n\n"
+                                            continue
+                                    except:
+                                        pass  # 解析失败则回退到启发式
+                                except Exception as e:
+                                    pass  # LLM调用失败则回退到启发式
+                            
+                            # 启发式转换（原逻辑）
                             sentences = text.split('。')
                             if len(sentences) >= 2:
                                 converted_data.append({
@@ -1103,6 +1220,10 @@ def start_data_preparation():
                     else:
                         # 保留原格式
                         converted_data.append(item)
+                
+                # 恢复原始LLM配置
+                if model_analysis_active and original_llm:
+                    qa_service.llm = original_llm
                 
                 # 保存清洗后的数据
                 with open(output_path, 'w', encoding='utf-8') as f:
@@ -1163,23 +1284,59 @@ def start_distillation():
             yield f"data: > 蒸馏策略: {strategy}\n\n"
             
             try:
-                # 使用预获取的路径
-                teacher_path = os.path.join(models_dir, teacher_model)
+                # 优化教师模型路径查找逻辑
+                possible_teacher_paths = [
+                    os.path.join(models_dir, teacher_model),  # 标准路径
+                    os.path.join(models_dir, teacher_model + '_merged'),  # 合并后的模型
+                    os.path.join(models_dir, teacher_model + '_lora'),  # LoRA适配器
+                ]
+                
+                teacher_path = None
+                for path in possible_teacher_paths:
+                    if os.path.exists(path) and os.path.isdir(path):
+                        teacher_path = path
+                        break
                 
                 # 检查教师模型是否存在
-                if not os.path.exists(teacher_path):
+                if not teacher_path:
                     yield f"data: > [ERROR] 教师模型不存在: {teacher_model}\n\n"
+                    yield f"data: > [INFO] 已尝试以下路径:\n\n"
+                    for path in possible_teacher_paths:
+                        yield f"data: >   - {path}\n\n"
+                    yield f"data: > [TIP] 请先在阶段2完成教师模型微调并合并权重\n\n"
                     yield f"data: [DONE]\n\n"
                     return
                 
-                # 解析学生模型名称
+                yield f"data: > [INFO] 找到教师模型路径: {teacher_path}\n\n"
+                
+                # 解析学生模型名称并查找路径
                 student_name = student_model.replace('/', '--')
-                student_path = os.path.join(root_path, '..', 'hugface', student_name)
                 
-                if not os.path.exists(student_path):
+                # 优化模型路径查找逻辑：支持多个可能的位置
+                possible_student_paths = [
+                    os.path.join(root_path, '..', 'hugface', student_name),  # 标准HF路径
+                    os.path.join(root_path, '..', 'hugface', student_model),  # 原始名称
+                    os.path.join(Config.HF_MODEL_DIR, student_name),  # 配置中的HF目录
+                    os.path.join(Config.HF_MODEL_DIR, student_model),  # 配置中的原始名称
+                    os.path.join(root_path, '..', 'finetuned_models', 'base_models', student_name),  # 基础模型目录
+                ]
+                
+                student_path = None
+                for path in possible_student_paths:
+                    if os.path.exists(path) and os.path.isdir(path):
+                        student_path = path
+                        break
+                
+                if not student_path:
                     yield f"data: > [ERROR] 学生模型不存在: {student_model}\n\n"
+                    yield f"data: > [INFO] 已尝试以下路径:\n\n"
+                    for path in possible_student_paths:
+                        yield f"data: >   - {path}\n\n"
+                    yield f"data: > [TIP] 请确保学生模型已下载到 hugface/ 目录或 finetuned_models/base_models/ 目录\n\n"
                     yield f"data: [DONE]\n\n"
                     return
+                
+                yield f"data: > [INFO] 找到学生模型路径: {student_path}\n\n"
                 
                 # 生成蒸馏后模型名称
                 distilled_name = f"{student_name}_distilled_by_{teacher_model}"
@@ -1621,12 +1778,31 @@ def start_quantization():
             yield f"data: > 量化方法: {method}\n\n"
             
             try:
-                model_path = os.path.join(models_dir, model_name)
+                # 优化模型路径查找逻辑
+                possible_model_paths = [
+                    os.path.join(models_dir, model_name),  # 标准路径
+                    os.path.join(models_dir, model_name + '_lora'),  # LoRA模型
+                    os.path.join(models_dir, model_name + '_merged'),  # 合并后的模型
+                    os.path.join(root_path, '..', 'hugface', model_name.replace('/', '--')),  # HF路径
+                    os.path.join(Config.HF_MODEL_DIR, model_name.replace('/', '--')),  # 配置HF目录
+                ]
                 
-                if not os.path.exists(model_path):
+                model_path = None
+                for path in possible_model_paths:
+                    if os.path.exists(path) and os.path.isdir(path):
+                        model_path = path
+                        break
+                
+                if not model_path:
                     yield f"data: > [ERROR] 模型不存在: {model_name}\n\n"
+                    yield f"data: > [INFO] 已尝试以下路径:\n\n"
+                    for path in possible_model_paths:
+                        yield f"data: >   - {path}\n\n"
+                    yield f"data: > [TIP] 请确保模型已完成训练并存在于 finetuned_models/ 或 hugface/ 目录\n\n"
                     yield f"data: [DONE]\n\n"
                     return
+                
+                yield f"data: > [INFO] 找到模型路径: {model_path}\n\n"
                 
                 # 生成量化后模型名称
                 quantized_name = f"{model_name}_{method}_4bit"
@@ -1654,15 +1830,50 @@ def start_quantization():
                     is_lora = os.path.exists(os.path.join(model_path, 'adapter_config.json'))
                     
                     if is_lora:
-                        # LoRA 模型需要先找到基础模型
-                        # 从模型名称解析基础模型
-                        if '0.5B' in model_name:
-                            base_model = os.path.join(root_path, '..', 'hugface', 'Qwen--Qwen2.5-0.5B-Instruct')
-                        elif '7B' in model_name:
-                            base_model = os.path.join(root_path, '..', 'hugface', 'Qwen--Qwen2.5-7B-Instruct')
-                        else:
-                            # 默认使用 0.5B
-                            base_model = os.path.join(root_path, '..', 'hugface', 'Qwen--Qwen2.5-0.5B-Instruct')
+                        # LoRA 模型需要先找到基础模型 - 优化查找逻辑
+                        # 尝试从 adapter_config.json 读取基础模型
+                        base_model = None
+                        adapter_config_path = os.path.join(model_path, 'adapter_config.json')
+                        try:
+                            with open(adapter_config_path, 'r', encoding='utf-8') as f:
+                                adapter_cfg = json.load(f)
+                                base_model_from_config = adapter_cfg.get('base_model_name_or_path', '')
+                                if base_model_from_config:
+                                    # 检查是否是本地路径
+                                    if os.path.exists(base_model_from_config):
+                                        base_model = base_model_from_config
+                                    else:
+                                        # 尝试在 hugface 目录查找
+                                        base_name = os.path.basename(base_model_from_config.replace('/', '--'))
+                                        possible_base_paths = [
+                                            os.path.join(root_path, '..', 'hugface', base_name),
+                                            os.path.join(Config.HF_MODEL_DIR, base_name),
+                                        ]
+                                        for path in possible_base_paths:
+                                            if os.path.exists(path):
+                                                base_model = path
+                                                break
+                        except Exception as e:
+                            yield f"data: > [WARNING] 读取 adapter_config.json 失败: {str(e)}\n\n"
+                        
+                        # 如果无法从配置读取，从模型名称推断
+                        if not base_model:
+                            if '0.5B' in model_name or '0.5b' in model_name.lower():
+                                base_model = os.path.join(root_path, '..', 'hugface', 'Qwen--Qwen2.5-0.5B-Instruct')
+                            elif '7B' in model_name or '7b' in model_name.lower():
+                                base_model = os.path.join(root_path, '..', 'hugface', 'Qwen--Qwen2.5-7B-Instruct')
+                            elif '1.5B' in model_name or '1.5b' in model_name.lower():
+                                base_model = os.path.join(root_path, '..', 'hugface', 'Qwen--Qwen2.5-1.5B-Instruct')
+                            else:
+                                # 默认使用 0.5B
+                                base_model = os.path.join(root_path, '..', 'hugface', 'Qwen--Qwen2.5-0.5B-Instruct')
+                        
+                        # 验证基础模型是否存在
+                        if not os.path.exists(base_model):
+                            yield f"data: > [ERROR] 基础模型不存在: {base_model}\n\n"
+                            yield f"data: > [TIP] 请先下载基础模型到 hugface/ 目录\n\n"
+                            yield f"data: [DONE]\n\n"
+                            return
                         
                         yield f"data: > 检测到 LoRA 模型，基础模型: {base_model}\n\n"
                         
@@ -1910,3 +2121,177 @@ def start_evaluation():
             yield f"data: [EVAL_ERROR] 评估异常: {str(e)}\n\n"
     
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
+
+
+# ============================================================================
+# 阶段 4: vLLM 部署 API
+# ============================================================================
+
+# 存储正在运行的vLLM进程
+active_vllm_processes = {}
+
+@api_bp.route('/api/deploy/start', methods=['POST'])
+def start_deploy():
+    """
+    使用 vLLM 部署模型为推理服务
+    """
+    try:
+        data = request.get_json()
+        model_name = data.get('model_name')
+        port = int(data.get('port', 8000))
+        gpu_util = float(data.get('gpu_util', 0.8))
+        is_quantized = data.get('is_quantized', False)
+        
+        if not model_name:
+            return jsonify({'error': '请指定要部署的模型'}), 400
+        
+        # 查找模型路径
+        models_dir = os.path.join(current_app.root_path, '..', 'finetuned_models')
+        hugface_dir = os.path.join(current_app.root_path, '..', 'hugface')
+        
+        possible_paths = [
+            os.path.join(models_dir, model_name),
+            os.path.join(models_dir, model_name + '_awq_4bit'),
+            os.path.join(models_dir, model_name + '_merged'),
+            os.path.join(models_dir, model_name + '_lora'),
+            os.path.join(hugface_dir, model_name.replace('/', '--')),
+        ]
+        
+        model_path = None
+        for path in possible_paths:
+            if os.path.exists(path) and os.path.isdir(path):
+                model_path = path
+                break
+        
+        if not model_path:
+            return jsonify({
+                'error': f'模型不存在: {model_name}',
+                'message': '请确保模型已完成训练或量化'
+            }), 404
+        
+        # 检查端口是否被占用
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        result = sock.connect_ex(('127.0.0.1', port))
+        sock.close()
+        
+        if result == 0:
+            return jsonify({
+                'error': f'端口 {port} 已被占用',
+                'message': '请更换端口或停止占用该端口的服务'
+            }), 400
+        
+        # 构建 vLLM 启动命令
+        cmd = [
+            sys.executable, '-m', 'vllm.entrypoints.openai.api_server',
+            '--model', model_path,
+            '--port', str(port),
+            '--gpu-memory-utilization', str(gpu_util),
+            '--trust-remote-code',
+        ]
+        
+        if is_quantized:
+            cmd.extend(['--quantization', 'awq'])
+        
+        # 启动 vLLM 进程
+        try:
+            env = os.environ.copy()
+            env['CUDA_VISIBLE_DEVICES'] = '0'
+            
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env
+            )
+            
+            # 存储进程信息
+            service_id = f"{model_name}_{port}"
+            active_vllm_processes[service_id] = {
+                'process': process,
+                'model': model_name,
+                'port': port,
+                'start_time': datetime.now().isoformat()
+            }
+            
+            api_url = f"http://localhost:{port}/v1/chat/completions"
+            
+            return jsonify({
+                'message': f'vLLM 服务已启动',
+                'model': model_name,
+                'port': port,
+                'api_url': api_url,
+                'service_id': service_id,
+                'note': '服务启动需要约10-30秒加载模型，请稍后测试'
+            })
+            
+        except Exception as e:
+            return jsonify({
+                'error': f'启动 vLLM 失败: {str(e)}',
+                'message': '请确保已安装 vLLM: pip install vllm'
+            }), 500
+            
+    except Exception as e:
+        current_app.logger.error(f"Deploy error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/api/deploy/stop', methods=['POST'])
+def stop_deploy():
+    """停止 vLLM 部署服务"""
+    try:
+        data = request.get_json()
+        service_id = data.get('service_id')
+        
+        if service_id and service_id in active_vllm_processes:
+            process_info = active_vllm_processes[service_id]
+            process = process_info['process']
+            
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+            
+            del active_vllm_processes[service_id]
+            
+            return jsonify({
+                'message': f'服务 {service_id} 已停止',
+                'port': process_info['port']
+            })
+        else:
+            return jsonify({'error': '未找到指定的服务'}), 404
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/api/deploy/list', methods=['GET'])
+def list_deployments():
+    """列出所有正在运行的部署服务"""
+    try:
+        # 清理已结束的进程
+        dead_services = []
+        for service_id, info in active_vllm_processes.items():
+            if info['process'].poll() is not None:
+                dead_services.append(service_id)
+        
+        for sid in dead_services:
+            del active_vllm_processes[sid]
+        
+        return jsonify({
+            'services': [
+                {
+                    'service_id': sid,
+                    'model': info['model'],
+                    'port': info['port'],
+                    'start_time': info['start_time'],
+                    'api_url': f"http://localhost:{info['port']}/v1/chat/completions"
+                }
+                for sid, info in active_vllm_processes.items()
+            ]
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

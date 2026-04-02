@@ -3,70 +3,194 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>模型微调 (Ollama) - 湖北移动运维知识助手</title>
+    <title>模型训练与部署 - 湖北移动运维知识助手</title>
     <link href="/static/vendor/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        /* 统一颜色方案 */
+        :root {
+            --primary-color: #1e3c72;
+            --primary-light: #2a5298;
+            --secondary-color: #f8f9fa;
+            --border-color: #dee2e6;
+            --text-muted: #6c757d;
+        }
+        
+        /* 导航栏样式 */
+        .navbar-custom {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            height: 56px;
+        }
+        
+        /* 页面容器 - 减少边距 */
+        .page-container {
+            max-width: 1400px;
+            padding: 1rem;
+        }
+        
+        /* 统一卡片样式 */
+        .stage-card {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            margin-bottom: 1rem;
+        }
+        
+        .stage-card .card-header {
+            background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+            border-bottom: 2px solid var(--primary-color);
+            padding: 0.75rem 1rem;
+        }
+        
+        .stage-card .card-header h6 {
+            color: var(--primary-color);
+            font-size: 0.95rem;
+            margin-bottom: 0.25rem;
+        }
+        
+        .stage-card .card-header p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 0;
+        }
+        
+        .stage-card .card-body {
+            padding: 1rem;
+        }
+        
+        /* 统一表单控件 */
+        .form-label {
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #495057;
+            margin-bottom: 0.25rem;
+        }
+        
+        .form-control, .form-select {
+            font-size: 0.85rem;
+            padding: 0.375rem 0.5rem;
+        }
+        
+        /* 统一按钮样式 */
+        .btn-primary-custom {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
+            border: none;
+            color: white;
+        }
+        
+        .btn-primary-custom:hover {
+            background: linear-gradient(135deg, #152a52 0%, #1e3c72 100%);
+            color: white;
+        }
+        
+        /* 统一输出区域 */
+        .output-terminal {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            border-radius: 6px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.8rem;
+            padding: 0.75rem;
+            height: 100px;
+            overflow-y: auto;
+            border: 1px solid #333;
+        }
+        
+        /* Tab样式统一 */
+        .nav-tabs .nav-link {
+            color: var(--text-muted);
+            font-weight: 500;
+            padding: 0.6rem 1.2rem;
+            border: none;
+            border-bottom: 3px solid transparent;
+        }
+        
+        .nav-tabs .nav-link.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+            background: transparent;
+        }
+        
+        /* 紧凑布局 */
+        .compact-row {
+            margin-bottom: 0.75rem;
+        }
+        
+        .compact-row > [class*="col-"] {
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }
+        
+        /* 参数网格 */
+        .param-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 0.5rem;
+        }
+        
+        /* 高级配置折叠 */
+        .advanced-toggle {
+            font-size: 0.8rem;
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        
+        .advanced-toggle:hover {
+            color: var(--primary-light);
+        }
+    </style>
 </head>
 <body class="bg-light">
-    <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); box-shadow: 0 2px 10px rgba(0,0,0,0.1); height: 56px;">
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-custom">
         <div class="container-fluid px-4">
-            <a class="navbar-brand" href="/">运维知识助手 (RAG)</a>
+            <a class="navbar-brand fw-bold" href="/">运维知识助手 (RAG)</a>
             <div class="collapse navbar-collapse">
                 <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/">问答系统</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" href="/finetune">模型训练与部署</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/eval_system">评估系统</a>
-                    </li>
+                    <li class="nav-item"><a class="nav-link" href="/">问答系统</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/finetune">模型训练与部署</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/eval_system">评估系统</a></li>
                 </ul>
             </div>
         </div>
     </nav>
 
-    <div id="mainContentContainer" class="container mt-4">
-        <!-- <h3 class="mb-4">模型训练与部署流水线 (四阶段)</h3> -->
-        
+    <div class="container-fluid page-container">
         <!-- 导航 Tabs -->
-        <ul class="nav nav-tabs mb-4" id="pipelineTabs" role="tablist">
+        <ul class="nav nav-tabs mb-3" id="pipelineTabs" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link active fw-bold" id="step1-tab" data-bs-toggle="tab" data-bs-target="#step1" type="button" role="tab" aria-controls="step1" aria-selected="true">1. 数据准备</button>
+                <button class="nav-link active" id="step1-tab" data-bs-toggle="tab" data-bs-target="#step1" type="button">1. 数据准备</button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link fw-bold" id="step2-tab" data-bs-toggle="tab" data-bs-target="#step2" type="button" role="tab" aria-controls="step2" aria-selected="false">2. 教师模型微调</button>
+                <button class="nav-link" id="step2-tab" data-bs-toggle="tab" data-bs-target="#step2" type="button">2. 教师模型微调</button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link fw-bold" id="step3-tab" data-bs-toggle="tab" data-bs-target="#step3" type="button" role="tab" aria-controls="step3" aria-selected="false">3. 知识蒸馏</button>
+                <button class="nav-link" id="step3-tab" data-bs-toggle="tab" data-bs-target="#step3" type="button">3. 知识蒸馏</button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link fw-bold" id="step4-tab" data-bs-toggle="tab" data-bs-target="#step4" type="button" role="tab" aria-controls="step4" aria-selected="false">4. 量化与部署</button>
+                <button class="nav-link" id="step4-tab" data-bs-toggle="tab" data-bs-target="#step4" type="button">4. 量化与部署</button>
             </li>
         </ul>
 
         <div class="tab-content" id="pipelineTabsContent">
             <!-- 阶段 1: 数据准备 -->
-            <div class="tab-pane fade show active" id="step1" role="tabpanel" aria-labelledby="step1-tab">
-                <div class="card border-0 shadow-sm rounded-3 mb-3">
-                    <div class="card-header bg-white border-bottom-0 pt-2 pb-0">
-                        <h6 class="mb-0 fw-bold" style="color: #1e3c72;">数据清洗与筛选 (Powered by Datatrove)</h6>
-                        <p class="text-muted small mb-1">从原始数据中提取高质量文本，支持 TXT/JSON/JSONL，自动去重与格式化为 Alpaca 格式。</p>
+            <div class="tab-pane fade show active" id="step1">
+                <div class="stage-card">
+                    <div class="card-header">
+                        <h6>📊 阶段 1: 数据清洗与筛选</h6>
+                        <p>从原始数据中提取高质量文本，支持 TXT/JSON/JSONL，自动去重与格式化为 Alpaca 格式</p>
                     </div>
-                    <div class="card-body py-2">
-                        <div class="row g-2">
+                    <div class="card-body">
+                        <div class="row compact-row">
                             <div class="col-md-4">
-                                <label class="form-label small mb-1">输入原始数据文件：</label>
+                                <label class="form-label">输入原始数据文件</label>
                                 <div class="input-group input-group-sm">
-                                    <select class="form-select" id="rawDatasetSelect">
-                                        <option value="">加载中...</option>
-                                    </select>
+                                    <select class="form-select" id="rawDatasetSelect"><option value="">加载中...</option></select>
                                     <button class="btn btn-outline-secondary" type="button" onclick="loadRawDatasets()">🔄</button>
                                 </div>
                             </div>
-                            <div class="col-md-3">
-                                <label class="form-label small mb-1">去重策略：</label>
+                            <div class="col-md-2">
+                                <label class="form-label">去重策略</label>
                                 <select class="form-select form-select-sm" id="dedupStrategySelect">
                                     <option value="exact">精确去重 (MD5)</option>
                                     <option value="minhash">近似去重 (MinHash)</option>
@@ -74,257 +198,265 @@
                                 </select>
                             </div>
                             <div class="col-md-3">
-                                <label class="form-label small mb-1">数据转换策略：</label>
-                                <select class="form-select form-select-sm" id="conversionStrategySelect">
+                                <label class="form-label">数据转换策略</label>
+                                <select class="form-select form-select-sm" id="conversionStrategySelect" onchange="toggleModelAnalysis()">
                                     <option value="knowledge_qa" selected>知识问答生成</option>
                                     <option value="text_completion">文本续写</option>
                                     <option value="keep_original">保留原格式</option>
                                 </select>
                             </div>
-                            <div class="col-md-2">
-                                <label class="form-label small mb-1">输出文件名：</label>
+                            <div class="col-md-3">
+                                <label class="form-label">输出文件名</label>
                                 <input type="text" class="form-control form-control-sm" id="coreDatasetNameInput" value="core_dataset.jsonl">
                             </div>
                         </div>
-                        <button class="btn btn-primary btn-sm mt-2" id="startDataPrepBtn" onclick="startDataPreparation()">开始数据清洗</button>
-                        <div class="mt-2 p-2 bg-dark text-light rounded overflow-auto" id="dataPrepOutput" style="font-family: monospace; font-size: 0.8rem; height: 120px;">
-                            > 等待开始数据准备任务...
+                        <!-- 模型介入分析配置 -->
+                        <div class="row compact-row" id="modelAnalysisConfig" style="display: none;">
+                            <div class="col-12">
+                                <div class="card bg-light border-0 p-2">
+                                    <p class="mb-2 fw-bold text-primary small">当前分析模型: <span id="dataPrepCurrentModelBadge">使用问答系统配置</span></p>
+                                    <div class="row g-2">
+                                        <div class="col-md-3">
+                                            <select class="form-select form-select-sm" id="dataPrepModelCategorySelect">
+                                                <option value="online">在线模型</option>
+                                                <option value="ollama" selected>本地模型 (Ollama)</option>
+                                                <option value="vllm">本地模型 (vLLM)</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <select class="form-select form-select-sm" id="dataPrepModelSelect"><option value="">加载中...</option></select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <button class="btn btn-primary-custom btn-sm w-100" type="button" id="applyDataPrepModelBtn">应用为分析模型</button>
+                                        </div>
+                                    </div>
+                                    <small class="text-muted mt-1" id="dataPrepModelStatus"></small>
+                                </div>
+                            </div>
                         </div>
+                        <div class="d-flex gap-2 mt-2">
+                            <button class="btn btn-primary-custom btn-sm" id="startDataPrepBtn" onclick="startDataPreparation()">开始数据清洗</button>
+                        </div>
+                        <div class="output-terminal mt-2" id="dataPrepOutput">> 等待开始数据准备任务...</div>
                     </div>
                 </div>
             </div>
 
             <!-- 阶段 2: 教师模型微调 -->
-            <div class="tab-pane fade" id="step2" role="tabpanel" aria-labelledby="step2-tab">
-                <div class="card border-0 shadow-sm rounded-3 mb-3">
-                    <div class="card-header bg-white border-bottom-0 pt-2 pb-0">
-                        <h6 class="mb-0 fw-bold" style="color: #1e3c72;">教师模型 QLoRA 微调</h6>
-                        <p class="text-muted small mb-1">使用高质量标注数据对教师模型进行微调，生成领域专家模型。</p>
+            <div class="tab-pane fade" id="step2">
+                <div class="stage-card">
+                    <div class="card-header">
+                        <h6>🎓 阶段 2: 教师模型 QLoRA 微调</h6>
+                        <p>使用高质量标注数据对教师模型进行微调，生成领域专家模型</p>
                     </div>
-                    <div class="card-body py-2">
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">教师基座模型：</label>
-                                <select class="form-select mb-2" id="modelCategorySelect">
+                    <div class="card-body">
+                        <!-- 模型和数据集选择 -->
+                        <div class="row compact-row">
+                            <div class="col-md-6">
+                                <label class="form-label">教师基座模型</label>
+                                <select class="form-select form-select-sm mb-2" id="modelCategorySelect">
                                     <option value="ollama">本地模型 (Ollama)</option>
                                     <option value="vllm">本地模型 (vLLM)</option>
                                     <option value="hf">本地模型 (Hugging Face)</option>
                                     <option value="online">在线模型 (支持下载)</option>
                                 </select>
-                                <div class="input-group">
+                                <div class="input-group input-group-sm">
                                     <input type="text" class="form-control" id="baseModelSelect" list="baseModelDatalist" placeholder="请选择或输入模型ID...">
-                                    <datalist id="baseModelDatalist">
-                                    </datalist>
-                                    <button class="btn btn-outline-info" type="button" id="searchModelBtn" title="搜索在线模型" onclick="searchOnlineModels()" style="display:none;">
-                                        🔍
-                                    </button>
-                                    <button class="btn btn-outline-primary" type="button" id="downloadModelBtn" title="下载选中的模型" style="display:none;">
-                                        ⬇️
-                                    </button>
-                                    <button class="btn btn-outline-danger" type="button" id="deleteModelBtn" title="删除选中的本地模型" onclick="deleteBaseModel()" style="display:none;">
-                                        🗑️
-                                    </button>
-                                    <button class="btn btn-outline-secondary" type="button" id="refreshModelBtn" title="刷新本地缓存" onclick="loadModels()">
-                                        🔄
-                                    </button>
+                                    <datalist id="baseModelDatalist"></datalist>
+                                    <button class="btn btn-outline-info" type="button" id="searchModelBtn" onclick="searchOnlineModels()" style="display:none;">🔍</button>
+                                    <button class="btn btn-outline-primary" type="button" id="downloadModelBtn" style="display:none;">⬇️</button>
+                                    <button class="btn btn-outline-danger" type="button" id="deleteModelBtn" onclick="deleteBaseModel()" style="display:none;">🗑️</button>
+                                    <button class="btn btn-outline-secondary" type="button" id="refreshModelBtn" onclick="loadModels()">🔄</button>
                                 </div>
                             </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">训练数据集：</label>
-                                <div class="input-group">
-                                    <select class="form-select" id="datasetSelect">
-                                        <option value="">加载中...</option>
-                                    </select>
-                                    <button class="btn btn-outline-secondary" type="button" id="refreshDatasetBtn" title="刷新文件列表">
-                                        🔄
-                                    </button>
+                            <div class="col-md-6">
+                                <label class="form-label">训练数据集</label>
+                                <div class="input-group input-group-sm">
+                                    <select class="form-select" id="datasetSelect"><option value="">加载中...</option></select>
+                                    <button class="btn btn-outline-secondary" type="button" id="refreshDatasetBtn">🔄</button>
                                 </div>
                             </div>
                         </div>
                         
-                        <hr class="my-2">
-                        
-                        <div class="row g-2 mb-2">
+                        <!-- 训练模式选择 -->
+                        <div class="row compact-row">
                             <div class="col-12">
-                                <div class="d-flex align-items-center gap-2 mb-2">
-                                    <label class="form-label mb-0 text-nowrap fw-bold">训练模式:</label>
-                                    <select class="form-select form-select-sm" id="trainingModeSelect" style="width: auto;" onchange="applyTrainingPreset()">
+                                <div class="d-flex align-items-center gap-2">
+                                    <label class="form-label mb-0 text-nowrap">训练模式</label>
+                                    <select class="form-select form-select-sm" id="trainingModeSelect" style="width: auto;" onchange="applyTrainingPreset(); updateTrainingModeIndicator();">
                                         <option value="local" selected>🖥️ 本地调试 (流程验证，低资源)</option>
                                         <option value="online">☁️ 线上训练 (正式训练，高质量)</option>
                                     </select>
+                                    <span id="trainingModeIndicator" class="badge bg-info">指标: loss趋势、收敛性</span>
                                 </div>
                             </div>
-                                <!-- 训练参数配置 -->
-                                <div class="row g-2 mb-2">
-                                    <div class="col">
-                                        <label class="form-label mb-0 small">学习率</label>
+                        </div>
+                        
+                        <!-- 训练参数配置 -->
+                        <div class="row compact-row">
+                            <div class="col-12">
+                                <label class="form-label">训练参数</label>
+                                <div class="param-grid">
+                                    <div>
+                                        <label class="form-label small">学习率</label>
                                         <input type="number" step="0.00001" id="learningRateInput" class="form-control form-control-sm" value="0.0002">
                                     </div>
-                                    <div class="col">
-                                        <label class="form-label mb-0 small">训练轮数</label>
+                                    <div>
+                                        <label class="form-label small">训练轮数</label>
                                         <input type="number" step="0.1" id="epochsInput" class="form-control form-control-sm" value="2.0">
                                     </div>
-                                    <div class="col">
-                                        <label class="form-label mb-0 small">批大小</label>
+                                    <div>
+                                        <label class="form-label small">批大小</label>
                                         <input type="number" id="batchSizeInput" class="form-control form-control-sm" value="1">
                                     </div>
-                                    <div class="col">
-                                        <label class="form-label mb-0 small">最大长度</label>
+                                    <div>
+                                        <label class="form-label small">最大长度</label>
                                         <input type="number" id="maxLengthInput" class="form-control form-control-sm" value="256">
                                     </div>
-                                    <div class="col">
-                                        <label class="form-label mb-0 small">梯度累积</label>
+                                    <div>
+                                        <label class="form-label small">梯度累积</label>
                                         <input type="number" id="gradAccInput" class="form-control form-control-sm" value="2">
                                     </div>
-                                    <div class="col">
-                                        <label class="form-label mb-0 small">精度</label>
+                                    <div>
+                                        <label class="form-label small">精度</label>
                                         <select class="form-select form-select-sm" id="precisionSelect">
                                             <option value="fp16">FP16</option>
                                             <option value="bf16">BF16</option>
                                             <option value="fp32" selected>FP32</option>
                                         </select>
                                     </div>
-                                    <div class="col">
-                                        <label class="form-label mb-0 small">QLoRA</label>
+                                    <div>
+                                        <label class="form-label small">QLoRA</label>
                                         <select class="form-select form-select-sm" id="quantizationSelect">
                                             <option value="none">不量化</option>
                                             <option value="8">8-bit</option>
                                             <option value="4" selected>4-bit</option>
                                         </select>
                                     </div>
-                                    <div class="col">
-                                        <label class="form-label mb-0 small">优化器</label>
+                                    <div>
+                                        <label class="form-label small">优化器</label>
                                         <select class="form-select form-select-sm" id="optimizerSelect">
                                             <option value="adamw_torch" selected>adamw</option>
                                             <option value="paged_adamw_32bit">paged</option>
                                         </select>
                                     </div>
                                 </div>
-                                <!-- 高级配置折叠区 -->
-                                <div class="mb-2">
-                                    <a class="text-decoration-none small" data-bs-toggle="collapse" href="#advancedConfig" role="button" aria-expanded="false">
-                                        ▶ 高级配置 (LoRA参数、预热、调度器等)
-                                    </a>
+                            </div>
+                        </div>
+                        
+                        <!-- 高级配置折叠区 -->
+                        <div class="compact-row">
+                            <a class="advanced-toggle" data-bs-toggle="collapse" href="#advancedConfig">▶ 高级配置 (LoRA参数、预热、调度器等)</a>
+                        </div>
+                        <div class="collapse" id="advancedConfig">
+                            <div class="param-grid mb-2">
+                                <div>
+                                    <label class="form-label small">LoRA Rank</label>
+                                    <input type="number" class="form-control form-control-sm" id="loraRankInput" value="8" min="1" max="256">
                                 </div>
-                                <div class="collapse" id="advancedConfig">
-                                    <div class="row g-2 mb-2">
-                                        <div class="col-md-2">
-                                            <label class="form-label small mb-0">LoRA Rank</label>
-                                            <input type="number" class="form-control form-control-sm" id="loraRankInput" value="8" min="1" max="256">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label small mb-0">LoRA Alpha</label>
-                                            <input type="number" class="form-control form-control-sm" id="loraAlphaInput" value="16" min="1" max="512">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label small mb-0">LoRA Dropout</label>
-                                            <input type="number" class="form-control form-control-sm" id="loraDropoutInput" value="0.1" min="0" max="1" step="0.01">
-                                        </div>
-                                        <div class="col-md-3">
-                                            <label class="form-label small mb-0">LoRA Target</label>
-                                            <select class="form-select form-select-sm" id="loraTargetSelect">
-                                                <option value="all" selected>all (推荐)</option>
-                                                <option value="q_proj,v_proj">q_proj,v_proj</option>
-                                                <option value="q_proj,k_proj,v_proj,o_proj">q_proj,k_proj,v_proj,o_proj</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-3">
-                                            <label class="form-label small mb-0">学习率调度器</label>
-                                            <select class="form-select form-select-sm" id="lrSchedulerSelect">
-                                                <option value="cosine" selected>cosine (推荐)</option>
-                                                <option value="linear">linear</option>
-                                                <option value="constant">constant</option>
-                                                <option value="constant_with_warmup">constant_with_warmup</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="row g-2 mb-2">
-                                        <div class="col-md-2">
-                                            <label class="form-label small mb-0">预热步数</label>
-                                            <input type="number" class="form-control form-control-sm" id="warmupStepsInput" value="0" min="0">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label small mb-0">预热比率</label>
-                                            <input type="number" class="form-control form-control-sm" id="warmupRatioInput" value="0.1" min="0" max="1" step="0.01">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label small mb-0">日志步数</label>
-                                            <input type="number" class="form-control form-control-sm" id="loggingStepsInput" value="1" min="1">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label small mb-0">权重衰减</label>
-                                            <input type="number" class="form-control form-control-sm" id="weightDecayInput" value="0.0" min="0" max="1" step="0.001">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label small mb-0">梯度裁剪</label>
-                                            <input type="number" class="form-control form-control-sm" id="maxGradNormInput" value="1.0" min="0" step="0.1">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label small mb-0">随机种子</label>
-                                            <input type="number" class="form-control form-control-sm" id="seedInput" value="42" min="0">
-                                        </div>
-                                    </div>
-                                    <div class="row g-2 mb-2">
-                                        <div class="col-md-3">
-                                            <label class="form-label small mb-0">序列打包</label>
-                                            <select class="form-select form-select-sm" id="packingSelect">
-                                                <option value="false" selected>关闭</option>
-                                                <option value="true">开启</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-3">
-                                            <label class="form-label small mb-0">RoPE缩放</label>
-                                            <select class="form-select form-select-sm" id="ropeScalingSelect">
-                                                <option value="none" selected>不使用</option>
-                                                <option value="linear">linear</option>
-                                                <option value="dynamic">dynamic</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-3">
-                                            <label class="form-label small mb-0">DeepSpeed</label>
-                                            <select class="form-select form-select-sm" id="deepspeedSelect">
-                                                <option value="none" selected>不使用</option>
-                                                <option value="zero2">ZeRO-2</option>
-                                                <option value="zero3">ZeRO-3</option>
-                                            </select>
-                                        </div>
-                                    </div>
+                                <div>
+                                    <label class="form-label small">LoRA Alpha</label>
+                                    <input type="number" class="form-control form-control-sm" id="loraAlphaInput" value="16" min="1" max="512">
                                 </div>
-                                <div class="d-flex gap-2 mb-2 align-items-center">
-                                    <button class="btn btn-primary btn-sm flex-grow-1" id="startFinetuneBtn" onclick="startFinetune()">开始教师微调任务</button>
-                                    <button class="btn btn-danger btn-sm d-none" id="stopFinetuneBtn" onclick="stopFinetune()">终止训练</button>
-                                    <button class="btn btn-sm btn-outline-info" type="button" id="openTbBtn" onclick="openTensorBoardModal()">
-                                        📈 实时监控 (TensorBoard)
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-secondary" onclick="$('#terminalOutput').empty()">清屏</button>
+                                <div>
+                                    <label class="form-label small">LoRA Dropout</label>
+                                    <input type="number" class="form-control form-control-sm" id="loraDropoutInput" value="0.1" min="0" max="1" step="0.01">
                                 </div>
-                                
-                                <div class="flex-grow-1 bg-dark text-light p-2 rounded overflow-auto" id="terminalOutput" style="font-family: monospace; font-size: 0.85rem; height: 150px;">
-                                    > 准备就绪... 等待分配教师模型微调任务。
+                                <div>
+                                    <label class="form-label small">LoRA Target</label>
+                                    <select class="form-select form-select-sm" id="loraTargetSelect">
+                                        <option value="all" selected>all (推荐)</option>
+                                        <option value="q_proj,v_proj">q_proj,v_proj</option>
+                                        <option value="q_proj,k_proj,v_proj,o_proj">q_proj,k_proj,v_proj,o_proj</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="form-label small">学习率调度器</label>
+                                    <select class="form-select form-select-sm" id="lrSchedulerSelect">
+                                        <option value="cosine" selected>cosine (推荐)</option>
+                                        <option value="linear">linear</option>
+                                        <option value="constant">constant</option>
+                                        <option value="constant_with_warmup">constant_with_warmup</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="form-label small">预热步数</label>
+                                    <input type="number" class="form-control form-control-sm" id="warmupStepsInput" value="0" min="0">
+                                </div>
+                                <div>
+                                    <label class="form-label small">预热比率</label>
+                                    <input type="number" class="form-control form-control-sm" id="warmupRatioInput" value="0.1" min="0" max="1" step="0.01">
+                                </div>
+                                <div>
+                                    <label class="form-label small">日志步数</label>
+                                    <input type="number" class="form-control form-control-sm" id="loggingStepsInput" value="1" min="1">
+                                </div>
+                                <div>
+                                    <label class="form-label small">权重衰减</label>
+                                    <input type="number" class="form-control form-control-sm" id="weightDecayInput" value="0.0" min="0" max="1" step="0.001">
+                                </div>
+                                <div>
+                                    <label class="form-label small">梯度裁剪</label>
+                                    <input type="number" class="form-control form-select-sm" id="maxGradNormInput" value="1.0" min="0" step="0.1">
+                                </div>
+                                <div>
+                                    <label class="form-label small">随机种子</label>
+                                    <input type="number" class="form-control form-control-sm" id="seedInput" value="42" min="0">
+                                </div>
+                                <div>
+                                    <label class="form-label small">序列打包</label>
+                                    <select class="form-select form-select-sm" id="packingSelect">
+                                        <option value="false" selected>关闭</option>
+                                        <option value="true">开启</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="form-label small">RoPE缩放</label>
+                                    <select class="form-select form-select-sm" id="ropeScalingSelect">
+                                        <option value="none" selected>不使用</option>
+                                        <option value="linear">linear</option>
+                                        <option value="dynamic">dynamic</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="form-label small">DeepSpeed</label>
+                                    <select class="form-select form-select-sm" id="deepspeedSelect">
+                                        <option value="none" selected>不使用</option>
+                                        <option value="zero2">ZeRO-2</option>
+                                        <option value="zero3">ZeRO-3</option>
+                                    </select>
                                 </div>
                             </div>
                         </div>
+                        
+                        <div class="d-flex gap-2 mt-2">
+                            <button class="btn btn-primary-custom btn-sm flex-grow-1" id="startFinetuneBtn" onclick="startFinetune()">开始教师微调任务</button>
+                            <button class="btn btn-danger btn-sm d-none" id="stopFinetuneBtn" onclick="stopFinetune()">终止训练</button>
+                            <button class="btn btn-sm btn-outline-info" type="button" id="openTbBtn" onclick="openTensorBoardModal()">📈 实时监控 (TensorBoard)</button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="$('#terminalOutput').empty()">清屏</button>
+                        </div>
+                        <div class="output-terminal mt-2" id="terminalOutput" style="height: 100px;">> 准备就绪... 等待分配教师模型微调任务。</div>
                     </div>
                 </div>
             </div>
 
             <!-- 阶段 3: 知识蒸馏 -->
-            <div class="tab-pane fade" id="step3" role="tabpanel" aria-labelledby="step3-tab">
-                <div class="card border-0 shadow-sm rounded-3 mb-3">
-                    <div class="card-header bg-white border-bottom-0 pt-2 pb-0">
-                        <h6 class="mb-0 fw-bold" style="color: #1e3c72;">学生模型知识蒸馏</h6>
-                        <p class="text-muted small mb-1">基于教师模型生成的软标签，对轻量级学生模型进行 SFT 训练。</p>
+            <div class="tab-pane fade" id="step3">
+                <div class="stage-card">
+                    <div class="card-header">
+                        <h6>🧪 阶段 3: 学生模型知识蒸馏</h6>
+                        <p>基于教师模型生成的软标签，对轻量级学生模型进行 SFT 训练</p>
                     </div>
-                    <div class="card-body py-2">
-                        <div class="row g-2">
+                    <div class="card-body">
+                        <div class="row compact-row">
                             <div class="col-md-4">
-                                <label class="form-label small mb-1">教师模型：</label>
+                                <label class="form-label">教师模型</label>
                                 <select class="form-select form-select-sm" id="teacherModelSelect">
                                     <option value="">加载中...</option>
                                 </select>
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label small mb-1">学生基础模型：</label>
+                                <label class="form-label">学生基础模型</label>
                                 <div class="input-group input-group-sm">
                                     <select class="form-select" id="studentBaseModelSelect">
                                         <option value="">加载中...</option>
@@ -333,65 +465,65 @@
                                 </div>
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label small mb-1">训练数据集：</label>
+                                <label class="form-label">训练数据集</label>
                                 <select class="form-select form-select-sm" id="distillDatasetSelect">
                                     <option value="">加载中...</option>
                                 </select>
                             </div>
+                        </div>
+                        <div class="row compact-row">
                             <div class="col-md-3">
-                                <label class="form-label small mb-1">蒸馏策略：</label>
+                                <label class="form-label">蒸馏策略</label>
                                 <select class="form-select form-select-sm" id="distillStrategySelect">
                                     <option value="text_sft">文本级蒸馏</option>
                                     <option value="soft_label">软标签 KL 蒸馏</option>
                                 </select>
                             </div>
                             <div class="col-md-3">
-                                <label class="form-label small mb-1">温度系数：</label>
+                                <label class="form-label">温度系数</label>
                                 <input type="number" class="form-control form-control-sm" id="distillTempInput" value="4.0" step="0.5">
                             </div>
                             <div class="col-md-3">
-                                <label class="form-label small mb-1">蒸馏损失权重：</label>
-                                <input type="number" class="form-control form-select-sm" id="distillWeightInput" value="0.7" step="0.1" min="0" max="1">
+                                <label class="form-label">蒸馏损失权重</label>
+                                <input type="number" class="form-control form-control-sm" id="distillWeightInput" value="0.7" step="0.1" min="0" max="1">
                             </div>
                             <div class="col-md-3 d-flex align-items-end">
-                                <button class="btn btn-primary btn-sm w-100" id="startDistillBtn" onclick="startDistillation()">开始知识蒸馏</button>
+                                <button class="btn btn-primary-custom btn-sm w-100" id="startDistillBtn" onclick="startDistillation()">开始知识蒸馏</button>
                             </div>
                         </div>
-                        <div class="mt-2 p-2 bg-dark text-light rounded overflow-auto" id="distillOutput" style="font-family: monospace; font-size: 0.8rem; height: 120px;">
-                            > 等待开始蒸馏任务...
-                        </div>
+                        <div class="output-terminal mt-2" id="distillOutput" style="height: 100px;">> 等待开始蒸馏任务...</div>
                     </div>
                 </div>
             </div>
 
             <!-- 阶段 4: 量化与部署 -->
-            <div class="tab-pane fade" id="step4" role="tabpanel" aria-labelledby="step4-tab">
-                <div class="card border-0 shadow-sm rounded-3 mb-3">
-                    <div class="card-header bg-white border-bottom-0 pt-2 pb-0">
-                        <h6 class="mb-0 fw-bold" style="color: #1e3c72;">AWQ 量化与 vLLM 部署</h6>
-                        <p class="text-muted small mb-1">将蒸馏后的学生模型压缩为 4-bit 精度，并一键部署为推理 API。</p>
+            <div class="tab-pane fade" id="step4">
+                <div class="stage-card">
+                    <div class="card-header">
+                        <h6>🚀 阶段 4: AWQ 量化与 vLLM 部署</h6>
+                        <p>将蒸馏后的学生模型压缩为 4-bit 精度，并一键部署为推理 API</p>
                     </div>
-                    <div class="card-body py-2">
-                        <div class="row g-2">
+                    <div class="card-body">
+                        <div class="row compact-row">
                             <div class="col-md-4">
-                                <label class="form-label small mb-1">待量化模型：</label>
+                                <label class="form-label">待量化模型</label>
                                 <select class="form-select form-select-sm" id="quantizeModelSelect">
                                     <option value="">加载中...</option>
                                 </select>
                             </div>
                             <div class="col-md-3">
-                                <label class="form-label small mb-1">量化方法：</label>
+                                <label class="form-label">量化方法</label>
                                 <select class="form-select form-select-sm" id="quantMethodSelect">
                                     <option value="awq">AWQ 4-bit</option>
                                     <option value="gguf">GGUF</option>
                                 </select>
                             </div>
                             <div class="col-md-2">
-                                <label class="form-label small mb-1">部署端口：</label>
+                                <label class="form-label">部署端口</label>
                                 <input type="number" class="form-control form-control-sm" id="deployPortInput" value="8000">
                             </div>
                             <div class="col-md-3">
-                                <label class="form-label small mb-1">GPU利用率：</label>
+                                <label class="form-label">GPU利用率</label>
                                 <input type="number" class="form-control form-control-sm" id="gpuMemUtilInput" value="0.8" step="0.05" min="0.1" max="1.0">
                             </div>
                         </div>
@@ -399,9 +531,7 @@
                             <button class="btn btn-warning btn-sm text-dark" id="startQuantizeBtn" onclick="startQuantization()">开始量化压缩</button>
                             <button class="btn btn-success btn-sm" id="startDeployBtn" onclick="startDeploy()">一键部署服务</button>
                         </div>
-                        <div class="mt-2 p-2 bg-dark text-light rounded overflow-auto" id="deployOutput" style="font-family: monospace; font-size: 0.8rem; height: 120px;">
-                            > 等待执行量化或部署指令...
-                        </div>
+                        <div class="output-terminal mt-2" id="deployOutput" style="height: 100px;">> 等待执行量化或部署指令...</div>
                     </div>
                 </div>
             </div>
@@ -598,6 +728,21 @@
                     $('#deepspeedSelect').val('none');
                 }
             }
+
+            // 更新训练模式指标指示器
+            function updateTrainingModeIndicator() {
+                var mode = $('#trainingModeSelect').val();
+                var indicator = $('#trainingModeIndicator');
+                if (mode === 'local') {
+                    indicator.removeClass('bg-primary').addClass('bg-info');
+                    indicator.text('指标关注: loss趋势、收敛性、无OOM');
+                } else {
+                    indicator.removeClass('bg-info').addClass('bg-primary');
+                    indicator.text('指标关注: eval_loss、perplexity、BLEU/ROUGE、泛化能力');
+                }
+            }
+            // 初始化指示器
+            updateTrainingModeIndicator();
 
             $('#modelCategorySelect').change(function() {
                 updateBaseModelOptions();
@@ -879,6 +1024,9 @@
             var formData = new FormData();
             formData.append('baseModel', model);
             formData.append('datasetFileName', selectedDataset); // 传递选中的文件名
+            // 训练模式：本地调试 vs 线上训练
+            var trainingMode = $('#trainingModeSelect').val();
+            formData.append('trainingMode', trainingMode);
             // newModelName 由后端自动生成版本号，前端不再传递
             formData.append('epochs', $('#epochsInput').val());
             formData.append('batchSize', $('#batchSizeInput').val());
@@ -1053,6 +1201,113 @@
             window.open(targetUrl, '_blank');
         }
 
+        // 切换模型分析配置显示
+        function toggleModelAnalysis() {
+            var strategy = $('#conversionStrategySelect').val();
+            var configDiv = $('#modelAnalysisConfig');
+            if (strategy === 'knowledge_qa') {
+                configDiv.show();
+            } else {
+                configDiv.hide();
+            }
+        }
+        // 初始化显示状态
+        toggleModelAnalysis();
+
+        // ==================== 数据准备模型选择 - 与问答系统完全复用 ====================
+        let dataPrepCachedModels = {
+            ollama_models: [],
+            vllm_models: [],
+            query_online_models: []
+        };
+        let selectedDataPrepModel = null;  // 存储选择的模型
+
+        // 监听模型类别变化
+        $('#dataPrepModelCategorySelect').change(function() {
+            var category = $(this).val();
+            updateDataPrepModelOptions(category);
+        });
+
+        // 更新模型选项 - 与问答系统updateLLMModelOptions逻辑一致
+        function updateDataPrepModelOptions(category) {
+            var select = $('#dataPrepModelSelect');
+            var currentValue = select.val() || select.data('target-value');
+            select.empty();
+            
+            var models = [];
+            if (category === 'ollama') {
+                models = dataPrepCachedModels.ollama_models;
+            } else if (category === 'vllm') {
+                models = dataPrepCachedModels.vllm_models;
+            } else if (category === 'online') {
+                models = dataPrepCachedModels.query_online_models;
+            }
+            
+            if (models && models.length > 0) {
+                models.forEach(function(model) {
+                    if (typeof model === 'object') {
+                        select.append(`<option value="${model.id}">${model.name}</option>`);
+                    } else {
+                        select.append(`<option value="${model}">${model}</option>`);
+                    }
+                });
+                
+                if (currentValue && select.find(`option[value="${currentValue}"]`).length > 0) {
+                    select.val(currentValue);
+                    select.removeData('target-value');
+                }
+            } else {
+                select.append('<option value="">暂无可用模型</option>');
+            }
+        }
+
+        // 加载模型列表 - 复用问答系统的loadOllamaModels
+        function loadDataPrepModels() {
+            $.ajax({
+                url: '/ollama/models',
+                type: 'GET',
+                success: function(response) {
+                    dataPrepCachedModels.ollama_models = response.ollama_models || [];
+                    dataPrepCachedModels.vllm_models = response.vllm_models || [];
+                    dataPrepCachedModels.query_online_models = response.query_online_models || [];
+                    
+                    var currentCategory = $('#dataPrepModelCategorySelect').val();
+                    updateDataPrepModelOptions(currentCategory);
+                },
+                error: function() {
+                    $('#dataPrepModelSelect').html('<option value="">加载失败</option>');
+                }
+            });
+        }
+
+        // 应用选择的模型
+        $('#applyDataPrepModelBtn').click(function() {
+            var category = $('#dataPrepModelCategorySelect').val();
+            var model = $('#dataPrepModelSelect').val();
+            
+            if (!model) {
+                $('#dataPrepModelStatus').text('请先选择模型').addClass('text-danger').removeClass('text-success text-muted');
+                return;
+            }
+            
+            selectedDataPrepModel = {
+                category: category,
+                model: model
+            };
+            
+            // 显示选择的模型名称
+            var modelName = $('#dataPrepModelSelect option:selected').text();
+            $('#dataPrepCurrentModelBadge').text(modelName);
+            $('#dataPrepModelStatus').text('已应用').addClass('text-success').removeClass('text-danger text-muted');
+            
+            setTimeout(() => $('#dataPrepModelStatus').text(''), 3000);
+        });
+
+        // 页面加载时初始化模型列表
+        $(document).ready(function() {
+            loadDataPrepModels();
+        });
+
         // 新增的阶段 1: 数据准备 API 交互
         function startDataPreparation() {
             var rawDataset = $('#rawDatasetSelect').val();
@@ -1064,10 +1319,14 @@
             var payload = {
                 raw_dataset: rawDataset,
                 dedup_strategy: $('#dedupStrategySelect').val(),
-                enable_scoring: $('#enableScoringCheck').is(':checked'),
-                score_threshold: $('#scoreThresholdInput').val(),
+                enable_scoring: $('#enableScoringCheck').length > 0 ? $('#enableScoringCheck').is(':checked') : false,
+                score_threshold: $('#scoreThresholdInput').length > 0 ? $('#scoreThresholdInput').val() : 7.0,
                 output_name: $('#coreDatasetNameInput').val(),
-                conversion_strategy: $('#conversionStrategySelect').val()
+                conversion_strategy: $('#conversionStrategySelect').val(),
+                // 模型介入分析参数 - 使用与问答系统一致的模型选择
+                enable_model_analysis: $('#conversionStrategySelect').val() === 'knowledge_qa',
+                analysis_model_category: selectedDataPrepModel ? selectedDataPrepModel.category : null,
+                analysis_model: selectedDataPrepModel ? selectedDataPrepModel.model : null
             };
 
             $('#startDataPrepBtn').prop('disabled', true).text('正在处理中...');
@@ -1120,10 +1379,12 @@
             });
         }
 
-        // 监听启用评分复选框
-        $('#enableScoringCheck').change(function() {
-            $('#scoreThresholdInput').prop('disabled', !this.checked);
-        });
+        // 监听启用评分复选框（如果存在）
+        if ($('#enableScoringCheck').length > 0) {
+            $('#enableScoringCheck').change(function() {
+                $('#scoreThresholdInput').prop('disabled', !this.checked);
+            });
+        }
 
         // 新增的阶段 3: 知识蒸馏 API 交互
         function startDistillation() {

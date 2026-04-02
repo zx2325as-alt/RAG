@@ -17,6 +17,13 @@ try:
 except ImportError:
     DocxDocument = None
 
+# 尝试导入 chardet 用于编码自动检测
+try:
+    import chardet
+except ImportError:
+    chardet = None
+    logging.warning("chardet not installed, falling back to utf-8 for text file encoding detection")
+
 # 初始化 RapidOCR（全局单例，避免重复加载）
 # 需要安装：pip install rapidocr-onnxruntime
 try:
@@ -70,10 +77,29 @@ def extract_text_from_pdf(file_path):
                 for table in tables:
                     if not table:
                         continue
+                    # 表格有效性验证：至少2行2列
+                    if len(table) < 2:
+                        logging.debug(f"Skipping table with only {len(table)} row(s)")
+                        continue
+                    # 检查是否至少有一行有2个或以上单元格
+                    max_cols = max(len(row) for row in table) if table else 0
+                    if max_cols < 2:
+                        logging.debug(f"Skipping table with only {max_cols} column(s)")
+                        continue
+                    # 检查表头是否全为空
+                    header_row = table[0] if table else []
+                    header_values = [str(cell).strip() if cell else "" for cell in header_row]
+                    if all(not cell for cell in header_values):
+                        logging.debug("Skipping table with empty header row")
+                        continue
                     # 将表格转换为 Markdown 格式
                     for i, row in enumerate(table):
                         # 过滤掉 None，转为字符串
                         clean_row = [str(cell).replace('\n', ' ') if cell else "" for cell in row]
+                        # 记录 None 单元格用于调试
+                        none_cells = [j for j, cell in enumerate(row) if cell is None]
+                        if none_cells:
+                            logging.debug(f"Row {i} has None cells at positions: {none_cells}")
                         full_text += "| " + " | ".join(clean_row) + " |\n"
                         # 表头分隔线
                         if i == 0:
@@ -89,6 +115,7 @@ def extract_text_from_pdf(file_path):
         text = page.get_text()
         
         # 提取页面中的所有图片并进行 OCR 识别，确保图片内的公式、文字不丢失
+        image_list = []
         if ocr is not None:
             image_list = page.get_images(full=True)
             for img_index, img_info in enumerate(image_list):
@@ -116,7 +143,8 @@ def extract_text_from_pdf(file_path):
                             text += line[1] + " "
                         text += "\n"
                 except Exception as e:
-                    print(f"OCR failed on image in page {page_num}: {e}")
+                    # 单张图片OCR失败只记录warning，不影响其他图片和整页处理
+                    logging.warning(f"OCR failed on image {img_index} in page {page_num}: {e}")
                     
         # 兼容处理全扫描件：如果一页文本极少，且没有提取到明显的内嵌图片，则将整页渲染后进行 OCR
         if len(text.strip()) < 50 and ocr is not None and not image_list:
@@ -201,7 +229,16 @@ def process_file(file_path):
     elif ext in ['.docx']:
         return extract_text_from_docx(file_path)
     elif ext in ['.txt', '.md']:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        # 使用 chardet 自动检测编码，如果不可用则降级为 utf-8
+        if chardet:
+            with open(file_path, 'rb') as f:
+                raw = f.read()
+            detected = chardet.detect(raw)
+            encoding = detected.get('encoding', 'utf-8') or 'utf-8'
+            logging.debug(f"Detected encoding for {file_path}: {encoding}")
+        else:
+            encoding = 'utf-8'
+        with open(file_path, 'r', encoding=encoding, errors='replace') as f:
             return f.read()
     elif ext in ['.png', '.jpg', '.jpeg', '.bmp']:
         return extract_text_from_image(file_path)

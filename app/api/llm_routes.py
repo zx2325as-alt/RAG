@@ -313,11 +313,13 @@ def set_llm_model():
         if model_type == 'ollama':
             Config.ACTIVE_LLM = 'ollama'
             if model_name:
-                Config.OLLAMA_MODEL_NAME = model_name
+                # 去掉 ollama: 前缀（如果存在）
+                Config.OLLAMA_MODEL_NAME = model_name.replace('ollama: ', '') if model_name.startswith('ollama: ') else model_name
         elif model_type == 'vllm':
             Config.ACTIVE_LLM = 'vllm'
             if model_name:
-                Config.VLLM_MODEL_NAME = model_name
+                # 去掉 vllm: 前缀（如果存在）
+                Config.VLLM_MODEL_NAME = model_name.replace('vllm: ', '') if model_name.startswith('vllm: ') else model_name
         elif model_type.startswith('online_'):
             Config.ACTIVE_LLM = model_type
         else:

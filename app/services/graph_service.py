@@ -62,10 +62,23 @@ class GraphService:
             return
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", '''你是一个信息抽取专家。请从给定的文本中提取关键实体（如服务器、服务、配置、错误码等）和它们之间的关系。
+            ("system", '''你是一个信息抽取专家。请从给定的文本中提取关键实体和它们之间的关系。
+实体类型包括但不限于：
+- 技术/模型：算法、模型、框架、工具（如 YOLO, SSD, BERT, TensorFlow）
+- 基础设施：服务器、服务、配置、数据库（如 Nginx, MySQL, Redis）
+- 概念：技术概念、方法、流程（如 目标检测, 特征融合, 量化部署）
+
+关系类型包括但不限于：
+- EVOLVED_FROM/EVOLVED_TO：版本演进（如 YOLOv2 → YOLOv3）
+- DEPENDS_ON：依赖关系
+- HAS_COMPONENT：组成关系（如 YOLOv3 包含 Darknet53）
+- COMPARED_WITH：对比关系
+- CONFIGURED_BY/HAS_ERROR/RELATED_TO 等
+
 请返回严格的 JSON 格式，包含 entities 和 relations 两个列表。
-实体格式: {"id": "唯一标识", "type": "实体类型(如Server/Service/Error)", "name": "名称"}
-关系格式: {"source": "源实体id", "target": "目标实体id", "type": "关系类型(如DEPENDS_ON/HAS_ERROR/CONFIGURED_BY)"}
+实体格式: {"id": "唯一标识", "type": "实体类型", "name": "名称"}
+关系格式: {"source": "源实体id", "target": "目标实体id", "type": "关系类型", "source_type": "源实体类型", "target_type": "目标实体类型"}
+特别注意：当文本提及模型/算法的版本演进时，务必提取 EVOLVED_FROM/EVOLVED_TO 关系。
 如果未发现明显关系，返回空列表。请只输出 JSON 字符串，不要输出 Markdown 格式标记。'''),
             ("user", "文本内容：\n{text}")
         ])
@@ -102,16 +115,34 @@ class GraphService:
                     
                     # 存入 Neo4j
                     for entity in entities:
+                        # 构建全局唯一ID：基于实体类型+名称
+                        entity_id = f"entity_{entity.get('type', 'unknown')}_{entity.get('name', '')}".lower().strip()
                         session.run(
-                            "MERGE (e:Entity {id: $id}) SET e.name = $name, e.type = $type",
-                            id=f"{doc_id}_{entity.get('id', '')}", name=entity.get('name', ''), type=entity.get('type', 'Unknown')
+                            """MERGE (e:Entity {id: $id}) 
+                            SET e.name = $name, e.type = $type
+                            WITH e
+                            SET e.doc_ids = CASE 
+                                WHEN $doc_id IN coalesce(e.doc_ids, []) THEN e.doc_ids 
+                                ELSE coalesce(e.doc_ids, []) + [$doc_id] 
+                            END""",
+                            id=entity_id, name=entity.get('name', ''), type=entity.get('type', 'Unknown'), doc_id=doc_id
                         )
                         
                     for rel in relations:
+                        # 构建全局唯一ID
+                        source_id = f"entity_{rel.get('source_type', 'unknown')}_{rel.get('source', '')}".lower().strip()
+                        target_id = f"entity_{rel.get('target_type', 'unknown')}_{rel.get('target', '')}".lower().strip()
+                        rel_type = rel.get('type', 'RELATED_TO')
+                        confidence = rel.get('confidence', 0.8)
+                        chunk_id = getattr(chunk, 'chunk_id', None)
                         session.run(
-                            f"MATCH (a:Entity {{id: $source}}), (b:Entity {{id: $target}}) "
-                            f"MERGE (a)-[r:{rel.get('type', 'RELATED_TO')}]->(b)",
-                            source=f"{doc_id}_{rel.get('source', '')}", target=f"{doc_id}_{rel.get('target', '')}"
+                            f"""MATCH (a:Entity {{id: $source}}), (b:Entity {{id: $target}})
+                            MERGE (a)-[r:{rel_type}]->(b)
+                            SET r.confidence = $confidence, 
+                                r.source_doc_id = $doc_id,
+                                r.source_chunk_id = $chunk_id,
+                                r.updated_at = datetime()""",
+                            source=source_id, target=target_id, confidence=confidence, doc_id=doc_id, chunk_id=chunk_id
                         )
                 except Exception as e:
                     print(f"Graph extraction error on chunk {i}: {e}")

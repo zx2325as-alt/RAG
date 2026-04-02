@@ -92,25 +92,27 @@ class DocumentService:
             text_chunks = chunk_text(cleaned_text, is_markdown=is_markdown, metadata=metadata)
             logger.info(f"[{doc.doc_name}] Text chunked successfully into {len(text_chunks)} segments.")
             
-            # 4. Save Chunks using bulk_save_objects for performance
+            # 4. Save Chunks using add_all + flush to get chunk_ids for graph extraction
+            # text_chunks 现在是 Document 对象列表，需要从 page_content 获取文本内容
             db_chunks = []
-            for i, content in enumerate(text_chunks):
+            for i, doc_obj in enumerate(text_chunks):
                 chunk = Chunk(
                     doc_id=doc.doc_id,
-                    content=content,
+                    content=doc_obj.page_content,
                     chunk_index=i
                 )
                 db_chunks.append(chunk)
                 
             if db_chunks:
-                db.session.bulk_save_objects(db_chunks)
+                db.session.add_all(db_chunks)
+                db.session.flush()  # 确保ID被分配，但不提交事务
             
             # 5. Extract and build Graph RAG (Intelligent Graph)
             try:
                 from app.services.graph_service import GraphService
                 graph_service = GraphService()
                 logger.info(f"[{doc.doc_name}] Starting LLM-based Graph extraction...")
-                # We use the generated db_chunks (which have doc_id but maybe not chunk_id yet, but content is there)
+                # 此时 db_chunks 中的每个 chunk 都有有效的 chunk_id
                 graph_service.extract_and_store_graph(db_chunks, doc.doc_id)
                 logger.info(f"[{doc.doc_name}] Graph extraction completed.")
             except Exception as e:
@@ -119,11 +121,11 @@ class DocumentService:
             doc.status = 'completed'
             db.session.commit()
             
-            # Since bulk_save_objects doesn't populate chunk_id automatically, we need to query them back
-            saved_chunks = Chunk.query.filter_by(doc_id=doc.doc_id).order_by(Chunk.chunk_index).all()
+            # db_chunks 已经有 chunk_id，可以直接返回
+            saved_chunks = db_chunks
             
             logger.info(f"[{doc.doc_name}] Processing and database insertion completed. {len(saved_chunks)} chunks saved.")
-            return saved_chunks
+            return saved_chunks  # 返回有 chunk_id 的 chunks
             
         except Exception as e:
             doc.status = 'failed'
