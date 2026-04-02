@@ -94,7 +94,7 @@ pydantic==2.7.4
 pydantic-settings==2.3.4
 
 # --- 其他工具依赖 ---
-blinker==1.8.2
+blinker>=1.9.0
 click==8.1.7
 itsdangerous==2.2.0
 jinja2==3.1.4
@@ -114,7 +114,7 @@ jsonpointer==3.0.0
 marshmallow==3.21.3
 multidict==6.0.5
 mypy-extensions==1.0.0
-packaging==24.1
+packaging==23.2
 regex==2024.5.15
 safetensors==0.4.3
 scipy==1.13.1
