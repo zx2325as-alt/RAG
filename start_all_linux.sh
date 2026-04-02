@@ -172,15 +172,19 @@ check_vllm() {
 install_vllm() {
     log_step "安装 vLLM 0.4.1 (CUDA 11.8 预编译版)..."
     
-    # 安装 vLLM 依赖
-    pip install ray==2.9.3 xformers==0.0.25 outlines==0.0.34 nvidia-ml-py pydantic==2.7.4 fastapi uvicorn
-    
     # 设置环境变量避免编译
     export VLLM_INSTALL_PUNICA_DROP_IN=0
     export VLLM_TARGET_DEVICE="cuda"
     
-    # 安装预编译的 CUDA 11.8 版本
-    pip install --no-deps https://github.com/vllm-project/vllm/releases/download/v0.4.1/vllm-0.4.1+cu118-cp310-cp310-manylinux1_x86_64.whl
+    # 安装 vLLM 预编译版（允许安装依赖）
+    pip install https://github.com/vllm-project/vllm/releases/download/v0.4.1/vllm-0.4.1+cu118-cp310-cp310-manylinux1_x86_64.whl
+    
+    # vLLM 可能拉取不兼容的 torch，重新安装正确的 PyTorch 2.1.2 + CUDA 11.8
+    log_step "恢复 PyTorch 2.1.2 + CUDA 11.8..."
+    pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cu118
+    
+    # xformers 必须与 PyTorch 2.1.2 匹配，用 --no-deps 防止再次拉取 torch
+    pip install xformers==0.0.23.post1 --no-deps
     
     if check_vllm; then
         log_info "vLLM 安装成功"
