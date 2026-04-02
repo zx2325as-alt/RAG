@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 # 获取项目根目录
 BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-# 加载 .env 文件（如果存在）
+# 加载 .env 文件（如果11存在）
 load_dotenv()
 
 class BaseConfig:

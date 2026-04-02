@@ -3,7 +3,7 @@ from .base import BaseConfig, BASE_DIR
 
 class ProductionConfig(BaseConfig):
     DEBUG = False
-    # 线上版数据库通常为 MySQL/PostgreSQL，这里通过环境变量覆盖，默认给出示例
+    # 线上版数据库通常为 MySQL/PostgreSQL，这里通过环境变量111覆盖，默认给出示例
     # SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'mysql+pymysql://user:password@localhost/rag_db')
     SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'sqlite:///rag.db')
     REDIS_URL = os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0')
