@@ -1,8 +1,8 @@
 #!/bin/bash
 # ==============================================================================
-# RAG 系统 - 服务启动与管理脚本（适配 AutoDL root 环境）
-# 环境: Ubuntu 22.04 / Python 3.12 / 依赖已预装
+# RAG 系统 - 服务启动脚本（适配线上 Ubuntu 22.04 / Python 3.10 / PyTorch 2.1.2 / CUDA 11.8 环境）
 # 功能: 启动/停止/重启 Redis, Neo4j, RAG Flask 后端
+# 说明: 此脚本只做启动，不再包含在线安装逻辑；vLLM 与项目拆分成了两个 Conda 环境，本脚本只处理 RAG。
 # ==============================================================================
 
 set -e  # 遇到错误退出
@@ -28,15 +28,15 @@ log_step() { echo -e "${BLUE}[STEP]${NC} $1" | tee -a "$LOGS_DIR/setup.log"; }
 cd "$(dirname "$0")"
 
 # ==============================================================================
-# 检查并激活 conda 环境
+# 检查并激活 conda 环境 (仅激活 RAG 环境)
 # ==============================================================================
 activate_conda_env() {
-    # 期望的环境名（可修改为你的实际环境名）
-    TARGET_ENV="vllm-new"
+    # 期望的环境名（线上 RAG 运行的 Conda 环境名）
+    TARGET_ENV="rag_env" # 请根据线上实际 RAG conda 环境名调整
 
     # 检查 conda 是否可用
     if ! command -v conda &> /dev/null; then
-        log_error "Conda 未安装或不在 PATH 中，请先安装 Miniconda"
+        log_error "Conda 未安装或不在 PATH 中"
         exit 1
     fi
 
@@ -49,22 +49,22 @@ activate_conda_env() {
     if [[ "$CONDA_DEFAULT_ENV" != "$TARGET_ENV" ]]; then
         log_info "切换到 Conda 环境: $TARGET_ENV"
         conda activate "$TARGET_ENV" || {
-            log_error "无法激活环境 $TARGET_ENV，请确认环境存在"
+            log_error "无法激活环境 $TARGET_ENV，请确认该环境已安装"
             exit 1
         }
     else
         log_info "已处于 Conda 环境: $TARGET_ENV"
     fi
 
-    # 验证关键包
-    python -c "import vllm, langchain, faiss" 2>/dev/null || {
+    # 验证关键包 (剥离 vllm 检查)
+    python -c "import langchain, faiss, torch" 2>/dev/null || {
         log_error "关键依赖导入失败，请检查环境 $TARGET_ENV"
         exit 1
     }
 }
 
 # ==============================================================================
-# 检查 Redis 并启动（root 用户无需 sudo）
+# 检查 Redis 并启动
 # ==============================================================================
 start_redis() {
     log_step "启动 Redis..."
@@ -74,7 +74,7 @@ start_redis() {
     fi
 
     if command -v redis-server &> /dev/null; then
-        log_info "Redis 已安装，正在启动..."
+        log_info "启动 Redis..."
         redis-server --daemonize yes
         sleep 2
         if redis-cli ping | grep -q PONG; then
@@ -84,33 +84,8 @@ start_redis() {
             return 1
         fi
     else
-        log_warn "Redis 未安装，尝试安装..."
-        apt-get update -qq
-        apt-get install -y redis-server
-        # 安装后启动
-        redis-server --daemonize yes
-        sleep 2
-        if redis-cli ping | grep -q PONG; then
-            log_info "Redis 安装并启动成功"
-        else
-            log_error "Redis 启动失败"
-            return 1
-        fi
-    fi
-}
-
-# ==============================================================================
-# 检查 Java 17
-# ==============================================================================
-ensure_java() {
-    log_step "检查 Java 17..."
-    if java -version 2>&1 | grep -q "version \"17"; then
-        log_info "Java 17 已安装"
-    else
-        log_info "安装 OpenJDK 17..."
-        apt-get update -qq
-        apt-get install -y openjdk-17-jre-headless
-        log_info "Java 17 安装完成"
+        log_error "Redis 未安装，请确保环境已准备就绪"
+        exit 1
     fi
 }
 
@@ -224,7 +199,6 @@ activate_conda_env
 
 # 启动服务
 start_redis
-ensure_java
 start_neo4j
 start_rag_backend
 
