@@ -32,7 +32,7 @@ cd "$(dirname "$0")"
 # ==============================================================================
 activate_conda_env() {
     # 期望的环境名（线上 RAG 运行的 Conda 环境名）
-    TARGET_ENV="rag_env" # 请根据线上实际 RAG conda 环境名调整
+    TARGET_ENV="RAG" # 请根据线上实际 RAG conda 环境名调整
 
     # 检查 conda 是否可用
     if ! command -v conda &> /dev/null; then
@@ -56,11 +56,6 @@ activate_conda_env() {
         log_info "已处于 Conda 环境: $TARGET_ENV"
     fi
 
-    # 验证关键包 (剥离 vllm 检查)
-    python -c "import langchain, faiss, torch" 2>/dev/null || {
-        log_error "关键依赖导入失败，请检查环境 $TARGET_ENV"
-        exit 1
-    }
 }
 
 # ==============================================================================
@@ -73,19 +68,35 @@ start_redis() {
         return 0
     fi
 
-    if command -v redis-server &> /dev/null; then
-        log_info "启动 Redis..."
-        redis-server --daemonize yes
-        sleep 2
-        if redis-cli ping | grep -q PONG; then
-            log_info "Redis 启动成功"
-        else
-            log_error "Redis 启动失败"
-            return 1
-        fi
+    if ! command -v redis-server &> /dev/null; then
+        log_warn "Redis 未安装，尝试自动安装..."
+        apt-get update -qq
+        apt-get install -y redis-server
+    fi
+
+    log_info "启动 Redis..."
+    redis-server --daemonize yes
+    sleep 2
+    if redis-cli ping | grep -q PONG; then
+        log_info "Redis 启动成功"
     else
-        log_error "Redis 未安装，请确保环境已准备就绪"
-        exit 1
+        log_error "Redis 启动失败"
+        return 1
+    fi
+}
+
+# ==============================================================================
+# 检查 Java 17
+# ==============================================================================
+ensure_java() {
+    log_step "检查 Java 17..."
+    if java -version 2>&1 | grep -q "version \"17"; then
+        log_info "Java 17 已安装"
+    else
+        log_info "安装 OpenJDK 17..."
+        apt-get update -qq
+        apt-get install -y openjdk-17-jre-headless
+        log_info "Java 17 安装完成"
     fi
 }
 
@@ -94,19 +105,36 @@ start_redis() {
 # ==============================================================================
 start_neo4j() {
     log_step "启动 Neo4j..."
-    NEO4J_HOME="$PWD/model/neo4j-community-5.18.1"
+    NEO4J_HOME="$PWD/model/neo4j"
+    
     if [[ ! -d "$NEO4J_HOME" ]]; then
-        log_warn "未找到 Neo4j 目录: $NEO4J_HOME，跳过启动"
-        return 0
+        log_warn "未找到 Neo4j 目录: $NEO4J_HOME，尝试自动下载..."
+        mkdir -p "$PWD/model"
+        cd "$PWD/model"
+        wget -qO neo4j.tar.gz https://neo4j.com/artifact.php?name=neo4j-community-5.18.1-unix.tar.gz
+        tar -xzf neo4j.tar.gz
+        mv neo4j-community-5.18.1 neo4j
+        rm neo4j.tar.gz
+        cd ..
+        log_info "Neo4j 下载解压完成"
     fi
 
     chmod +x "$NEO4J_HOME/bin/neo4j" 2>/dev/null || true
+    chmod +x "$NEO4J_HOME/bin/neo4j-admin" 2>/dev/null || true
+    
     if pgrep -f "neo4j" >/dev/null; then
         log_info "Neo4j 已在运行"
     else
+        # 恢复密码验证并设置默认密码为 11111111 (与 start_neo4j.py 保持一致)
+        sed -i 's/dbms.security.auth_enabled=false/#dbms.security.auth_enabled=false/g' "$NEO4J_HOME/conf/neo4j.conf" 2>/dev/null || true
+        
+        # 使用 neo4j-admin 设置初始密码 (如果数据库是全新的)
+        log_info "尝试设置 Neo4j 初始密码 (neo4j/11111111)..."
+        "$NEO4J_HOME/bin/neo4j-admin" dbms set-initial-password "11111111" 2>/dev/null || log_warn "初始密码可能已设置过，忽略该提示"
+        
         "$NEO4J_HOME/bin/neo4j" start
         sleep 5
-        log_info "Neo4j 启动完成 (bolt://localhost:7687)"
+        log_info "Neo4j 启动完成 (bolt://localhost:7687, 用户: neo4j, 密码: 11111111)"
     fi
 }
 
@@ -199,6 +227,7 @@ activate_conda_env
 
 # 启动服务
 start_redis
+ensure_java
 start_neo4j
 start_rag_backend
 
