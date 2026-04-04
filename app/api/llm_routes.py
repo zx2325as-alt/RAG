@@ -74,27 +74,41 @@ def download_model():
             # 解决Linux下www-data等用户可能无法写入默认~/.cache/huggingface的问题
             env["HF_HOME"] = os.path.abspath(os.path.join(current_app.root_path, '..', '.cache', 'huggingface'))
             os.makedirs(env["HF_HOME"], exist_ok=True)
-
-            hf_cli_cmd = shutil.which("huggingface-cli")
-            if hf_cli_cmd:
-                cmd = [hf_cli_cmd, "download", model_name, "--local-dir", local_dir]
-            else:
-                cmd = [sys.executable, "-m", "huggingface_hub.commands.huggingface_cli", "download", model_name, "--local-dir", local_dir]
-
-            # 兼容Linux和Windows的后台进程启动参数
-            kwargs = {}
+            
+            # 使用 nohup 或 setsid 强制后台运行 (Linux)
             if os.name == 'posix':
-                kwargs['start_new_session'] = True
-            elif os.name == 'nt':
-                kwargs['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP
+                hf_cli_cmd = shutil.which("huggingface-cli")
+                if not hf_cli_cmd:
+                    hf_cli_cmd = f"{sys.executable} -m huggingface_hub.commands.huggingface_cli"
+                
+                log_file = os.path.abspath(os.path.join(current_app.root_path, '..', 'logs', 'hf_download.log'))
+                os.makedirs(os.path.dirname(log_file), exist_ok=True)
+                
+                # 构造 shell 命令，完全脱离当前进程
+                # 增加 --resume-download 确保可以断点续传
+                cmd_str = f"nohup {hf_cli_cmd} download {model_name} --local-dir {local_dir} --resume-download > {log_file} 2>&1 &"
+                
+                subprocess.Popen(
+                    cmd_str,
+                    shell=True,
+                    env=env,
+                    preexec_fn=os.setpgrp # 确保分配新的进程组
+                )
+            else:
+                hf_cli_cmd = shutil.which("huggingface-cli")
+                if hf_cli_cmd:
+                    cmd = [hf_cli_cmd, "download", model_name, "--local-dir", local_dir, "--resume-download"]
+                else:
+                    cmd = [sys.executable, "-m", "huggingface_hub.commands.huggingface_cli", "download", model_name, "--local-dir", local_dir, "--resume-download"]
 
-            subprocess.Popen(
-                cmd,
-                stdout=open(os.path.join(current_app.root_path, '..', 'logs', 'hf_download.log'), 'a'),
-                stderr=subprocess.STDOUT,
-                env=env,
-                **kwargs
-            )
+                kwargs = {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP}
+                subprocess.Popen(
+                    cmd,
+                    stdout=open(os.path.join(current_app.root_path, '..', 'logs', 'hf_download.log'), 'a'),
+                    stderr=subprocess.STDOUT,
+                    env=env,
+                    **kwargs
+                )
             return jsonify({'message': f'✅ 校验通过！已在后台执行下载: {model_name}\n目标目录: {local_dir}\n请稍后查看日志并刷新列表'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
