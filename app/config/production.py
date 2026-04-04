@@ -14,8 +14,8 @@ class ProductionConfig(BaseConfig):
     WEBUI_HOST = '0.0.0.0'
     TENSORBOARD_HOST = '0.0.0.0'
     
-    # 线上版图数据库配置 (生产环境可能在其他内网 IP)
-    NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://neo4j-server:7687')
+    # 线上版图数据库配置 (生产环境可能在其他内网 IP，默认退回为 127.0.0.1 兼容单机部署)
+    NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://127.0.0.1:7687')
     
     # 线上版模型路径配置 (相对路径)
     EMBEDDING_MODEL_PATH = os.getenv('EMBEDDING_MODEL_PATH', os.path.join(BASE_DIR, 'model', 'bge-large-zh'))
