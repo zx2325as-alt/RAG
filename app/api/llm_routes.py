@@ -377,11 +377,12 @@ def delete_ollama_model():
 def set_llm_model():
     """设置当前使用的模型"""
     data = request.json
-    model_type = data.get('model_type')
+    # 兼容前端传入的 llm_type 和 model_type
+    model_type = data.get('model_type') or data.get('llm_type')
     model_name = data.get('model_name')
 
     if not model_type:
-        return jsonify({'error': 'Missing model_type'}), 400
+        return jsonify({'error': 'Missing model_type or llm_type'}), 400
 
     try:
         if model_type == 'ollama':
@@ -394,14 +395,15 @@ def set_llm_model():
             if model_name:
                 # 去掉 vllm: 前缀（如果存在）
                 Config.VLLM_MODEL_NAME = model_name.replace('vllm: ', '') if model_name.startswith('vllm: ') else model_name
-        elif model_type.startswith('online_'):
-            Config.ACTIVE_LLM = model_type
+        elif model_type == 'online' or model_type.startswith('online_'):
+            # 处理 online 类型
+            Config.ACTIVE_LLM = model_name
         else:
             return jsonify({'error': f'Unsupported model type: {model_type}'}), 400
 
         return jsonify({
             'message': 'Model updated',
-            'current': Config.ACTIVE_LLM,
+            'current_model': Config.ACTIVE_LLM,
             'ollama_model': Config.OLLAMA_MODEL_NAME if model_type == 'ollama' else None,
             'vllm_model': Config.VLLM_MODEL_NAME if model_type == 'vllm' else None
         })

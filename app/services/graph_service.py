@@ -115,34 +115,56 @@ class GraphService:
                     
                     # 存入 Neo4j
                     for entity in entities:
-                        # 构建全局唯一ID：基于实体类型+名称
-                        entity_id = f"entity_{entity.get('type', 'unknown')}_{entity.get('name', '')}".lower().strip()
+                        # 构建全局唯一ID：仅基于名称，避免因类型不一致导致图分裂
+                        entity_name = str(entity.get('name', '')).strip()
+                        if not entity_name:
+                            continue
+                        entity_id = f"entity_{entity_name}".lower()
                         session.run(
                             """MERGE (e:Entity {id: $id}) 
-                            SET e.name = $name, e.type = $type
+                            ON CREATE SET e.name = $name, e.type = $type
                             WITH e
                             SET e.doc_ids = CASE 
                                 WHEN $doc_id IN coalesce(e.doc_ids, []) THEN e.doc_ids 
                                 ELSE coalesce(e.doc_ids, []) + [$doc_id] 
                             END""",
-                            id=entity_id, name=entity.get('name', ''), type=entity.get('type', 'Unknown'), doc_id=doc_id
+                            id=entity_id, name=entity_name, type=entity.get('type', 'Unknown'), doc_id=doc_id
                         )
                         
                     for rel in relations:
+                        source_name = str(rel.get('source', '')).strip()
+                        target_name = str(rel.get('target', '')).strip()
+                        if not source_name or not target_name:
+                            continue
                         # 构建全局唯一ID
-                        source_id = f"entity_{rel.get('source_type', 'unknown')}_{rel.get('source', '')}".lower().strip()
-                        target_id = f"entity_{rel.get('target_type', 'unknown')}_{rel.get('target', '')}".lower().strip()
-                        rel_type = rel.get('type', 'RELATED_TO')
+                        source_id = f"entity_{source_name}".lower()
+                        target_id = f"entity_{target_name}".lower()
+                        rel_type = str(rel.get('type', 'RELATED_TO')).replace(' ', '_').upper()
+                        # 确保关系类型是合法的Neo4j类型
+                        import re
+                        rel_type = re.sub(r'[^A-Z0-9_]', '_', rel_type)
+                        if not rel_type:
+                            rel_type = 'RELATED_TO'
+                            
                         confidence = rel.get('confidence', 0.8)
                         chunk_id = getattr(chunk, 'chunk_id', None)
+                        # 这里如果节点不存在，先MERGE节点，防止关系孤立丢失
                         session.run(
-                            f"""MATCH (a:Entity {{id: $source}}), (b:Entity {{id: $target}})
+                            f"""
+                            MERGE (a:Entity {{id: $source}})
+                            ON CREATE SET a.name = $source_name, a.type = $source_type
+                            MERGE (b:Entity {{id: $target}})
+                            ON CREATE SET b.name = $target_name, b.type = $target_type
+                            WITH a, b
                             MERGE (a)-[r:{rel_type}]->(b)
                             SET r.confidence = $confidence, 
                                 r.source_doc_id = $doc_id,
                                 r.source_chunk_id = $chunk_id,
                                 r.updated_at = datetime()""",
-                            source=source_id, target=target_id, confidence=confidence, doc_id=doc_id, chunk_id=chunk_id
+                            source=source_id, target=target_id, 
+                            source_name=source_name, source_type=rel.get('source_type', 'Unknown'),
+                            target_name=target_name, target_type=rel.get('target_type', 'Unknown'),
+                            confidence=confidence, doc_id=doc_id, chunk_id=chunk_id
                         )
                 except Exception as e:
                     print(f"Graph extraction error on chunk {i}: {e}")

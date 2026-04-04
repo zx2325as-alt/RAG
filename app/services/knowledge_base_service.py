@@ -715,8 +715,8 @@ class KnowledgeBaseService:
                     print(f"[Graph Search] Multi-entity query: {entities}")
                     cypher_multi = """
                     MATCH path = (n1)-[r*1..6]-(n2)
-                    WHERE n1.name IN $entities
-                      AND n2.name IN $entities
+                    WHERE any(e IN $entities WHERE n1.name CONTAINS e OR n1.name = e OR n1.id = e)
+                      AND any(e IN $entities WHERE n2.name CONTAINS e OR n2.name = e OR n2.id = e)
                       AND n1 <> n2
                     RETURN n1.name as source, n2.name as target,
                            [rel in r | type(rel)] as relations,
@@ -822,16 +822,16 @@ class KnowledgeBaseService:
             
         # 根据最高分意图返回对应的权重配置
         if best_intent == 'precise':
-            # 代码/技术术语查询：大幅偷好BM25精确匹配
+            # 代码/技术术语查询：偏好BM25精确匹配
             weights = {'vector': 0.5, 'bm25': 2.0, 'graph': 0.3}
         elif best_intent == 'fault':
-            # 故障排查：偷好图谱关系推理
+            # 故障排查：偏好图谱关系推理
             weights = {'vector': 1.0, 'bm25': 0.8, 'graph': 1.5}
         elif best_intent == 'compare':
             # 对比查询：平衡向量语义和BM25精确
             weights = {'vector': 1.3, 'bm25': 1.2, 'graph': 0.8}
         elif best_intent == 'factual':
-            # 事实查询：偷好向量语义相似度
+            # 事实查询：偏好向量语义相似度
             weights = {'vector': 1.5, 'bm25': 1.0, 'graph': 0.8}
         else:
             # 默认权重
@@ -1092,7 +1092,15 @@ class KnowledgeBaseService:
             print("Hit Reranker Cache!")
             cached_reranked = self.reranker_cache[cache_key]
             final_results = graph_docs + cached_reranked
-            return final_results[:top_k]  # 返回 (doc, score) 元组列表
+            # 去重
+            seen = set()
+            dedup_results = []
+            for d, s in final_results:
+                content_hash = hash(d.page_content[:100])
+                if content_hash not in seen:
+                    seen.add(content_hash)
+                    dedup_results.append((d, s))
+            return dedup_results[:top_k]  # 返回 (doc, score) 元组列表
         
         # 5. Rerank (重排序)
         reranked_results = []
@@ -1124,22 +1132,28 @@ class KnowledgeBaseService:
                 document_id = doc.metadata.get("doc_id")
                 
                 # Fetch surrounding chunks to provide broader context (Parent document simulation)
-                try:
-                    from app.db.models import Chunk
-                    from flask import current_app
-                    from app.db import db
-                    with current_app.app_context():
-                        surrounding_chunks = db.session.query(Chunk).filter(
-                            Chunk.doc_id == document_id,
-                            Chunk.chunk_index >= max(0, chunk_index - 1),
-                            Chunk.chunk_index <= chunk_index + 1
-                        ).order_by(Chunk.chunk_index).all()
-                        
-                        if surrounding_chunks:
-                            expanded_content = "\n...\n".join([c.content for c in surrounding_chunks])
-                            doc.page_content = expanded_content
-                except Exception as e:
-                    pass
+                # 跳过图谱节点（图谱节点没有chunk_index，为None）
+                if chunk_index is not None and document_id is not None and not str(document_id).startswith("graph_"):
+                    try:
+                        from app.db.models import Chunk
+                        from flask import current_app
+                        from app.db import db
+                        with current_app.app_context():
+                            surrounding_chunks = db.session.query(Chunk).filter(
+                                Chunk.doc_id == document_id,
+                                Chunk.chunk_index >= max(0, chunk_index - 1),
+                                Chunk.chunk_index <= chunk_index + 1
+                            ).order_by(Chunk.chunk_index).all()
+                            
+                            if surrounding_chunks:
+                                expanded_content = "\n...\n".join([c.content for c in surrounding_chunks])
+                                # 创建新doc避免修改原doc，因为原doc可能同时在graph_docs中
+                                doc = LangchainDocument(
+                                    page_content=expanded_content,
+                                    metadata=doc.metadata.copy()
+                                )
+                    except Exception as e:
+                        pass
 
                 reranked_results.append((doc, score.item()))
                 

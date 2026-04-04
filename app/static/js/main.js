@@ -629,13 +629,43 @@ function appendChunkToMessage(msgId, textChunk) {
         // Format citations before parsing markdown
         var formattedText = formatCitations(rawText);
         
-        // 预处理数学公式：保护 LaTeX 公式不被 marked 错误解析为斜体或意外换行
-        // 例如保护带下划线的 LaTeX 不被当作 markdown 加粗/斜体处理
-        formattedText = formattedText.replace(/\\\(/g, ' <span class="math-inline">\\(')
-                                     .replace(/\\\)/g, '\\)</span> ')
-                                     .replace(/\$\$(.*?)\$\$/gs, '<div class="math-block">$$$$$1$$$$</div>')
-                                     .replace(/\\\[(.*?)\\\]/gs, '<div class="math-block">\\[$1\\]</div>');
+        // 1. 保护代码块，防止其中的公式符号被错误提取
+        var codePlaceholders = {};
+        var codeCounter = 0;
+        function storeCode(match) {
+            var id = '___CODE_PLACEHOLDER_' + (codeCounter++) + '___';
+            codePlaceholders[id] = match;
+            return id;
+        }
+        formattedText = formattedText.replace(/```[\s\S]*?```/g, storeCode);
+        formattedText = formattedText.replace(/`[^`]*`/g, storeCode);
+
+        // 2. 预处理数学公式：保护 LaTeX 公式不被 marked 错误解析为斜体或意外换行
+        var mathPlaceholders = {};
+        var mathCounter = 0;
         
+        function storeMath(match, isBlock) {
+            var id = '___MATH_PLACEHOLDER_' + (mathCounter++) + '___';
+            mathPlaceholders[id] = { text: match, isBlock: isBlock };
+            return id;
+        }
+
+        // 提取 display math: $$...$$ 和 \[...\]
+        formattedText = formattedText.replace(/\$\$(.*?)\$\$/gs, function(match) { return storeMath(match, true); });
+        formattedText = formattedText.replace(/\\\[(.*?)\\\]/gs, function(match) { return storeMath(match, true); });
+        
+        // 提取 inline math: $...$ 和 \(...\)
+        // 匹配规则：$ 后面不能紧跟空格，结束的 $ 前面也不能是空格
+        formattedText = formattedText.replace(/(^|[^\$])\$([^\s\$](?:[^\$]*?[^\s\$])?)\$([^\$]|$)/g, function(match, p1, p2, p3) { 
+            return p1 + storeMath('$' + p2 + '$', false) + p3; 
+        });
+        formattedText = formattedText.replace(/\\\((.*?)\\\)/gs, function(match) { return storeMath(match, false); });
+        
+        // 3. 恢复代码块
+        for (var id in codePlaceholders) {
+            formattedText = formattedText.replace(id, codePlaceholders[id]);
+        }
+
         var parsedHtml = formattedText;
         if (typeof marked !== 'undefined') {
             if (typeof marked.parse === 'function') {
@@ -648,6 +678,15 @@ function appendChunkToMessage(msgId, textChunk) {
         } else {
             parsedHtml = formattedText.replace(/\n/g, '<br>');
         }
+        
+        // 4. 恢复数学公式
+        for (var id in mathPlaceholders) {
+            var mathObj = mathPlaceholders[id];
+            var wrapped = mathObj.isBlock ? '<div class="math-block">' + mathObj.text + '</div>' : '<span class="math-inline">' + mathObj.text + '</span>';
+            // 使用全局替换，因为 marked.js 可能会包裹 `<p>` 标签，或者在渲染时被复用
+            parsedHtml = parsedHtml.split(id).join(wrapped);
+        }
+        
         textElem.html(parsedHtml);
         
         // Render math formulas if KaTeX is available
@@ -716,6 +755,39 @@ function appendMessage(sender, text, sources) {
     if (sender !== 'user') {
         try {
             var formattedText = formatCitations(text);
+            
+            // 1. 保护代码块，防止其中的公式符号被错误提取
+            var codePlaceholders = {};
+            var codeCounter = 0;
+            function storeCode(match) {
+                var id = '___CODE_PLACEHOLDER_' + (codeCounter++) + '___';
+                codePlaceholders[id] = match;
+                return id;
+            }
+            formattedText = formattedText.replace(/```[\s\S]*?```/g, storeCode);
+            formattedText = formattedText.replace(/`[^`]*`/g, storeCode);
+
+            // 2. 预处理数学公式：保护 LaTeX 公式不被 marked 错误解析为斜体或意外换行
+            var mathPlaceholders = {};
+            var mathCounter = 0;
+            function storeMath(match, isBlock) {
+                var id = '___MATH_PLACEHOLDER_' + (mathCounter++) + '___';
+                mathPlaceholders[id] = { text: match, isBlock: isBlock };
+                return id;
+            }
+
+            formattedText = formattedText.replace(/\$\$(.*?)\$\$/gs, function(match) { return storeMath(match, true); });
+            formattedText = formattedText.replace(/\\\[(.*?)\\\]/gs, function(match) { return storeMath(match, true); });
+            formattedText = formattedText.replace(/(^|[^\$])\$([^\s\$](?:[^\$]*?[^\s\$])?)\$([^\$]|$)/g, function(match, p1, p2, p3) { 
+                return p1 + storeMath('$' + p2 + '$', false) + p3; 
+            });
+            formattedText = formattedText.replace(/\\\((.*?)\\\)/gs, function(match) { return storeMath(match, false); });
+            
+            // 3. 恢复代码块
+            for (var id in codePlaceholders) {
+                formattedText = formattedText.replace(id, codePlaceholders[id]);
+            }
+
             if (typeof marked !== 'undefined') {
                 if (typeof marked.parse === 'function') {
                     displayContent = marked.parse(formattedText);
@@ -727,6 +799,15 @@ function appendMessage(sender, text, sources) {
             } else {
                 displayContent = formattedText.replace(/\n/g, '<br>');
             }
+            
+            // 4. 恢复数学公式
+            for (var id in mathPlaceholders) {
+                var mathObj = mathPlaceholders[id];
+                var wrapped = mathObj.isBlock ? '<div class="math-block">' + mathObj.text + '</div>' : '<span class="math-inline">' + mathObj.text + '</span>';
+                // 全局替换
+                displayContent = displayContent.split(id).join(wrapped);
+            }
+            
         } catch (err) {
             console.error("Error formatting message:", err);
             displayContent = text.replace(/\n/g, '<br>');

@@ -7,10 +7,10 @@ def clean_text(text):
     """
     # Remove null characters
     text = text.replace('\x00', '')
-    # Replace multiple newlines with single newline
-    text = re.sub(r'\n+', '\n', text)
-    # Replace multiple spaces with single space
-    text = re.sub(r'\s+', ' ', text)
+    # Replace 3 or more newlines with 2 newlines (preserve paragraph breaks)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    # Replace multiple spaces/tabs with single space (excluding newlines)
+    text = re.sub(r'[ \t]+', ' ', text)
     return text.strip()
 
 def detect_text_type_and_adjust_size(text, default_size=500):

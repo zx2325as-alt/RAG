@@ -182,24 +182,24 @@ class QAService:
         """
         问题重构后处理：防止过度发散
         """
-        # 如果改写结果过长（超过原问题5倍），可能过度发散
-        if len(rewritten) > len(original) * 5:
+        # 如果改写结果过长（超过原问题5倍且长度大于20），可能过度发散
+        if len(rewritten) > len(original) * 5 and len(rewritten) > 20:
             print(f"Warning: Rewritten query too long, falling back to original. Original: {original}, Rewritten: {rewritten}")
             return original
         
-        # 如果改写结果包含原问题中没有的关键词（可能是幻觉）
-        original_words = set(original.lower().split())
-        rewritten_words = set(rewritten.lower().split())
-        new_words = list(rewritten_words - original_words)
+        # 针对中文环境，使用字级别集合比较而不是 split()
+        original_chars = set(original.lower())
+        rewritten_chars = set(rewritten.lower())
+        new_chars = list(rewritten_chars - original_chars)
         
-        # 在检查新词比例之前，过滤掉来自历史对话的词
+        # 在检查新字比例之前，过滤掉来自历史对话的字
         if history_text:
-            history_words = set(history_text.lower().split())
-            new_words = [w for w in new_words if w not in history_words]
+            history_chars = set(history_text.lower())
+            new_chars = [c for c in new_chars if c not in history_chars]
         
-        # 如果新增词汇过多（超过70%），可能过度发散
-        if len(new_words) > len(original_words) * 0.7 and len(original_words) > 3:
-            print(f"Warning: Rewritten query has too many new words, using original.")
+        # 如果新增字汇过多（超过70%），可能过度发散
+        if len(new_chars) > len(original_chars) * 0.7 and len(original_chars) > 5:
+            print(f"Warning: Rewritten query has too many new chars, using original.")
             return original
         
         return rewritten
@@ -223,7 +223,7 @@ class QAService:
                 print(f"Redis get error: {e}")
 
         # ========== 思考过程开始 ==========
-        yield json.dumps({"type": "chunk", "content": "> 🧠 **思考过程**\n"}) + "\n"
+        # yield json.dumps({"type": "chunk", "content": "> 🧠 **思考过程**\n"}) + "\n"
         yield json.dumps({"type": "chunk", "content": "> ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"}) + "\n"
         
         # 步骤1: 接收请求
