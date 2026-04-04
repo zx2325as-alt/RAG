@@ -71,6 +71,9 @@ def download_model():
 
             env = os.environ.copy()
             env["HF_ENDPOINT"] = "https://hf-mirror.com"
+            # 解决Linux下www-data等用户可能无法写入默认~/.cache/huggingface的问题
+            env["HF_HOME"] = os.path.abspath(os.path.join(current_app.root_path, '..', '.cache', 'huggingface'))
+            os.makedirs(env["HF_HOME"], exist_ok=True)
 
             hf_cli_cmd = shutil.which("huggingface-cli")
             if hf_cli_cmd:
@@ -78,11 +81,19 @@ def download_model():
             else:
                 cmd = [sys.executable, "-m", "huggingface_hub.commands.huggingface_cli", "download", model_name, "--local-dir", local_dir]
 
+            # 兼容Linux和Windows的后台进程启动参数
+            kwargs = {}
+            if os.name == 'posix':
+                kwargs['start_new_session'] = True
+            elif os.name == 'nt':
+                kwargs['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP
+
             subprocess.Popen(
                 cmd,
                 stdout=open(os.path.join(current_app.root_path, '..', 'logs', 'hf_download.log'), 'a'),
                 stderr=subprocess.STDOUT,
-                env=env
+                env=env,
+                **kwargs
             )
             return jsonify({'message': f'✅ 校验通过！已在后台执行下载: {model_name}\n目标目录: {local_dir}\n请稍后查看日志并刷新列表'})
     except Exception as e:

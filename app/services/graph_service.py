@@ -76,8 +76,8 @@ class GraphService:
 - CONFIGURED_BY/HAS_ERROR/RELATED_TO 等
 
 请返回严格的 JSON 格式，包含 entities 和 relations 两个列表。
-实体格式: {"id": "唯一标识", "type": "实体类型", "name": "名称"}
-关系格式: {"source": "源实体id", "target": "目标实体id", "type": "关系类型", "source_type": "源实体类型", "target_type": "目标实体类型"}
+实体格式: {{"id": "唯一标识", "type": "实体类型", "name": "名称"}}
+关系格式: {{"source": "源实体id", "target": "目标实体id", "type": "关系类型", "source_type": "源实体类型", "target_type": "目标实体类型"}}
 特别注意：当文本提及模型/算法的版本演进时，务必提取 EVOLVED_FROM/EVOLVED_TO 关系。
 如果未发现明显关系，返回空列表。请只输出 JSON 字符串，不要输出 Markdown 格式标记。'''),
             ("user", "文本内容：\n{text}")

@@ -633,7 +633,7 @@ function appendChunkToMessage(msgId, textChunk) {
         var codePlaceholders = {};
         var codeCounter = 0;
         function storeCode(match) {
-            var id = '___CODE_PLACEHOLDER_' + (codeCounter++) + '___';
+            var id = 'CODEPLACEHOLDER' + (codeCounter++) + 'ENDCODE';
             codePlaceholders[id] = match;
             return id;
         }
@@ -643,9 +643,8 @@ function appendChunkToMessage(msgId, textChunk) {
         // 2. 预处理数学公式：保护 LaTeX 公式不被 marked 错误解析为斜体或意外换行
         var mathPlaceholders = {};
         var mathCounter = 0;
-        
         function storeMath(match, isBlock) {
-            var id = '___MATH_PLACEHOLDER_' + (mathCounter++) + '___';
+            var id = 'MATHPLACEHOLDER' + (mathCounter++) + 'ENDMATH';
             mathPlaceholders[id] = { text: match, isBlock: isBlock };
             return id;
         }
@@ -760,7 +759,7 @@ function appendMessage(sender, text, sources) {
             var codePlaceholders = {};
             var codeCounter = 0;
             function storeCode(match) {
-                var id = '___CODE_PLACEHOLDER_' + (codeCounter++) + '___';
+                var id = 'CODEPLACEHOLDER' + (codeCounter++) + 'ENDCODE';
                 codePlaceholders[id] = match;
                 return id;
             }
@@ -771,7 +770,7 @@ function appendMessage(sender, text, sources) {
             var mathPlaceholders = {};
             var mathCounter = 0;
             function storeMath(match, isBlock) {
-                var id = '___MATH_PLACEHOLDER_' + (mathCounter++) + '___';
+                var id = 'MATHPLACEHOLDER' + (mathCounter++) + 'ENDMATH';
                 mathPlaceholders[id] = { text: match, isBlock: isBlock };
                 return id;
             }
