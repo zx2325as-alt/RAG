@@ -1781,10 +1781,9 @@
                     function checkTbReady() {
                         $.get('/api/check_tensorboard', function(checkRes) {
                             if (checkRes.running) {
-                                // 支持自定义线上外网地址映射
-                                var tbUrl = '{{ tensorboard_public_url }}';
+                                var tbUrl = checkRes.public_url || '{{ tensorboard_public_url }}';
                                 if (!tbUrl) {
-                                    tbUrl = 'http://' + window.location.hostname + ':{{ tensorboard_port }}';
+                                    tbUrl = getAutoDLUrl({{ tensorboard_port }});
                                 }
                                 
                                 $('#tbIframe').attr('src', tbUrl);
@@ -1819,7 +1818,7 @@
                     setTimeout(checkTbReady, 1500);
                 } else {
                     btn.prop('disabled', false).html(originalText);
-                    alert('拉起 TensorBoard 失败: ' + res.error);
+                    alert('拉起 TensorBoard 失败: ' + (res.error || '未知错误'));
                 }
             }).fail(function() {
                 btn.prop('disabled', false).html(originalText);
@@ -1831,12 +1830,12 @@
         function getAutoDLUrl(port) {
             let hostname = window.location.hostname;
             if (hostname.includes('seetacloud.com')) {
-                if (port === 7860 || port === 6006) {
+                if (port === 7860 || port === 6006 || port === 6008) {
                     let mappedHost = hostname.replace(/^uu/, 'u');
                     return `https://${mappedHost}:8443`;
                 }
             }
-            return `http://${window.location.hostname}:${port}`;
+            return `${window.location.protocol}//${window.location.hostname}:${port}`;
         }
 
         function openAutoDLUrl(port) {

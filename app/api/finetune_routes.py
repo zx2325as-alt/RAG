@@ -124,16 +124,22 @@ def _resolve_trainable_model_path(base_model_name, root_path):
         logs.append(f"[INFO] 发现本地 Hugging Face 模型缓存，直接使用绝对路径: {hf_model_path}")
         return hf_model_path, logs
 
+    def map_model_name_to_hf(model_lower):
+        if "qwen3-vl:2b" in model_lower or "qwen3_vl_2b" in model_lower or "qwen2.5-vl:3b" in model_lower:
+            return "Qwen/Qwen2.5-VL-3B-Instruct"
+        if "qwen2.5:0.5b" in model_lower or "qwen:0.5b" in model_lower or "qwen3:0.6b" in model_lower or "qwen3_0.6b" in model_lower:
+            return "Qwen/Qwen2.5-0.5B-Instruct"
+        if "qwen2.5:1.5b" in model_lower or "qwen:1.5b" in model_lower:
+            return "Qwen/Qwen2.5-1.5B-Instruct"
+        if "qwen2.5:7b" in model_lower or "qwen:7b" in model_lower or "qwen3:8b" in model_lower:
+            return "Qwen/Qwen2.5-7B-Instruct"
+        if "deepseek" in model_lower and "1.5b" in model_lower:
+            return "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct"
+        return "Qwen/Qwen1.5-0.5B-Chat"
+
     if is_vllm:
         model_lower = base_model_name.lower()
-        if "qwen2.5:0.5b" in model_lower or "qwen:0.5b" in model_lower or "qwen3:0.6b" in model_lower or "qwen3_0.6b" in model_lower:
-            hf_model_path = "Qwen/Qwen2.5-0.5B-Instruct"
-        elif "qwen2.5:1.5b" in model_lower or "qwen:1.5b" in model_lower:
-            hf_model_path = "Qwen/Qwen2.5-1.5B-Instruct"
-        elif "qwen2.5:7b" in model_lower or "qwen:7b" in model_lower or "qwen3:8b" in model_lower:
-            hf_model_path = "Qwen/Qwen2.5-7B-Instruct"
-        else:
-            hf_model_path = "Qwen/Qwen1.5-0.5B-Chat"
+        hf_model_path = map_model_name_to_hf(model_lower)
         logs.append(f"[TIP] vLLM 本地模型路径缺少 config.json 权重配置文件，已自动映射回 HuggingFace 官方镜像基座: {hf_model_path}，确保训练正常进行。")
         return hf_model_path, logs
 
@@ -145,16 +151,7 @@ def _resolve_trainable_model_path(base_model_name, root_path):
         if not os.path.exists(os.path.join(ollama_export_dir, "config.json")):
             logs.append("[INFO] 正在后台通过 `ollama export` 自动提取原始权重到本地，这可能需要一点时间...")
             model_lower = base_model_name.lower()
-            if "qwen2.5:0.5b" in model_lower or "qwen:0.5b" in model_lower or "qwen3:0.6b" in model_lower:
-                hf_model_path = "Qwen/Qwen2.5-0.5B-Instruct"
-            elif "qwen2.5:1.5b" in model_lower or "qwen:1.5b" in model_lower:
-                hf_model_path = "Qwen/Qwen2.5-1.5B-Instruct"
-            elif "qwen2.5:7b" in model_lower or "qwen:7b" in model_lower or "qwen3:8b" in model_lower:
-                hf_model_path = "Qwen/Qwen2.5-7B-Instruct"
-            elif "deepseek" in model_lower and "1.5b" in model_lower:
-                hf_model_path = "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct"
-            else:
-                hf_model_path = "Qwen/Qwen1.5-0.5B-Chat"
+            hf_model_path = map_model_name_to_hf(model_lower)
             logs.append(f"[TIP] 目前检测到 Ollama 内部模型。为了最稳定的训练，已自动为你映射并拉取 HuggingFace 官方未量化的全精度基座: {hf_model_path}。")
             logs.append("[INFO] 自动缓存加速已开启，下载完成后下次训练将秒级加载。")
         else:
@@ -187,10 +184,40 @@ def _prepare_cpt_dataset(root_path, dataset_file_name):
             try:
                 item = json.loads(line)
             except Exception:
+                converted_lines.append(json.dumps({"text": line}, ensure_ascii=False))
                 continue
 
             if not isinstance(item, dict):
                 continue
+
+            direct_text = str(
+                item.get('text')
+                or item.get('content')
+                or item.get('value')
+                or item.get('sentence')
+                or item.get('paragraph')
+                or ''
+            ).strip()
+            if direct_text:
+                converted_lines.append(json.dumps({"text": direct_text}, ensure_ascii=False))
+                continue
+
+            conversations = item.get('conversations') or item.get('messages')
+            if isinstance(conversations, list):
+                conversation_parts = []
+                for message in conversations:
+                    if isinstance(message, dict):
+                        role = str(message.get('from') or message.get('role') or '').strip()
+                        content = str(message.get('value') or message.get('content') or '').strip()
+                        merged = f"{role}: {content}".strip(": ").strip()
+                        if merged:
+                            conversation_parts.append(merged)
+                    elif isinstance(message, str):
+                        if message.strip():
+                            conversation_parts.append(message.strip())
+                if conversation_parts:
+                    converted_lines.append(json.dumps({"text": "\n".join(conversation_parts)}, ensure_ascii=False))
+                    continue
 
             text_parts = [
                 str(item.get('instruction') or item.get('question') or item.get('prompt') or '').strip(),

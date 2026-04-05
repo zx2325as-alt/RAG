@@ -1,7 +1,7 @@
 """
 系统相关路由：首页、状态、TensorBoard
 """
-from flask import jsonify, render_template, current_app
+from flask import jsonify, render_template, current_app, request
 from app.db.models import Document, Chunk
 from app.config import Config
 from app.api.common import api_bp, tensorboard_process
@@ -9,6 +9,22 @@ import os
 import sys
 import socket
 import subprocess
+import time
+
+
+def _build_tensorboard_public_url():
+    if Config.TENSORBOARD_PUBLIC_URL:
+        return Config.TENSORBOARD_PUBLIC_URL
+
+    host = request.host.split(':')[0] if request.host else ''
+    if 'seetacloud.com' in host:
+        mapped_host = host
+        if mapped_host.startswith('uu'):
+            mapped_host = 'u' + mapped_host[2:]
+        return f'https://{mapped_host}:8443'
+
+    scheme = request.scheme or 'http'
+    return f'{scheme}://{host}:{Config.TENSORBOARD_PORT}'
 
 
 @api_bp.route('/')
@@ -37,7 +53,9 @@ def start_tensorboard():
 
     try:
         log_dir = os.path.join(current_app.root_path, '..', 'finetuned_models', 'runs')
+        logs_dir = os.path.join(current_app.root_path, '..', 'logs')
         os.makedirs(log_dir, exist_ok=True)
+        os.makedirs(logs_dir, exist_ok=True)
 
         tb_cmd = [
             sys.executable, "-m", "tensorboard.main",
@@ -56,11 +74,22 @@ def start_tensorboard():
             
         tensorboard_process = subprocess.Popen(
             tb_cmd,
-            stdout=open(os.path.join(current_app.root_path, '..', 'logs', 'tensorboard_stdout.log'), 'w'),
+            stdout=open(os.path.join(logs_dir, 'tensorboard_stdout.log'), 'w'),
             stderr=subprocess.STDOUT,
             **kwargs
         )
-        return jsonify({'status': 'ok'})
+
+        time.sleep(2)
+        if tensorboard_process.poll() is not None:
+            return jsonify({
+                'status': 'error',
+                'error': 'TensorBoard 进程启动失败，请检查 logs/tensorboard_stdout.log'
+            }), 500
+
+        return jsonify({
+            'status': 'ok',
+            'public_url': _build_tensorboard_public_url()
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -72,7 +101,10 @@ def check_tensorboard():
             check_host = '127.0.0.1' if Config.TENSORBOARD_HOST == '0.0.0.0' else Config.TENSORBOARD_HOST
             return s.connect_ex((check_host, port)) == 0
 
-    return jsonify({'running': is_port_in_use(Config.TENSORBOARD_PORT)})
+    return jsonify({
+        'running': is_port_in_use(Config.TENSORBOARD_PORT),
+        'public_url': _build_tensorboard_public_url()
+    })
 
 
 @api_bp.route('/status', methods=['GET'])
