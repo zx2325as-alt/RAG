@@ -63,12 +63,13 @@ def start_tensorboard():
         tb_cmd = [
             sys.executable, "-m", "tensorboard.main",
             "--logdir", log_dir,
-            "--host", Config.TENSORBOARD_HOST,
             "--port", str(Config.TENSORBOARD_PORT),
             "--reload_interval", "1"
         ]
         if Config.TENSORBOARD_HOST == '0.0.0.0':
             tb_cmd.append("--bind_all")
+        else:
+            tb_cmd.extend(["--host", Config.TENSORBOARD_HOST])
 
         # 增加 TensorBoard 启动超时和重试机制，或者分离进程组
         kwargs = {}
