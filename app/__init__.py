@@ -31,9 +31,19 @@ def create_app(config_class=Config):
                 print(f"Warning: Could not create directory {dir_path}: {e}")
 
     # 设置详细的日志格式
-    if not os.path.exists('logs'):
-        os.mkdir('logs')
-    file_handler = RotatingFileHandler('logs/rag_system.log', maxBytes=10240000, backupCount=10)
+    root_logs_dir = os.path.join(root_dir, 'logs')
+    app_logs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+    os.makedirs(root_logs_dir, exist_ok=True)
+
+    legacy_log_path = os.path.join(app_logs_dir, 'rag_system.log')
+    target_log_path = os.path.join(root_logs_dir, 'rag_system.log')
+    if os.path.exists(legacy_log_path) and not os.path.exists(target_log_path):
+        try:
+            os.replace(legacy_log_path, target_log_path)
+        except Exception:
+            pass
+
+    file_handler = RotatingFileHandler(target_log_path, maxBytes=10240000, backupCount=10)
     # 增加线程名、进程ID等详细信息
     file_handler.setFormatter(logging.Formatter(
         '[%(asctime)s] %(levelname)s in %(module)s [%(pathname)s:%(lineno)d] - Thread:%(threadName)s: %(message)s'
