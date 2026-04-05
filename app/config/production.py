@@ -13,6 +13,7 @@ class ProductionConfig(BaseConfig):
     APP_HOST = '0.0.0.0'
     WEBUI_HOST = '0.0.0.0'
     TENSORBOARD_HOST = '0.0.0.0'
+    TENSORBOARD_PORT = 6006
     
     # 线上版图数据库配置 (生产环境可能在其他内网 IP，默认退回为 127.0.0.1 兼容单机部署)
     NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://127.0.0.1:7687')

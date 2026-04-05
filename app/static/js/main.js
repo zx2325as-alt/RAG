@@ -724,13 +724,9 @@ function appendChunkToMessage(msgId, textChunk) {
 function appendSourcesToMessage(msgId, sources) {
     var sourcesHtml = renderSources(sources);
     
-    // 如果有思考过程的容器，优先追加到思考过程里
-    var thinkingSourcesElem = $(`#${msgId}-sources-thinking`);
-    if (thinkingSourcesElem.length > 0) {
-        thinkingSourcesElem.html(sourcesHtml);
-    } else {
-        // 后备：附加到原来的位置
-        var sourcesElem = $(`#${msgId}-sources`);
+    // 直接附加到主消息气泡底部，不要放到思考过程里，否则折叠后看不见
+    var sourcesElem = $(`#${msgId}-sources`);
+    if (sourcesElem.length > 0) {
         sourcesElem.html(sourcesHtml).show();
     }
     

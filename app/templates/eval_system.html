@@ -795,8 +795,10 @@
                     
                     if (res.datasets && res.datasets.length > 0) {
                         res.datasets.forEach(function(d) {
-                            select1.append(`<option value="${d}">${d}</option>`);
-                            select2.append(`<option value="${d}">${d}</option>`);
+                            const val = typeof d === 'string' ? d : d.file_name;
+                            const name = typeof d === 'string' ? d : d.name;
+                            select1.append(`<option value="${val}">${name}</option>`);
+                            select2.append(`<option value="${val}">${name}</option>`);
                         });
                     } else {
                         select1.append('<option value="" disabled>暂无数据集</option>');
@@ -853,9 +855,9 @@
                     res.sample_comparisons.forEach(function(s) {
                         tbody.append(`
                             <tr>
-                                <td><small>${s.input.substring(0, 100)}...</small></td>
-                                <td><small class="text-muted">${s.reference.substring(0, 150)}...</small></td>
-                                <td><small>${s.prediction.substring(0, 150)}...</small></td>
+                                <td><small>${(s.input || '').substring(0, 100)}...</small></td>
+                                <td><small class="text-muted">${(s.reference || '').substring(0, 150)}...</small></td>
+                                <td><small>${(s.prediction || '').substring(0, 150)}...</small></td>
                             </tr>
                         `);
                     });
@@ -1108,12 +1110,12 @@
                 sampleTbody.empty();
                 if (res.sample_comparisons) {
                     res.sample_comparisons.forEach(function(s) {
-                        var row = `<tr><td><small>${s.input.substring(0, 80)}...</small></td>`;
-                        row += `<td><small class="text-muted">${s.reference.substring(0, 100)}...</small></td>`;
+                        var row = `<tr><td><small>${(s.input || '').substring(0, 80)}...</small></td>`;
+                        row += `<td><small class="text-muted">${(s.reference || '').substring(0, 100)}...</small></td>`;
                         res.model_names.forEach(function(name) {
                             const output = s.model_outputs[name];
                             if (output) {
-                                row += `<td><div class="output-cell"><small>${output.output.substring(0, 100)}...</small></div></td>`;
+                                row += `<td><div class="output-cell"><small>${(output.output || '').substring(0, 100)}...</small></div></td>`;
                             } else {
                                 row += `<td>-</td>`;
                             }

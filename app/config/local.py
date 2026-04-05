@@ -11,6 +11,7 @@ class LocalConfig(BaseConfig):
     APP_HOST = '127.0.0.1'
     WEBUI_HOST = '127.0.0.1'
     TENSORBOARD_HOST = '127.0.0.1'
+    TENSORBOARD_PORT = 6007
     
     # 本地版图数据库配置
     NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://127.0.0.1:7687')
