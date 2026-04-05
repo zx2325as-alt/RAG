@@ -49,7 +49,10 @@ def start_tensorboard():
             return s.connect_ex((check_host, port)) == 0
 
     if is_port_in_use(Config.TENSORBOARD_PORT):
-        return jsonify({'status': 'already_running'})
+        return jsonify({
+            'status': 'already_running',
+            'public_url': _build_tensorboard_public_url()
+        })
 
     try:
         log_dir = os.path.join(current_app.root_path, '..', 'finetuned_models', 'runs')

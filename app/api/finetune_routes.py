@@ -244,9 +244,8 @@ def _prepare_cpt_dataset(root_path, dataset_file_name):
 
     dataset_info[cpt_dataset_name] = {
         "file_name": os.path.basename(cpt_dataset_path),
-        "formatting": "text",
         "columns": {
-            "text": "text"
+            "prompt": "text"
         }
     }
 
