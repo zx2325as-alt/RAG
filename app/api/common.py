@@ -58,3 +58,4 @@ def register_routes():
     from app.api import document_routes
     from app.api import llm_routes
     from app.api import finetune_routes
+    from app.api import chat_routes

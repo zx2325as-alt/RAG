@@ -148,6 +148,7 @@
             <div class="collapse navbar-collapse">
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item"><a class="nav-link" href="/">问答系统</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/chat">纯净聊天</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/finetune">模型训练与部署</a></li>
                     <li class="nav-item"><a class="nav-link" href="/eval_system">评估系统</a></li>
                 </ul>
@@ -183,10 +184,10 @@
                     <div class="card-body">
                         <div class="row compact-row">
                             <div class="col-md-4">
-                                <label class="form-label">输入原始数据文件</label>
+                                <label class="form-label">输入原始数据</label>
                                 <div class="input-group input-group-sm">
-                                    <select class="form-select" id="rawDatasetSelect"><option value="">加载中...</option></select>
-                                    <button class="btn btn-outline-secondary" type="button" onclick="loadRawDatasets()">🔄</button>
+                                    <input type="text" class="form-control" value="读取目录下所有文件" disabled id="rawDatasetSelect">
+                                    <button class="btn btn-outline-secondary" type="button" disabled>🔄</button>
                                 </div>
                             </div>
                             <div class="col-md-2">
@@ -1581,11 +1582,7 @@
 
         // 新增的阶段 1: 数据准备 API 交互
         function startDataPreparation() {
-            var rawDataset = $('#rawDatasetSelect').val();
-            if (!rawDataset) {
-                alert("请选择输入的原始数据文件");
-                return;
-            }
+            var rawDataset = $('#rawDatasetSelect').val() || 'all';
             
             var payload = {
                 raw_dataset: rawDataset,

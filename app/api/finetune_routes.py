@@ -1028,18 +1028,18 @@ def start_data_preparation():
             return jsonify({'error': '未指定原始数据文件'}), 400
         
         # 构建路径
-        raw_path = os.path.join(current_app.root_path, '..', Config.UPLOAD_FOLDER, 'datasets', 'raw', raw_dataset)
+        raw_dir = os.path.join(current_app.root_path, '..', Config.UPLOAD_FOLDER, 'datasets', 'raw')
         cleaned_dir = os.path.join(current_app.root_path, '..', Config.UPLOAD_FOLDER, 'datasets', 'cleaned')
         output_path = os.path.join(cleaned_dir, output_name)
         
-        if not os.path.exists(raw_path):
-            return jsonify({'error': f'原始文件不存在: {raw_dataset}'}), 404
+        if not os.path.exists(raw_dir) or not os.listdir(raw_dir):
+            return jsonify({'error': '原始数据目录不存在或为空'}), 404
         
         os.makedirs(cleaned_dir, exist_ok=True)
         
         def generate_data_prep_logs():
             yield f"data: > 开始数据准备任务...\n\n"
-            yield f"data: > 输入文件: {raw_dataset}\n\n"
+            yield f"data: > 读取 raw 目录下所有文件进行处理\n\n"
             yield f"data: > 去重策略: {dedup_strategy}\n\n"
             
             try:
@@ -1047,15 +1047,19 @@ def start_data_preparation():
                 yield f"data: > 正在读取原始数据...\n\n"
                 
                 raw_data = []
-                with open(raw_path, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line:
-                            try:
-                                raw_data.append(json.loads(line))
-                            except:
-                                # 非 JSON 行，作为纯文本处理
-                                raw_data.append({'text': line})
+                for file_name in os.listdir(raw_dir):
+                    file_path = os.path.join(raw_dir, file_name)
+                    if os.path.isfile(file_path):
+                        yield f"data: > 正在读取文件: {file_name}...\n\n"
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            for line in f:
+                                line = line.strip()
+                                if line:
+                                    try:
+                                        raw_data.append(json.loads(line))
+                                    except:
+                                        # 非 JSON 行，作为纯文本处理
+                                        raw_data.append({'text': line})
                 
                 yield f"data: > 读取完成，共 {len(raw_data)} 条原始数据\n\n"
                 
