@@ -428,6 +428,10 @@ def set_llm_model():
             Config.ACTIVE_LLM = model_name
         else:
             return jsonify({'error': f'Unsupported model type: {model_type}'}), 400
+            
+        # 强制更新 qa_service 内部的 LLM 实例，否则切换的配置不会生效
+        qa_service = get_qa_service()
+        qa_service.initialize_llm()
 
         return jsonify({
             'message': 'Model updated',
