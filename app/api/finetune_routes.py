@@ -1168,7 +1168,7 @@ def start_data_preparation():
                                     base_url = base_url.replace('/chat/completions', '')
                                 qa_service.llm = ChatOpenAI(
                                     base_url=base_url,
-                                    api_key=Config.VLLM_API_KEY,
+                                    api_key=Config.VLLM_API_KEY or "EMPTY",
                                     model=analysis_model,
                                     temperature=0.1,
                                     max_retries=1,

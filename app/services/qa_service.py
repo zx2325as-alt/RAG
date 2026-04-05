@@ -108,7 +108,7 @@ class QAService:
                 
             self.llm = ChatOpenAI(
                 base_url=base_url, 
-                api_key=Config.VLLM_API_KEY,
+                api_key=Config.VLLM_API_KEY or "EMPTY", # vLLM 本地服务通常不需要真实 API Key，但 OpenAI 客户端强校验此字段，必须给一个非空字符串
                 model=Config.VLLM_MODEL_NAME,
                 temperature=0.1,
                 max_retries=1,
