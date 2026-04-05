@@ -58,14 +58,14 @@ def download_model():
             return jsonify({'message': f'已在后台执行: ollama pull {model_name}'})
         else:
             try:
-                import urllib3
-                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
                 hf_mirror_url = f"https://hf-mirror.com/api/models/{model_name}"
+                # 禁用 SSL 验证以防止国内网络环境下的 SSLEOFError
                 check_response = requests.get(hf_mirror_url, timeout=5, verify=False)
                 if check_response.status_code != 200:
                     return jsonify({'error': f'校验失败：在 hf-mirror.com 上未找到模型 [{model_name}]，请检查 ID 是否正确。状态码: {check_response.status_code}'}), 404
             except requests.exceptions.RequestException as e:
-                return jsonify({'error': f'校验失败：无法连接到 hf-mirror.com，请检查网络。({str(e)})'}), 500
+                # 如果依然失败，不阻断流程，仅记录警告，尝试直接下载
+                current_app.logger.warning(f'校验 hf-mirror.com 失败 ({str(e)})，将尝试直接下载...')
 
             safe_model_name = model_name.replace('/', '--')
             local_dir = os.path.join(Config.HF_MODEL_DIR, safe_model_name)
@@ -316,8 +316,7 @@ def search_models():
             'limit': 30                    # 限制返回数量
         }
         
-        import urllib3
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        # 禁用 SSL 验证以防止 SSLEOFError
         resp = requests.get(search_url, params=params, timeout=10, verify=False)
         
         if resp.status_code == 200:

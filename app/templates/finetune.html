@@ -451,12 +451,9 @@
                         <div class="row compact-row">
                             <div class="col-md-4">
                                 <label class="form-label">教师模型</label>
-                                <div class="input-group input-group-sm">
-                                    <select class="form-select" id="teacherModelSelect">
-                                        <option value="">加载中...</option>
-                                    </select>
-                                    <button class="btn btn-outline-primary" type="button" id="downloadTeacherModelBtn" onclick="downloadTeacherModel()" title="下载/拉取此模型">📥</button>
-                                </div>
+                                <select class="form-select form-select-sm" id="teacherModelSelect">
+                                    <option value="">加载中...</option>
+                                </select>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">学生基础模型</label>
@@ -1132,42 +1129,7 @@
             // 初始加载数据集列表
             loadDatasets();
             
-            // 教师模型下载
-        window.downloadTeacherModel = function() {
-            var model = $('#teacherModelSelect').val();
-            if (!model) {
-                alert('请先选择一个模型');
-                return;
-            }
-            if (model.startsWith('online:')) {
-                model = model.substring(7);
-            }
-            if (!confirm('确定要在后台下载/拉取模型 [' + model + '] 吗？这可能需要较长时间并占用磁盘空间。')) {
-                return;
-            }
-            
-            var btn = $('#downloadTeacherModelBtn');
-            var originalText = btn.html();
-            btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>');
-            
-            $.ajax({
-                url: '/api/download_model',
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({ model_name: model }),
-                success: function(res) {
-                    alert(res.message || '已开始在后台下载');
-                },
-                error: function(err) {
-                    alert('下载请求失败: ' + (err.responseJSON ? err.responseJSON.error : '未知错误'));
-                },
-                complete: function() {
-                    btn.prop('disabled', false).html(originalText);
-                }
-            });
-        };
-        
-        // 删除模型绑定
+            // 删除模型绑定
             $('#deleteModelBtn').click(function() {
                 var selectedModel = $('#baseModelSelect').val();
                 var category = $('#modelCategorySelect').val();
@@ -1370,7 +1332,7 @@
             $.post('/api/start_tensorboard', function(res) {
                 if (res.status === 'ok' || res.status === 'already_running') {
                     // 使用轮询检测端口是否真正可用，防止拒绝连接
-                    var maxRetries = 30; // 稍微延长等待次数，服务器冷启动可能较慢
+                    var maxRetries = 30; // 延长等待次数，线上环境启动可能较慢
                     var retries = 0;
                     
                     function checkTbReady() {

@@ -208,9 +208,9 @@ class EvalService:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
             
             for idx, item in enumerate(dataset):
-                instruction = item.get('instruction', item.get('prompt', item.get('query', '')))
+                instruction = item.get('instruction', '')
                 input_text = item.get('input', '')
-                reference = item.get('output', item.get('response', item.get('answer', '')))
+                reference = item.get('output', '')
                 
                 # 构建prompt
                 if input_text:

@@ -724,9 +724,15 @@ function appendChunkToMessage(msgId, textChunk) {
 function appendSourcesToMessage(msgId, sources) {
     var sourcesHtml = renderSources(sources);
     
-    // 直接附加到主消息气泡底部，不要放到思考过程里，否则折叠后看不见
-    var sourcesElem = $(`#${msgId}-sources`);
-    if (sourcesElem.length > 0) {
+    // 如果有思考过程的容器，优先追加到思考过程里
+    var thinkingSourcesElem = $(`#${msgId}-sources-thinking`);
+    if (thinkingSourcesElem.length > 0) {
+        thinkingSourcesElem.html(sourcesHtml).show();
+        // 确保包含它的 details 也是可见的
+        $(`#${msgId}-thinking-container`).show();
+    } else {
+        // 后备：附加到原来的位置
+        var sourcesElem = $(`#${msgId}-sources`);
         sourcesElem.html(sourcesHtml).show();
     }
     
@@ -904,12 +910,14 @@ function renderSources(sources) {
     html += '<div class="d-flex flex-wrap gap-2">'; // 横向排布容器
     
     sources.forEach(function(src, index) {
+        var scoreHtml = src.score ? ` | 相关度: ${(src.score * 100).toFixed(1)}%` : '';
         html += `
             <div class="source-item position-relative">
-                <span class="badge bg-secondary source-badge" onclick="toggleSource(this)" style="cursor: pointer;">来源 ${index + 1}</span>
-                <div class="source-content position-absolute bg-white border rounded shadow p-2" style="display: none; z-index: 1000; width: 300px; max-height: 200px; overflow-y: auto; left: 0; top: 100%; margin-top: 5px;">
-                    <div class="mb-2" style="font-size: 0.85rem;">${src.content}</div>
-                    <div class="text-end text-muted" style="font-size: 0.75rem;">DocName: ${src.doc_name || '-'} | DocID: ${src.doc_id || '-'}</div>
+                <span class="badge bg-secondary source-badge" onclick="toggleSource(this)" style="cursor: pointer;">原文片段 ${index + 1}</span>
+                <div class="source-content position-absolute bg-white border rounded shadow p-2" style="display: none; z-index: 1000; width: 350px; max-height: 250px; overflow-y: auto; left: 0; top: 100%; margin-top: 5px; color: #333;">
+                    <div class="mb-2 fw-bold" style="font-size: 0.85rem; border-bottom: 1px solid #eee; padding-bottom: 4px;">原文内容</div>
+                    <div class="mb-2" style="font-size: 0.85rem; white-space: pre-wrap;">${src.content}</div>
+                    <div class="text-end text-muted" style="font-size: 0.75rem;">DocName: ${src.doc_name || '-'}${scoreHtml}</div>
                 </div>
             </div>
         `;

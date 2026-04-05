@@ -49,10 +49,16 @@ def start_tensorboard():
         if Config.TENSORBOARD_HOST == '0.0.0.0':
             tb_cmd.append("--bind_all")
 
+        # 增加 TensorBoard 启动超时和重试机制，或者分离进程组
+        kwargs = {}
+        if os.name != 'nt':
+            kwargs['preexec_fn'] = os.setpgrp
+            
         tensorboard_process = subprocess.Popen(
             tb_cmd,
             stdout=open(os.path.join(current_app.root_path, '..', 'logs', 'tensorboard_stdout.log'), 'w'),
-            stderr=subprocess.STDOUT
+            stderr=subprocess.STDOUT,
+            **kwargs
         )
         return jsonify({'status': 'ok'})
     except Exception as e:

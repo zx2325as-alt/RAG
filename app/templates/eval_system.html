@@ -681,46 +681,64 @@
                 });
             }
             
-            if (datasets.length > 0) {
-                const ctx = document.getElementById('lossChart').getContext('2d');
-                window.charts['lossChart'] = new Chart(ctx, {
-                    type: 'line',
-                    data: { datasets: datasets },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: true } },
-                        scales: {
-                            x: { type: 'linear', title: { display: true, text: 'Step' } },
-                            y: { title: { display: true, text: 'Loss' } }
-                        }
-                    }
+            if (datasets.length === 0) {
+                datasets.push({
+                    label: '暂无数据',
+                    data: [],
+                    borderColor: '#ccc',
+                    backgroundColor: 'rgba(200, 200, 200, 0.1)',
+                    borderWidth: 1
                 });
-                // 设置canvas容器高度
-                document.getElementById('lossChart').parentElement.style.height = '250px';
             }
+            
+            const ctx = document.getElementById('lossChart').getContext('2d');
+            window.charts['lossChart'] = new Chart(ctx, {
+                type: 'line',
+                data: { datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: true } },
+                    scales: {
+                        x: { type: 'linear', title: { display: true, text: 'Step' } },
+                        y: { title: { display: true, text: 'Loss' } }
+                    }
+                }
+            });
+            // 设置canvas容器高度
+            document.getElementById('lossChart').parentElement.style.height = '250px';
         }
 
         function renderLRChart(lrHistory) {
             destroyChart('lrChart');
             // 过滤掉无效的lr值
             const validLRHistory = (lrHistory || []).filter(x => x.lr !== null && x.lr !== undefined && !isNaN(x.lr) && x.lr > 0);
-            if (validLRHistory.length === 0) return;
+            
+            const datasets = [];
+            if (validLRHistory.length > 0) {
+                datasets.push({
+                    label: 'Learning Rate',
+                    data: validLRHistory.map(x => ({x: x.step, y: x.lr})),
+                    borderColor: '#28a745',
+                    backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true
+                });
+            } else {
+                datasets.push({
+                    label: '暂无数据',
+                    data: [],
+                    borderColor: '#ccc',
+                    backgroundColor: 'rgba(200, 200, 200, 0.1)',
+                    borderWidth: 1
+                });
+            }
             
             const ctx = document.getElementById('lrChart').getContext('2d');
             window.charts['lrChart'] = new Chart(ctx, {
                 type: 'line',
-                data: {
-                    datasets: [{
-                        label: 'Learning Rate',
-                        data: validLRHistory.map(x => ({x: x.step, y: x.lr})),
-                        borderColor: '#28a745',
-                        backgroundColor: 'rgba(40, 167, 69, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.4,
-                        fill: true
-                    }]
-                },
+                data: { datasets: datasets },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
@@ -731,28 +749,39 @@
                     }
                 }
             });
+            document.getElementById('lrChart').parentElement.style.height = '200px';
         }
 
         function renderGradNormChart(gradNormHistory) {
             destroyChart('gradNormChart');
             // 过滤掉无效的grad_norm值
             const validGradNormHistory = (gradNormHistory || []).filter(x => x.grad_norm !== null && x.grad_norm !== undefined && !isNaN(x.grad_norm) && x.grad_norm > 0);
-            if (validGradNormHistory.length === 0) return;
+            
+            const datasets = [];
+            if (validGradNormHistory.length > 0) {
+                datasets.push({
+                    label: 'Gradient Norm',
+                    data: validGradNormHistory.map(x => ({x: x.step, y: x.grad_norm})),
+                    borderColor: '#ffc107',
+                    backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true
+                });
+            } else {
+                datasets.push({
+                    label: '暂无数据',
+                    data: [],
+                    borderColor: '#ccc',
+                    backgroundColor: 'rgba(200, 200, 200, 0.1)',
+                    borderWidth: 1
+                });
+            }
             
             const ctx = document.getElementById('gradNormChart').getContext('2d');
             window.charts['gradNormChart'] = new Chart(ctx, {
                 type: 'line',
-                data: {
-                    datasets: [{
-                        label: 'Gradient Norm',
-                        data: validGradNormHistory.map(x => ({x: x.step, y: x.grad_norm})),
-                        borderColor: '#ffc107',
-                        backgroundColor: 'rgba(255, 193, 7, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.4,
-                        fill: true
-                    }]
-                },
+                data: { datasets: datasets },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
@@ -763,6 +792,7 @@
                     }
                 }
             });
+            document.getElementById('gradNormChart').parentElement.style.height = '200px';
         }
 
         // ==================== Tab 2: 模型评估 ====================
@@ -795,10 +825,8 @@
                     
                     if (res.datasets && res.datasets.length > 0) {
                         res.datasets.forEach(function(d) {
-                            const val = typeof d === 'string' ? d : d.file_name;
-                            const name = typeof d === 'string' ? d : d.name;
-                            select1.append(`<option value="${val}">${name}</option>`);
-                            select2.append(`<option value="${val}">${name}</option>`);
+                            select1.append(`<option value="${d}">${d}</option>`);
+                            select2.append(`<option value="${d}">${d}</option>`);
                         });
                     } else {
                         select1.append('<option value="" disabled>暂无数据集</option>');
@@ -855,9 +883,9 @@
                     res.sample_comparisons.forEach(function(s) {
                         tbody.append(`
                             <tr>
-                                <td><small>${(s.input || '').substring(0, 100)}...</small></td>
-                                <td><small class="text-muted">${(s.reference || '').substring(0, 150)}...</small></td>
-                                <td><small>${(s.prediction || '').substring(0, 150)}...</small></td>
+                                <td><small>${s.input.substring(0, 100)}...</small></td>
+                                <td><small class="text-muted">${s.reference.substring(0, 150)}...</small></td>
+                                <td><small>${s.prediction.substring(0, 150)}...</small></td>
                             </tr>
                         `);
                     });
@@ -1110,12 +1138,12 @@
                 sampleTbody.empty();
                 if (res.sample_comparisons) {
                     res.sample_comparisons.forEach(function(s) {
-                        var row = `<tr><td><small>${(s.input || '').substring(0, 80)}...</small></td>`;
-                        row += `<td><small class="text-muted">${(s.reference || '').substring(0, 100)}...</small></td>`;
+                        var row = `<tr><td><small>${s.input.substring(0, 80)}...</small></td>`;
+                        row += `<td><small class="text-muted">${s.reference.substring(0, 100)}...</small></td>`;
                         res.model_names.forEach(function(name) {
                             const output = s.model_outputs[name];
                             if (output) {
-                                row += `<td><div class="output-cell"><small>${(output.output || '').substring(0, 100)}...</small></div></td>`;
+                                row += `<td><div class="output-cell"><small>${output.output.substring(0, 100)}...</small></div></td>`;
                             } else {
                                 row += `<td>-</td>`;
                             }
