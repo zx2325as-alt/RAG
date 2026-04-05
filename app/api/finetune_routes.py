@@ -42,11 +42,191 @@ def stop_finetune():
                 process.kill()
 
             del active_finetune_processes['current']
+            active_finetune_processes.pop('model_name', None)
+            active_finetune_processes.pop('start_time', None)
             return jsonify({'message': '训练进程已被强制终止！'})
         else:
             return jsonify({'message': '当前没有正在运行的训练进程。'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/api/cpt/stop', methods=['POST'])
+def stop_cpt():
+    try:
+        if 'cpt_current' in active_finetune_processes:
+            process = active_finetune_processes['cpt_current']
+            process.terminate()
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                process.kill()
+
+            del active_finetune_processes['cpt_current']
+            active_finetune_processes.pop('cpt_model_name', None)
+            active_finetune_processes.pop('cpt_start_time', None)
+            return jsonify({'message': 'CPT 训练进程已被强制终止！'})
+        return jsonify({'message': '当前没有正在运行的 CPT 训练进程。'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+def _build_versioned_model_name(base_model_name, models_dir, stage_suffix=""):
+    base_name_clean = base_model_name
+    if base_name_clean.startswith('vllm: '):
+        base_name_clean = base_name_clean.replace('vllm: ', '')
+
+    base_name_clean = os.path.basename(base_name_clean.rstrip('/\\'))
+    base_name_clean = base_name_clean.replace(':', '_').replace('/', '_').replace('--', '-')
+    base_name_clean = re.sub(r'_merged$', '', base_name_clean)
+    base_name_clean = re.sub(r'_lora$', '', base_name_clean)
+    base_name_clean = re.sub(r'_cpt_v\d+$', '', base_name_clean)
+    base_name_clean = re.sub(r'_v\d+$', '', base_name_clean)
+
+    version = 1
+    while True:
+        model_core_name = f"{base_name_clean}{stage_suffix}_v{version}"
+        if not os.path.exists(os.path.join(models_dir, model_core_name)) and \
+           not os.path.exists(os.path.join(models_dir, f"{model_core_name}_lora")) and \
+           not os.path.exists(os.path.join(models_dir, f"{model_core_name}_merged")):
+            return model_core_name
+        version += 1
+
+
+def _resolve_trainable_model_path(base_model_name, root_path):
+    logs = []
+    is_vllm = False
+    original_model_name = base_model_name
+
+    if base_model_name.startswith('vllm: '):
+        base_model_name = base_model_name.replace('vllm: ', '')
+        is_vllm = True
+
+    hf_model_path = base_model_name
+
+    if os.path.isabs(base_model_name) and os.path.exists(base_model_name):
+        return base_model_name, logs
+
+    potential_finetuned_path = os.path.join(root_path, '..', 'finetuned_models', base_model_name)
+    if os.path.exists(os.path.join(potential_finetuned_path, "config.json")):
+        hf_model_path = potential_finetuned_path
+        logs.append(f"[INFO] 检测到本地训练产物，直接使用 finetuned_models 目录: {hf_model_path}")
+        return hf_model_path, logs
+
+    local_hf_path = os.path.join(Config.HF_MODEL_DIR, base_model_name)
+    local_hf_path_alt = os.path.join(Config.HF_MODEL_DIR, base_model_name.replace('/', '--'))
+    if os.path.exists(local_hf_path) and os.path.isdir(local_hf_path):
+        hf_model_path = local_hf_path
+        logs.append(f"[INFO] 发现本地 Hugging Face 模型缓存，直接使用绝对路径: {hf_model_path}")
+        return hf_model_path, logs
+    if os.path.exists(local_hf_path_alt) and os.path.isdir(local_hf_path_alt):
+        hf_model_path = local_hf_path_alt
+        logs.append(f"[INFO] 发现本地 Hugging Face 模型缓存，直接使用绝对路径: {hf_model_path}")
+        return hf_model_path, logs
+
+    if is_vllm:
+        model_lower = base_model_name.lower()
+        if "qwen2.5:0.5b" in model_lower or "qwen:0.5b" in model_lower or "qwen3:0.6b" in model_lower or "qwen3_0.6b" in model_lower:
+            hf_model_path = "Qwen/Qwen2.5-0.5B-Instruct"
+        elif "qwen2.5:1.5b" in model_lower or "qwen:1.5b" in model_lower:
+            hf_model_path = "Qwen/Qwen2.5-1.5B-Instruct"
+        elif "qwen2.5:7b" in model_lower or "qwen:7b" in model_lower or "qwen3:8b" in model_lower:
+            hf_model_path = "Qwen/Qwen2.5-7B-Instruct"
+        else:
+            hf_model_path = "Qwen/Qwen1.5-0.5B-Chat"
+        logs.append(f"[TIP] vLLM 本地模型路径缺少 config.json 权重配置文件，已自动映射回 HuggingFace 官方镜像基座: {hf_model_path}，确保训练正常进行。")
+        return hf_model_path, logs
+
+    if ":" in base_model_name and "/" not in base_model_name:
+        logs.append(f"[INFO] 检测到 Ollama 格式的模型名 '{original_model_name}'。")
+        ollama_export_dir = os.path.join(root_path, '..', 'finetuned_models', 'base_models', base_model_name.replace(":", "_"))
+        os.makedirs(ollama_export_dir, exist_ok=True)
+
+        if not os.path.exists(os.path.join(ollama_export_dir, "config.json")):
+            logs.append("[INFO] 正在后台通过 `ollama export` 自动提取原始权重到本地，这可能需要一点时间...")
+            model_lower = base_model_name.lower()
+            if "qwen2.5:0.5b" in model_lower or "qwen:0.5b" in model_lower or "qwen3:0.6b" in model_lower:
+                hf_model_path = "Qwen/Qwen2.5-0.5B-Instruct"
+            elif "qwen2.5:1.5b" in model_lower or "qwen:1.5b" in model_lower:
+                hf_model_path = "Qwen/Qwen2.5-1.5B-Instruct"
+            elif "qwen2.5:7b" in model_lower or "qwen:7b" in model_lower or "qwen3:8b" in model_lower:
+                hf_model_path = "Qwen/Qwen2.5-7B-Instruct"
+            elif "deepseek" in model_lower and "1.5b" in model_lower:
+                hf_model_path = "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct"
+            else:
+                hf_model_path = "Qwen/Qwen1.5-0.5B-Chat"
+            logs.append(f"[TIP] 目前检测到 Ollama 内部模型。为了最稳定的训练，已自动为你映射并拉取 HuggingFace 官方未量化的全精度基座: {hf_model_path}。")
+            logs.append("[INFO] 自动缓存加速已开启，下载完成后下次训练将秒级加载。")
+        else:
+            hf_model_path = ollama_export_dir
+            logs.append(f"[INFO] 发现已导出的本地基座模型缓存，直接使用: {hf_model_path}")
+
+    return hf_model_path, logs
+
+
+def _prepare_cpt_dataset(root_path, dataset_file_name):
+    cleaned_dir = os.path.join(root_path, '..', Config.UPLOAD_FOLDER, 'datasets', 'cleaned')
+    source_dataset_path = os.path.join(cleaned_dir, dataset_file_name)
+    if not os.path.exists(source_dataset_path):
+        raise FileNotFoundError(f'找不到清洗后的数据集文件: {dataset_file_name}')
+
+    cpt_dataset_dir = os.path.join(root_path, '..', Config.UPLOAD_FOLDER, 'datasets', 'cpt')
+    os.makedirs(cpt_dataset_dir, exist_ok=True)
+
+    dataset_base_name = os.path.splitext(dataset_file_name)[0]
+    cpt_dataset_name = f"{dataset_base_name}_cpt"
+    cpt_dataset_path = os.path.join(cpt_dataset_dir, f"{cpt_dataset_name}.jsonl")
+    dataset_info_path = os.path.join(cpt_dataset_dir, 'dataset_info.json')
+
+    converted_lines = []
+    with open(source_dataset_path, 'r', encoding='utf-8') as f:
+        for line_idx, line in enumerate(f):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                item = json.loads(line)
+            except Exception:
+                continue
+
+            if not isinstance(item, dict):
+                continue
+
+            text_parts = [
+                str(item.get('instruction') or item.get('question') or item.get('prompt') or '').strip(),
+                str(item.get('input') or '').strip(),
+                str(item.get('output') or item.get('answer') or item.get('response') or '').strip()
+            ]
+            full_text = "\n\n".join([part for part in text_parts if part]).strip()
+            if full_text:
+                converted_lines.append(json.dumps({"text": full_text}, ensure_ascii=False))
+
+    if not converted_lines:
+        raise ValueError('无法从当前清洗数据集中提取可用于 CPT 的文本内容')
+
+    with open(cpt_dataset_path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(converted_lines))
+
+    dataset_info = {}
+    if os.path.exists(dataset_info_path):
+        with open(dataset_info_path, 'r', encoding='utf-8') as f:
+            try:
+                dataset_info = json.load(f)
+            except json.JSONDecodeError:
+                dataset_info = {}
+
+    dataset_info[cpt_dataset_name] = {
+        "file_name": os.path.basename(cpt_dataset_path),
+        "formatting": "text",
+        "columns": {
+            "text": "text"
+        }
+    }
+
+    with open(dataset_info_path, 'w', encoding='utf-8') as f:
+        json.dump(dataset_info, f, indent=2, ensure_ascii=False)
+
+    return cpt_dataset_name, cpt_dataset_dir, cpt_dataset_path, len(converted_lines)
 
 
 def _get_eval_data_for_model(model_name):
@@ -387,6 +567,296 @@ def get_datasets():
         return jsonify({'error': str(e)}), 500
 
 
+@api_bp.route('/api/cpt/start', methods=['POST'])
+def start_cpt():
+    try:
+        base_model = request.form.get('baseModel')
+        dataset_file_name = request.form.get('datasetFileName')
+        training_mode = request.form.get('trainingMode', 'local')
+        epochs = request.form.get('epochs')
+        batch_size = request.form.get('batchSize')
+        learning_rate = request.form.get('learningRate')
+        lora_rank = request.form.get('loraRank')
+        lora_alpha = request.form.get('loraAlpha')
+        lora_dropout = request.form.get('loraDropout')
+        lora_target = request.form.get('loraTarget')
+        optimizer = request.form.get('optimizer')
+        lr_scheduler = request.form.get('lrScheduler')
+        max_length = request.form.get('maxLength')
+        precision = request.form.get('precision')
+        quantization = request.form.get('quantization')
+        packing = request.form.get('packing')
+        grad_acc = request.form.get('gradAcc')
+        save_steps = request.form.get('saveSteps')
+        logging_steps = request.form.get('loggingSteps')
+        weight_decay = request.form.get('weightDecay')
+        max_grad_norm = request.form.get('maxGradNorm')
+        seed = request.form.get('seed')
+        warmup_steps = request.form.get('warmupSteps')
+        warmup_ratio = request.form.get('warmupRatio')
+
+        if not base_model:
+            return jsonify({'error': 'Missing base model'}), 400
+        if not dataset_file_name:
+            return jsonify({'error': '未选择数据集文件'}), 400
+
+        root_path = current_app.root_path
+        models_dir = os.path.join(root_path, '..', 'finetuned_models')
+        os.makedirs(models_dir, exist_ok=True)
+        new_model = _build_versioned_model_name(base_model, models_dir, '_cpt')
+
+        def generate_cpt_logs(base_model_name, mode=training_mode):
+            try:
+                yield f"data: > 接收到 CPT 任务请求，准备初始化环境...\n\n"
+                yield f"data: > 基座模型: [{base_model_name}], CPT 输出模型: [{new_model}]\n\n"
+
+                if mode == 'local':
+                    yield f"data: > [训练模式] 🖥️ 本地调试模式 - 优先验证领域续训流程\n\n"
+                    yield f"data: > [指标关注] loss 下降趋势、无 OOM、语料加载是否正常\n\n"
+                else:
+                    yield f"data: > [训练模式] ☁️ 线上训练模式 - 面向正式领域持续预训练\n\n"
+                    yield f"data: > [指标关注] 领域语料收敛速度、泛化稳定性、持续预训练质量\n\n"
+
+                hf_model_path, model_logs = _resolve_trainable_model_path(base_model_name, root_path)
+                for log in model_logs:
+                    yield f"data: > {log}\n\n"
+
+                cpt_dataset_name, cpt_dataset_dir, cpt_dataset_path, sample_count = _prepare_cpt_dataset(root_path, dataset_file_name)
+                yield f"data: > 已将清洗后的指令数据转换为 CPT 语料: {os.path.basename(cpt_dataset_path)}\n\n"
+                yield f"data: > 可用于持续预训练的文本片段数: {sample_count}\n\n"
+
+                config_dir = os.path.join(root_path, '..', 'finetune_configs')
+                os.makedirs(config_dir, exist_ok=True)
+                config_path = os.path.join(config_dir, f"cpt_{datetime.now().strftime('%Y%m%d%H%M%S')}.yaml")
+                output_dir = os.path.join(root_path, '..', 'finetuned_models', new_model)
+                logging_dir = os.path.join(root_path, '..', 'finetuned_models', 'runs', new_model)
+
+                train_config = {
+                    "stage": "pt",
+                    "do_train": True,
+                    "model_name_or_path": hf_model_path,
+                    "dataset": cpt_dataset_name,
+                    "dataset_dir": cpt_dataset_dir,
+                    "finetuning_type": "lora",
+                    "lora_target": lora_target if lora_target and lora_target != 'all' and lora_target != 'undefined' else "all",
+                    "lora_rank": int(lora_rank) if lora_rank and lora_rank != 'undefined' else 8,
+                    "lora_alpha": int(lora_alpha) if lora_alpha and lora_alpha != 'undefined' else 16,
+                    "lora_dropout": float(lora_dropout) if lora_dropout and lora_dropout != 'undefined' else 0.05,
+                    "output_dir": output_dir,
+                    "logging_dir": logging_dir,
+                    "overwrite_cache": True,
+                    "overwrite_output_dir": True,
+                    "per_device_train_batch_size": int(batch_size) if batch_size and batch_size != 'undefined' else 1,
+                    "gradient_accumulation_steps": int(grad_acc) if grad_acc and grad_acc != 'undefined' else 4,
+                    "optim": optimizer if optimizer and optimizer != 'undefined' else "adamw_torch",
+                    "lr_scheduler_type": lr_scheduler if lr_scheduler and lr_scheduler != 'undefined' else "cosine",
+                    "logging_steps": int(logging_steps) if logging_steps and logging_steps != 'undefined' else 10,
+                    "warmup_steps": int(warmup_steps) if warmup_steps and warmup_steps != 'undefined' else 0,
+                    "warmup_ratio": float(warmup_ratio) if warmup_ratio and warmup_ratio != 'undefined' else 0.1,
+                    "save_steps": int(save_steps) if save_steps and save_steps != 'undefined' else 100,
+                    "learning_rate": float(learning_rate) if learning_rate and learning_rate != 'undefined' else 1e-4,
+                    "num_train_epochs": float(epochs) if epochs and epochs != 'undefined' else 1.0,
+                    "cutoff_len": int(max_length) if max_length and max_length != 'undefined' else 1024,
+                    "weight_decay": float(weight_decay) if weight_decay and weight_decay != 'undefined' else 0.0,
+                    "max_grad_norm": float(max_grad_norm) if max_grad_norm and max_grad_norm != 'undefined' else 1.0,
+                    "dataloader_num_workers": 0,
+                    "dataloader_pin_memory": True,
+                    "seed": int(seed) if seed and seed != 'undefined' else 42,
+                    "plot_loss": True,
+                    "report_to": "tensorboard",
+                    "low_cpu_mem_usage": True,
+                    "trust_remote_code": True,
+                    "use_fast_tokenizer": False,
+                    "resize_vocab": False,
+                    "streaming": False,
+                    "bf16": False,
+                    "fp16": False
+                }
+
+                if precision == "fp16":
+                    try:
+                        import torch
+                        if torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 7:
+                            train_config["fp16"] = True
+                            train_config["bf16"] = False
+                        else:
+                            yield f"data: > [WARNING] 当前 GPU 不支持 FP16，自动回退到 FP32 模式\n\n"
+                    except Exception:
+                        train_config["fp16"] = True
+                elif precision == "bf16":
+                    train_config["bf16"] = True
+                    train_config["fp16"] = False
+                else:
+                    train_config["fp16"] = False
+                    train_config["bf16"] = False
+
+                if quantization and quantization != 'none':
+                    train_config["quantization_bit"] = int(quantization)
+
+                if packing == 'true':
+                    train_config["packing"] = True
+
+                if 'trust_remote_code' in train_config:
+                    del train_config['trust_remote_code']
+
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    safe_yaml_dump(train_config, f, allow_unicode=True)
+
+                yield f"data: > CPT 训练配置已生成: {config_path}\n\n"
+                yield f"data: > 正在拉起 LLaMA-Factory 持续预训练进程...\n\n"
+
+                env = os.environ.copy()
+                env['HF_ENDPOINT'] = 'https://hf-mirror.com'
+                if os.path.isabs(hf_model_path) and os.path.exists(hf_model_path):
+                    env['HF_HUB_OFFLINE'] = '1'
+                    env['TRANSFORMERS_OFFLINE'] = '1'
+                env['TORCH_FORCE_WEIGHTS_ONLY_LOAD'] = '0'
+                env['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
+                if os.name == 'nt':
+                    env['OMP_NUM_THREADS'] = '1'
+                    env['MKL_NUM_THREADS'] = '1'
+                    env['TOKENIZERS_PARALLELISM'] = 'false'
+                env['HF_DATASETS_CACHE'] = os.path.join(root_path, '..', 'cache', 'datasets')
+                env['HF_DATASETS_IN_MEMORY'] = '1'
+
+                process = subprocess.Popen(
+                    [get_llamafactory_cli_path(), "train", config_path],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    universal_newlines=True,
+                    encoding='utf-8',
+                    errors='replace',
+                    env=env
+                )
+
+                active_finetune_processes['cpt_current'] = process
+                active_finetune_processes['cpt_model_name'] = new_model
+                active_finetune_processes['cpt_start_time'] = datetime.now().isoformat()
+
+                buffer = ""
+                while True:
+                    char = process.stdout.read(1)
+                    if not char:
+                        break
+                    if char == '\n' or char == '\r':
+                        if buffer:
+                            clean_line = buffer.strip().replace('"', "'")
+                            if clean_line:
+                                yield f"data: > {clean_line}\n\n"
+                            buffer = ""
+                    else:
+                        buffer += char
+                        if len(buffer) > 150:
+                            clean_line = buffer.strip().replace('"', "'")
+                            if clean_line:
+                                yield f"data: > {clean_line}\n\n"
+                            buffer = ""
+
+                process.wait()
+
+                if 'cpt_current' in active_finetune_processes:
+                    del active_finetune_processes['cpt_current']
+
+                if process.returncode == 0:
+                    yield f"data: > [SUCCESS] CPT 训练完成，LoRA 权重已保存至: {output_dir}\n\n"
+                    yield f"data: > 正在合并 CPT LoRA 权重与基座模型，供后续教师微调直接复用...\n\n"
+                    try:
+                        export_dir = os.path.join(root_path, '..', 'finetuned_models', f"{new_model}_merged")
+                        os.makedirs(export_dir, exist_ok=True)
+                        export_config_path = os.path.join(config_dir, f"cpt_export_{datetime.now().strftime('%Y%m%d%H%M%S')}.yaml")
+                        export_config = {
+                            "model_name_or_path": hf_model_path,
+                            "adapter_name_or_path": output_dir,
+                            "finetuning_type": "lora",
+                            "export_dir": export_dir,
+                            "export_size": 2,
+                            "export_legacy_format": False
+                        }
+
+                        with open(export_config_path, 'w', encoding='utf-8') as f:
+                            safe_yaml_dump(export_config, f, allow_unicode=True)
+
+                        export_process = subprocess.Popen(
+                            [get_llamafactory_cli_path(), "export", export_config_path],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            text=True,
+                            bufsize=1,
+                            universal_newlines=True,
+                            encoding='utf-8',
+                            errors='replace',
+                            env=env
+                        )
+
+                        buffer_e = ""
+                        while True:
+                            char = export_process.stdout.read(1)
+                            if not char:
+                                break
+                            if char == '\n' or char == '\r':
+                                if buffer_e:
+                                    clean_line = buffer_e.strip().replace('"', "'")
+                                    if clean_line:
+                                        yield f"data: > [合并] {clean_line}\n\n"
+                                    buffer_e = ""
+                            else:
+                                buffer_e += char
+                                if len(buffer_e) > 150:
+                                    clean_line = buffer_e.strip().replace('"', "'")
+                                    if clean_line:
+                                        yield f"data: > [合并] {clean_line}\n\n"
+                                    buffer_e = ""
+
+                        export_process.wait()
+                        if export_process.returncode != 0:
+                            yield f"data: > [ERROR] CPT 模型合并失败，状态码: {export_process.returncode}\n\n"
+                            yield f"data: [DONE]\n\n"
+                            return
+
+                        time.sleep(1)
+                        lora_dir = os.path.join(root_path, '..', 'finetuned_models', f"{new_model}_lora")
+                        if os.path.exists(output_dir):
+                            if os.path.exists(lora_dir):
+                                import shutil
+                                shutil.rmtree(lora_dir)
+                            os.rename(output_dir, lora_dir)
+                        if os.path.exists(export_dir):
+                            os.rename(export_dir, output_dir)
+
+                        yield f"data: > [SUCCESS] CPT 模型 [{new_model}] 已就绪，可直接作为下一阶段教师微调的基座模型。\n\n"
+                        yield f"data: [CPT_READY] {new_model}\n\n"
+                    except Exception as merge_err:
+                        yield f"data: > [ERROR] 合并 CPT 模型时出错: {str(merge_err)}\n\n"
+                else:
+                    if process.returncode == -15 or process.returncode == 15:
+                        yield f"data: > [WARNING] CPT 训练进程已被用户手动终止。\n\n"
+                    else:
+                        yield f"data: > [ERROR] CPT 训练进程异常退出，状态码: {process.returncode}\n\n"
+                    import shutil
+                    if os.path.exists(output_dir):
+                        shutil.rmtree(output_dir, ignore_errors=True)
+                        yield f"data: > [INFO] 已清理不完整的 CPT 输出目录: {output_dir}\n\n"
+                    if os.path.exists(logging_dir):
+                        shutil.rmtree(logging_dir, ignore_errors=True)
+            except FileNotFoundError:
+                yield f"data: > [FATAL ERROR] 找不到 `llamafactory-cli` 命令。请确保当前环境中已正确安装 LLaMA-Factory。\n\n"
+            except Exception as e:
+                yield f"data: > [FATAL ERROR] 执行 CPT 训练时发生未知错误: {str(e)}\n\n"
+            finally:
+                active_finetune_processes.pop('cpt_current', None)
+                active_finetune_processes.pop('cpt_model_name', None)
+                active_finetune_processes.pop('cpt_start_time', None)
+
+            yield f"data: [DONE]\n\n"
+
+        return Response(generate_cpt_logs(base_model), mimetype='text/event-stream')
+    except Exception as e:
+        current_app.logger.error(f"CPT error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @api_bp.route('/finetune/start', methods=['POST'])
 def start_finetune():
     """接收前端传来的微调任务参数，开始微调
@@ -433,34 +903,9 @@ def start_finetune():
         if not dataset_file_name:
             return jsonify({'error': '未选择数据集文件'}), 400
             
-        # 自动生成版本号形式的 new_model
-        base_name_clean = base_model
-        # 1. 移除可能的前缀
-        if base_name_clean.startswith('vllm: '):
-            base_name_clean = base_name_clean.replace('vllm: ', '')
-            
-        # 2. 如果是绝对路径（如本地 HF 缓存），只提取最后一部分的模型名
-        base_name_clean = os.path.basename(base_name_clean.rstrip('/\\'))
-        
-        # 3. 替换掉特殊字符，并清理 -- 为 -
-        base_name_clean = base_name_clean.replace(':', '_').replace('/', '_').replace('--', '-')
-        
-        # 4. 移除可能已经存在的后缀，避免类似 _v1_merged_v1 的情况
-        base_name_clean = re.sub(r'_merged$', '', base_name_clean)
-        base_name_clean = re.sub(r'_lora$', '', base_name_clean)
-        base_name_clean = re.sub(r'_v\d+$', '', base_name_clean)
-        
         models_dir = os.path.join(current_app.root_path, '..', 'finetuned_models')
         os.makedirs(models_dir, exist_ok=True)
-        
-        version = 1
-        while True:
-            new_model = f"{base_name_clean}_v{version}"
-            # 确保不存在这个名称的目录，也不存在它的 lora 文件夹
-            if not os.path.exists(os.path.join(models_dir, new_model)) and \
-               not os.path.exists(os.path.join(models_dir, f"{new_model}_lora")):
-                break
-            version += 1
+        new_model = _build_versioned_model_name(base_model, models_dir)
             
         dataset_path = None
         if dataset_file_name:
@@ -562,77 +1007,10 @@ def start_finetune():
                 yield f"data: > [训练模式] ☁️ 线上训练模式 - 高质量正式训练\n\n"
                 yield f"data: > [指标关注] eval_loss、perplexity、BLEU/ROUGE、模型泛化能力\n\n"
             
-            # 清理 vllm: 前缀
-            is_vllm = False
-            if base_model_name.startswith('vllm: '):
-                base_model_name = base_model_name.replace('vllm: ', '')
-                is_vllm = True
-                
-            hf_model_path = base_model_name
-            
-            # 检查是否为本地下载的 HF 模型（支持两种命名格式：Qwen/xxx 和 Qwen--xxx）
-            local_hf_path = os.path.join(Config.HF_MODEL_DIR, base_model_name)
-            local_hf_path_alt = os.path.join(Config.HF_MODEL_DIR, base_model_name.replace('/', '--'))
-            if os.path.exists(local_hf_path) and os.path.isdir(local_hf_path):
-                hf_model_path = local_hf_path
-                yield f"data: > [INFO] 发现本地 Hugging Face 模型缓存，直接使用绝对路径: {hf_model_path}\n\n"
-            elif os.path.exists(local_hf_path_alt) and os.path.isdir(local_hf_path_alt):
-                hf_model_path = local_hf_path_alt
-                yield f"data: > [INFO] 发现本地 Hugging Face 模型缓存，直接使用绝对路径: {hf_model_path}\n\n"
-            
-            # 如果是 vllm 模型，优先去本地 finetuned_models 目录下找
-            if is_vllm:
-                potential_path = os.path.join(root_path, '..', 'finetuned_models', base_model_name)
-                # vLLM 模型有可能放在其他地方，需要检查有没有 config.json
-                if os.path.exists(os.path.join(potential_path, "config.json")):
-                    hf_model_path = potential_path
-                else:
-                    # 补充一个针对 vLLM 模型如果是来源于 ollama / 在线镜像的回退机制
-                    model_lower = base_model_name.lower()
-                    if "qwen2.5:0.5b" in model_lower or "qwen:0.5b" in model_lower or "qwen3:0.6b" in model_lower or "qwen3_0.6b" in model_lower:
-                        hf_model_path = "Qwen/Qwen2.5-0.5B-Instruct"
-                    elif "qwen2.5:1.5b" in model_lower or "qwen:1.5b" in model_lower:
-                        hf_model_path = "Qwen/Qwen2.5-1.5B-Instruct"
-                    elif "qwen2.5:7b" in model_lower or "qwen:7b" in model_lower or "qwen3:8b" in model_lower:
-                        hf_model_path = "Qwen/Qwen2.5-7B-Instruct"
-                    else:
-                        hf_model_path = "Qwen/Qwen1.5-0.5B-Chat"
-                    yield f"data: > [TIP] vLLM 本地模型路径缺少 config.json 权重配置文件，已自动映射回 HuggingFace 官方镜像基座: {hf_model_path}，确保微调正常进行。\n\n"
-            elif ":" in base_model_name and not "/" in base_model_name:
-                yield f"data: > [INFO] 检测到 Ollama 格式的模型名 '{base_model_name}'。\n\n"
-                
-                # 创建专门的存放导出基座模型的目录
-                ollama_export_dir = os.path.join(root_path, '..', 'finetuned_models', 'base_models', base_model_name.replace(":", "_"))
-                os.makedirs(ollama_export_dir, exist_ok=True)
-                
-                # 检查是否之前已经导出过了，避免重复耗时操作
-                # 我们假设导出会产生 safetensors 或者是一个可以直接加载的目录
-                if not os.path.exists(os.path.join(ollama_export_dir, "config.json")):
-                     yield f"data: > [INFO] 正在后台通过 `ollama export` 自动提取原始权重到本地，这可能需要一点时间...\n\n"
-                     # 由于 ollama 目前版本可能并未完全提供内置的 "ollama export" 命令（它通常存在于开发版或者某些特定分支），
-                     # 我们采取折中/兜底的自动化策略：我们告诉用户系统正在处理，但因为 LLaMA-Factory 的要求，如果失败，退回智能镜像下载。
-                     # 在未来的版本中如果 ollama export 稳定可用，可以直接在这里 subprocess 调用：
-                     # subprocess.run(["ollama", "export", base_model_name, "-o", ollama_export_dir])
-                     
-                     # 智能映射兜底：
-                     model_lower = base_model_name.lower()
-                     if "qwen2.5:0.5b" in model_lower or "qwen:0.5b" in model_lower or "qwen3:0.6b" in model_lower:
-                         hf_model_path = "Qwen/Qwen2.5-0.5B-Instruct"
-                     elif "qwen2.5:1.5b" in model_lower or "qwen:1.5b" in model_lower:
-                         hf_model_path = "Qwen/Qwen2.5-1.5B-Instruct"
-                     elif "qwen2.5:7b" in model_lower or "qwen:7b" in model_lower or "qwen3:8b" in model_lower:
-                         hf_model_path = "Qwen/Qwen2.5-7B-Instruct"
-                     elif "deepseek" in model_lower and "1.5b" in model_lower:
-                         hf_model_path = "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct"
-                     else:
-                         hf_model_path = "Qwen/Qwen1.5-0.5B-Chat"
-                         
-                     yield f"data: > [TIP] 目前检测到 Ollama 内部模型。为了最稳定的微调，已自动为你映射并拉取 HuggingFace 官方未量化的全精度基座: {hf_model_path}。\n\n"
-                     yield f"data: > [INFO] 自动缓存加速已开启，下载完成后下次微调将秒级加载。\n\n"
-                else:
-                     hf_model_path = ollama_export_dir
-                     yield f"data: > [INFO] 发现已导出的本地基座模型缓存，直接使用: {hf_model_path}\n\n"
-                
+            hf_model_path, model_logs = _resolve_trainable_model_path(base_model_name, root_path)
+            for log in model_logs:
+                yield f"data: > {log}\n\n"
+            if ":" in base_model_name and "/" not in base_model_name:
                 time.sleep(1)
             
             if not dataset_path:
@@ -850,6 +1228,8 @@ def start_finetune():
                 
                 # 将进程对象存入全局变量以便外部可以 kill
                 active_finetune_processes['current'] = process
+                active_finetune_processes['model_name'] = new_model
+                active_finetune_processes['start_time'] = datetime.now().isoformat()
                 
                 # 使用非阻塞的方式或者让迭代器能够更快吐出日志
                 # Windows 下由于控制台缓冲区的问题，直接迭代 stdout 可能会卡住直到缓冲区满
@@ -880,6 +1260,8 @@ def start_finetune():
                 # 训练结束，清理进程字典
                 if 'current' in active_finetune_processes:
                     del active_finetune_processes['current']
+                active_finetune_processes.pop('model_name', None)
+                active_finetune_processes.pop('start_time', None)
                     
                 if process.returncode == 0:
                     yield f"data: > [SUCCESS] 模型微调完成，LoRA 权重已保存至: {output_dir}\n\n"
@@ -2396,12 +2778,25 @@ def get_task_status():
     from app.api.common import active_finetune_processes
     
     status = {
+        'cpt': {'running': False, 'details': None},
         'finetune': {'running': False, 'details': None},
         'distill': {'running': False, 'details': None},
         'quantize': {'running': False, 'details': None},
         'deploy': {'running': False, 'services': []}
     }
     
+    if 'cpt_current' in active_finetune_processes:
+        proc = active_finetune_processes['cpt_current']
+        if proc and proc.poll() is None:
+            status['cpt'] = {
+                'running': True,
+                'details': {
+                    'task_id': 'cpt_current',
+                    'model': active_finetune_processes.get('cpt_model_name', ''),
+                    'start_time': active_finetune_processes.get('cpt_start_time', '')
+                }
+            }
+
     # 检查微调进程
     if 'current' in active_finetune_processes:
         proc = active_finetune_processes['current']

@@ -163,13 +163,16 @@
                 <button class="nav-link active" id="step1-tab" data-bs-toggle="tab" data-bs-target="#step1" type="button">1. 数据准备</button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="step2-tab" data-bs-toggle="tab" data-bs-target="#step2" type="button">2. 教师模型微调</button>
+                <button class="nav-link" id="step-cpt-tab" data-bs-toggle="tab" data-bs-target="#step-cpt" type="button">2. Continued Pre-Training（CPT）</button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="step3-tab" data-bs-toggle="tab" data-bs-target="#step3" type="button">3. 知识蒸馏</button>
+                <button class="nav-link" id="step2-tab" data-bs-toggle="tab" data-bs-target="#step2" type="button">3. 教师模型微调</button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="step4-tab" data-bs-toggle="tab" data-bs-target="#step4" type="button">4. 量化与部署</button>
+                <button class="nav-link" id="step3-tab" data-bs-toggle="tab" data-bs-target="#step3" type="button">4. 知识蒸馏</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="step4-tab" data-bs-toggle="tab" data-bs-target="#step4" type="button">5. 量化与部署</button>
             </li>
         </ul>
 
@@ -243,11 +246,179 @@
                 </div>
             </div>
 
-            <!-- 阶段 2: 教师模型微调 -->
+            <div class="tab-pane fade" id="step-cpt">
+                <div class="stage-card">
+                    <div class="card-header">
+                        <h6>🧠 阶段 2: Continued Pre-Training（CPT）</h6>
+                        <p>基于阶段 1 产出的高质量领域语料继续预训练基座模型，为后续教师模型微调补充领域知识底座</p>
+                    </div>
+                    <div class="card-body">
+                        <div class="row compact-row">
+                            <div class="col-md-6">
+                                <label class="form-label">CPT 基座模型</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control" id="cptBaseModelSelect" list="cptBaseModelDatalist" placeholder="请选择本地模型，或直接输入 Hugging Face 模型 ID">
+                                    <datalist id="cptBaseModelDatalist"></datalist>
+                                    <button class="btn btn-outline-secondary" type="button" id="refreshCptModelBtn" onclick="loadModels()">🔄</button>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">CPT 语料来源</label>
+                                <div class="input-group input-group-sm">
+                                    <select class="form-select" id="cptDatasetSelect"><option value="">加载中...</option></select>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="loadRawDatasets()">🔄</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row compact-row">
+                            <div class="col-12">
+                                <div class="d-flex align-items-center gap-2">
+                                    <label class="form-label mb-0 text-nowrap">训练模式</label>
+                                    <select class="form-select form-select-sm" id="cptTrainingModeSelect" style="width: auto;" onchange="applyCptTrainingPreset(); updateCptTrainingModeIndicator();">
+                                        <option value="local" selected>🖥️ 本地调试（先验证流程）</option>
+                                        <option value="online">☁️ 线上训练（正式领域续训）</option>
+                                    </select>
+                                    <span id="cptTrainingModeIndicator" class="badge bg-info">指标关注: 领域语料收敛、无 OOM</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row compact-row">
+                            <div class="col-12">
+                                <label class="form-label">训练参数</label>
+                                <div class="param-grid">
+                                    <div>
+                                        <label class="form-label small">学习率</label>
+                                        <input type="number" step="0.00001" id="cptLearningRateInput" class="form-control form-control-sm" value="0.0001">
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">训练轮数</label>
+                                        <input type="number" step="0.1" id="cptEpochsInput" class="form-control form-control-sm" value="1.0">
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">批大小</label>
+                                        <input type="number" id="cptBatchSizeInput" class="form-control form-control-sm" value="1">
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">最大长度</label>
+                                        <input type="number" id="cptMaxLengthInput" class="form-control form-control-sm" value="512">
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">梯度累积</label>
+                                        <input type="number" id="cptGradAccInput" class="form-control form-control-sm" value="4">
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">精度</label>
+                                        <select class="form-select form-select-sm" id="cptPrecisionSelect">
+                                            <option value="fp16">FP16</option>
+                                            <option value="bf16">BF16</option>
+                                            <option value="fp32" selected>FP32</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">QLoRA</label>
+                                        <select class="form-select form-select-sm" id="cptQuantizationSelect">
+                                            <option value="none" selected>不量化</option>
+                                            <option value="8">8-bit</option>
+                                            <option value="4">4-bit</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">优化器</label>
+                                        <select class="form-select form-select-sm" id="cptOptimizerSelect">
+                                            <option value="adamw_torch" selected>adamw</option>
+                                            <option value="paged_adamw_32bit">paged</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="compact-row">
+                            <a class="advanced-toggle" data-bs-toggle="collapse" href="#cptAdvancedConfig">▶ 高级配置（LoRA、预热、日志、打包等）</a>
+                        </div>
+                        <div class="collapse" id="cptAdvancedConfig">
+                            <div class="param-grid mb-2">
+                                <div>
+                                    <label class="form-label small">LoRA Rank</label>
+                                    <input type="number" class="form-control form-control-sm" id="cptLoraRankInput" value="8" min="1" max="256">
+                                </div>
+                                <div>
+                                    <label class="form-label small">LoRA Alpha</label>
+                                    <input type="number" class="form-control form-control-sm" id="cptLoraAlphaInput" value="16" min="1" max="512">
+                                </div>
+                                <div>
+                                    <label class="form-label small">LoRA Dropout</label>
+                                    <input type="number" class="form-control form-control-sm" id="cptLoraDropoutInput" value="0.05" min="0" max="1" step="0.01">
+                                </div>
+                                <div>
+                                    <label class="form-label small">LoRA Target</label>
+                                    <select class="form-select form-select-sm" id="cptLoraTargetSelect">
+                                        <option value="all" selected>all（推荐）</option>
+                                        <option value="q_proj,v_proj">q_proj,v_proj</option>
+                                        <option value="q_proj,k_proj,v_proj,o_proj">q_proj,k_proj,v_proj,o_proj</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="form-label small">学习率调度器</label>
+                                    <select class="form-select form-select-sm" id="cptLrSchedulerSelect">
+                                        <option value="cosine" selected>cosine（推荐）</option>
+                                        <option value="linear">linear</option>
+                                        <option value="constant">constant</option>
+                                        <option value="constant_with_warmup">constant_with_warmup</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="form-label small">预热步数</label>
+                                    <input type="number" class="form-control form-control-sm" id="cptWarmupStepsInput" value="0" min="0">
+                                </div>
+                                <div>
+                                    <label class="form-label small">预热比率</label>
+                                    <input type="number" class="form-control form-control-sm" id="cptWarmupRatioInput" value="0.1" min="0" max="1" step="0.01">
+                                </div>
+                                <div>
+                                    <label class="form-label small">日志步数</label>
+                                    <input type="number" class="form-control form-control-sm" id="cptLoggingStepsInput" value="5" min="1">
+                                </div>
+                                <div>
+                                    <label class="form-label small">保存步数</label>
+                                    <input type="number" class="form-control form-control-sm" id="cptSaveStepsInput" value="50" min="1">
+                                </div>
+                                <div>
+                                    <label class="form-label small">权重衰减</label>
+                                    <input type="number" class="form-control form-control-sm" id="cptWeightDecayInput" value="0.0" min="0" max="1" step="0.001">
+                                </div>
+                                <div>
+                                    <label class="form-label small">梯度裁剪</label>
+                                    <input type="number" class="form-control form-control-sm" id="cptMaxGradNormInput" value="1.0" min="0" step="0.1">
+                                </div>
+                                <div>
+                                    <label class="form-label small">随机种子</label>
+                                    <input type="number" class="form-control form-control-sm" id="cptSeedInput" value="42" min="0">
+                                </div>
+                                <div>
+                                    <label class="form-label small">序列打包</label>
+                                    <select class="form-select form-select-sm" id="cptPackingSelect">
+                                        <option value="false" selected>关闭</option>
+                                        <option value="true">开启</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 mt-2">
+                            <button class="btn btn-primary-custom btn-sm flex-grow-1" id="startCptBtn" onclick="startCptTraining()">开始 CPT 任务</button>
+                            <button class="btn btn-danger btn-sm d-none" id="stopCptBtn" onclick="stopCptTraining()">终止训练</button>
+                            <button class="btn btn-sm btn-outline-info" type="button" onclick="openTensorBoardModal()">📈 实时监控 (TensorBoard)</button>
+                            <button class="btn btn-sm btn-outline-success" type="button" onclick="goToTeacherFinetune()">进入教师微调</button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="$('#cptOutput').empty()">清屏</button>
+                        </div>
+                        <div class="output-terminal mt-2" id="cptOutput" style="height: 100px;">> 等待开始 Continued Pre-Training（CPT）任务...</div>
+                    </div>
+                </div>
+            </div>
+
             <div class="tab-pane fade" id="step2">
                 <div class="stage-card">
                     <div class="card-header">
-                        <h6>🎓 阶段 2: 教师模型 QLoRA 微调</h6>
+                        <h6>🎓 阶段 3: 教师模型 QLoRA 微调</h6>
                         <p>使用高质量标注数据对教师模型进行微调，生成领域专家模型</p>
                     </div>
                     <div class="card-body">
@@ -441,11 +612,10 @@
                 </div>
             </div>
 
-            <!-- 阶段 3: 知识蒸馏 -->
             <div class="tab-pane fade" id="step3">
                 <div class="stage-card">
                     <div class="card-header">
-                        <h6>🧪 阶段 3: 学生模型知识蒸馏</h6>
+                        <h6>🧪 阶段 4: 学生模型知识蒸馏</h6>
                         <p>基于教师模型生成的软标签，对轻量级学生模型进行 SFT 训练</p>
                     </div>
                     <div class="card-body">
@@ -497,11 +667,10 @@
                 </div>
             </div>
 
-            <!-- 阶段 4: 量化与部署 -->
             <div class="tab-pane fade" id="step4">
                 <div class="stage-card">
                     <div class="card-header">
-                        <h6>🚀 阶段 4: AWQ 量化与 vLLM 部署</h6>
+                        <h6>🚀 阶段 5: AWQ 量化与 vLLM 部署</h6>
                         <p>将蒸馏后的学生模型压缩为 4-bit 精度，并一键部署为推理 API</p>
                     </div>
                     <div class="card-body">
@@ -713,6 +882,55 @@
                 }
             }
 
+            function updateCptBaseModelOptions() {
+                var datalist = $('#cptBaseModelDatalist');
+                var input = $('#cptBaseModelSelect');
+                var currentValue = input.val();
+                var seen = {};
+                datalist.empty();
+
+                (cachedFinetuneModels.vllm_detail || []).forEach(function(model) {
+                    var optionValue = model.raw_name || model.name;
+                    if (!optionValue || seen[optionValue]) {
+                        return;
+                    }
+                    seen[optionValue] = true;
+                    datalist.append(`<option value="${optionValue}">${getModelDisplayText(model)}</option>`);
+                });
+
+                (cachedFinetuneModels.hf || []).forEach(function(model) {
+                    if (!model || seen[model]) {
+                        return;
+                    }
+                    seen[model] = true;
+                    datalist.append(`<option value="${model}">${model}</option>`);
+                });
+
+                (cachedFinetuneModels.ollama || []).forEach(function(model) {
+                    if (!model || seen[model]) {
+                        return;
+                    }
+                    seen[model] = true;
+                    datalist.append(`<option value="${model}">${model}</option>`);
+                });
+
+                (cachedFinetuneModels.online || []).slice(0, 20).forEach(function(model) {
+                    if (!model || seen[model]) {
+                        return;
+                    }
+                    seen[model] = true;
+                    datalist.append(`<option value="${model}">${model}</option>`);
+                });
+
+                input.attr('placeholder', '请选择本地模型，或直接输入 Hugging Face 模型 ID');
+                if (currentValue) {
+                    input.val(currentValue);
+                }
+            }
+
+            window.refreshBaseModelOptions = updateBaseModelOptions;
+            window.refreshCptBaseModelOptions = updateCptBaseModelOptions;
+
             // 训练模式预设配置
             function applyTrainingPreset() {
                 var mode = $('#trainingModeSelect').val();
@@ -798,7 +1016,12 @@
             window.loadModels = function() {
                 var refreshBtn = $('#refreshModelBtn');
                 var originalRefreshText = refreshBtn.html();
+                var cptRefreshBtn = $('#refreshCptModelBtn');
+                var cptOriginalRefreshText = cptRefreshBtn.length ? cptRefreshBtn.html() : '';
                 refreshBtn.prop('disabled', true).html('...');
+                if (cptRefreshBtn.length) {
+                    cptRefreshBtn.prop('disabled', true).html('...');
+                }
                 
                 $.ajax({
                     url: '/ollama/models',
@@ -810,6 +1033,7 @@
                         cachedFinetuneModels.hf = response.hf_models || [];
                         cachedFinetuneModels.online = response.online_models || [];
                         updateBaseModelOptions();
+                        updateCptBaseModelOptions();
                     },
                     error: function() {
                         cachedFinetuneModels.ollama = [];
@@ -818,9 +1042,13 @@
                         cachedFinetuneModels.hf = [];
                         cachedFinetuneModels.online = [];
                         updateBaseModelOptions();
+                        updateCptBaseModelOptions();
                     },
                     complete: function() {
                         refreshBtn.prop('disabled', false).html(originalRefreshText);
+                        if (cptRefreshBtn.length) {
+                            cptRefreshBtn.prop('disabled', false).html(cptOriginalRefreshText);
+                        }
                     }
                 });
             }
@@ -926,11 +1154,16 @@
             // 获取并加载 uploads/datasets/raw 目录下的 JSONL 文件列表
             function loadDatasets() {
                 var select = $('#datasetSelect');
+                var cptSelect = $('#cptDatasetSelect');
                 var rawSelect = $('#rawDatasetSelect');
                 var refreshBtn = $('#refreshDatasetBtn');
                 var originalRefreshText = refreshBtn.html();
+                var selectedTeacherDataset = select.val();
+                var selectedCptDataset = cptSelect.val();
+                var preferredDataset = window.preferredCleanedDataset || '';
                 refreshBtn.prop('disabled', true).html('...');
                 select.html('<option value="">加载中...</option>');
+                cptSelect.html('<option value="">加载中...</option>');
                 rawSelect.html('<option value="">加载中...</option>');
                 
                 $.ajax({
@@ -938,14 +1171,26 @@
                     type: 'GET',
                     success: function(response) {
                         select.empty();
+                        cptSelect.empty();
                         rawSelect.empty();
                         
                         if (response.cleaned_datasets && response.cleaned_datasets.length > 0) {
                             response.cleaned_datasets.forEach(function(file) {
                                 select.append(`<option value="${file}">${file}</option>`);
+                                cptSelect.append(`<option value="${file}">${file}</option>`);
                             });
                         } else {
                             select.append('<option value="">uploads/datasets/cleaned 目录下未找到清洗后的数据集</option>');
+                            cptSelect.append('<option value="">uploads/datasets/cleaned 目录下未找到清洗后的数据集</option>');
+                        }
+
+                        var teacherTarget = preferredDataset || selectedTeacherDataset;
+                        var cptTarget = preferredDataset || selectedCptDataset;
+                        if (teacherTarget && select.find(`option[value="${teacherTarget}"]`).length > 0) {
+                            select.val(teacherTarget);
+                        }
+                        if (cptTarget && cptSelect.find(`option[value="${cptTarget}"]`).length > 0) {
+                            cptSelect.val(cptTarget);
                         }
                         
                         if (response.raw_datasets && response.raw_datasets.length > 0) {
@@ -958,6 +1203,7 @@
                     },
                     error: function() {
                         select.html('<option value="">获取数据集列表失败</option>');
+                        cptSelect.html('<option value="">获取数据集列表失败</option>');
                         rawSelect.html('<option value="">获取数据集列表失败</option>');
                     },
                     complete: function() {
@@ -968,6 +1214,11 @@
             
             // 暴露给全局，供第一个Tab的按钮调用
             window.loadRawDatasets = loadDatasets;
+            $('#step2-tab').on('shown.bs.tab', function() {
+                if (typeof applyLatestCptModelToTeacher === 'function') {
+                    applyLatestCptModelToTeacher(false);
+                }
+            });
             
             // 加载微调过的模型列表，供第三、四阶段选择
             function loadFinetunedModels() {
@@ -1120,6 +1371,7 @@
                     }
                 });
             }
+            window.loadFinetunedModels = loadFinetunedModels;
             loadFinetunedModels();
             
             // 绑定刷新数据集按钮事件
@@ -1206,6 +1458,225 @@
         });
 
         let currentAbortController = null;
+        let currentCptAbortController = null;
+        window.latestCptModelName = '';
+
+        function applyCptTrainingPreset() {
+            var mode = $('#cptTrainingModeSelect').val();
+
+            if (mode === 'local') {
+                $('#cptLearningRateInput').val('0.0001');
+                $('#cptEpochsInput').val('1.0');
+                $('#cptBatchSizeInput').val('1');
+                $('#cptMaxLengthInput').val('512');
+                $('#cptGradAccInput').val('4');
+                $('#cptPrecisionSelect').val('fp32');
+                $('#cptQuantizationSelect').val('4');
+                $('#cptOptimizerSelect').val('adamw_torch');
+                $('#cptLoraRankInput').val('8');
+                $('#cptLoraAlphaInput').val('16');
+                $('#cptLoraDropoutInput').val('0.05');
+                $('#cptLoraTargetSelect').val('all');
+                $('#cptLrSchedulerSelect').val('cosine');
+                $('#cptWarmupStepsInput').val('0');
+                $('#cptWarmupRatioInput').val('0.1');
+                $('#cptLoggingStepsInput').val('5');
+                $('#cptSaveStepsInput').val('50');
+                $('#cptWeightDecayInput').val('0.0');
+                $('#cptMaxGradNormInput').val('1.0');
+                $('#cptSeedInput').val('42');
+                $('#cptPackingSelect').val('false');
+            } else {
+                $('#cptLearningRateInput').val('0.00005');
+                $('#cptEpochsInput').val('2.0');
+                $('#cptBatchSizeInput').val('2');
+                $('#cptMaxLengthInput').val('1024');
+                $('#cptGradAccInput').val('8');
+                $('#cptPrecisionSelect').val('bf16');
+                $('#cptQuantizationSelect').val('4');
+                $('#cptOptimizerSelect').val('adamw_torch');
+                $('#cptLoraRankInput').val('16');
+                $('#cptLoraAlphaInput').val('32');
+                $('#cptLoraDropoutInput').val('0.05');
+                $('#cptLoraTargetSelect').val('all');
+                $('#cptLrSchedulerSelect').val('cosine');
+                $('#cptWarmupStepsInput').val('0');
+                $('#cptWarmupRatioInput').val('0.1');
+                $('#cptLoggingStepsInput').val('10');
+                $('#cptSaveStepsInput').val('100');
+                $('#cptWeightDecayInput').val('0.01');
+                $('#cptMaxGradNormInput').val('1.0');
+                $('#cptSeedInput').val('42');
+                $('#cptPackingSelect').val('true');
+            }
+        }
+
+        function updateCptTrainingModeIndicator() {
+            var mode = $('#cptTrainingModeSelect').val();
+            var indicator = $('#cptTrainingModeIndicator');
+            if (mode === 'local') {
+                indicator.removeClass('bg-primary').addClass('bg-info');
+                indicator.text('指标关注: 领域语料收敛、无 OOM');
+            } else {
+                indicator.removeClass('bg-info').addClass('bg-primary');
+                indicator.text('指标关注: 领域知识注入、稳定收敛、泛化保持');
+            }
+        }
+
+        applyCptTrainingPreset();
+        updateCptTrainingModeIndicator();
+
+        function applyLatestCptModelToTeacher(showMessage) {
+            if (!window.latestCptModelName) {
+                if (showMessage) {
+                    alert('当前还没有可衔接到教师微调的 CPT 模型');
+                }
+                return;
+            }
+
+            $('#modelCategorySelect').val('vllm');
+            if (typeof window.refreshBaseModelOptions === 'function') {
+                window.refreshBaseModelOptions();
+            }
+            $('#baseModelSelect').val(window.latestCptModelName);
+
+            if (showMessage) {
+                $('#terminalOutput').append(`> 已自动预填 CPT 基座模型: ${window.latestCptModelName}<br>`);
+            }
+        }
+
+        function goToTeacherFinetune() {
+            applyLatestCptModelToTeacher(true);
+            var teacherTab = document.getElementById('step2-tab');
+            if (teacherTab) {
+                bootstrap.Tab.getOrCreateInstance(teacherTab).show();
+            }
+        }
+
+        function resetCptButtons() {
+            $('#startCptBtn').prop('disabled', false).removeClass('d-none').text('开始 CPT 任务');
+            $('#stopCptBtn').addClass('d-none');
+        }
+
+        function startCptTraining() {
+            var model = $('#cptBaseModelSelect').val();
+            var dataset = $('#cptDatasetSelect').val();
+
+            if (!model) {
+                alert('请选择一个 CPT 基座模型');
+                return;
+            }
+            if (!dataset) {
+                alert('请选择阶段 1 产出的清洗数据集');
+                return;
+            }
+
+            var formData = new FormData();
+            formData.append('baseModel', model);
+            formData.append('datasetFileName', dataset);
+            formData.append('trainingMode', $('#cptTrainingModeSelect').val());
+            formData.append('epochs', $('#cptEpochsInput').val());
+            formData.append('batchSize', $('#cptBatchSizeInput').val());
+            formData.append('learningRate', $('#cptLearningRateInput').val());
+            formData.append('loraRank', $('#cptLoraRankInput').val());
+            formData.append('loraAlpha', $('#cptLoraAlphaInput').val());
+            formData.append('loraDropout', $('#cptLoraDropoutInput').val());
+            formData.append('loraTarget', $('#cptLoraTargetSelect').val());
+            formData.append('optimizer', $('#cptOptimizerSelect').val());
+            formData.append('lrScheduler', $('#cptLrSchedulerSelect').val());
+            formData.append('maxLength', $('#cptMaxLengthInput').val());
+            formData.append('precision', $('#cptPrecisionSelect').val());
+            formData.append('quantization', $('#cptQuantizationSelect').val());
+            formData.append('packing', $('#cptPackingSelect').val());
+            formData.append('warmupSteps', $('#cptWarmupStepsInput').val());
+            formData.append('warmupRatio', $('#cptWarmupRatioInput').val());
+            formData.append('gradAcc', $('#cptGradAccInput').val());
+            formData.append('saveSteps', $('#cptSaveStepsInput').val());
+            formData.append('loggingSteps', $('#cptLoggingStepsInput').val());
+            formData.append('weightDecay', $('#cptWeightDecayInput').val());
+            formData.append('maxGradNorm', $('#cptMaxGradNormInput').val());
+            formData.append('seed', $('#cptSeedInput').val());
+
+            $('#startCptBtn').prop('disabled', true).addClass('d-none');
+            $('#stopCptBtn').removeClass('d-none');
+            $('#cptOutput').empty().append('> 正在向服务器提交 CPT 任务...\n');
+
+            currentCptAbortController = new AbortController();
+
+            fetch('/api/cpt/start', {
+                method: 'POST',
+                body: formData,
+                signal: currentCptAbortController.signal
+            }).then(response => {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder('utf-8');
+                let buffer = '';
+
+                function readStream() {
+                    reader.read().then(({done, value}) => {
+                        if (done) {
+                            resetCptButtons();
+                            if (window.latestCptModelName) {
+                                if (typeof loadModels === 'function') {
+                                    loadModels();
+                                }
+                                if (typeof loadFinetunedModels === 'function') {
+                                    loadFinetunedModels();
+                                }
+                                applyLatestCptModelToTeacher(false);
+                            }
+                            return;
+                        }
+
+                        buffer += decoder.decode(value, {stream: true});
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop();
+
+                        lines.forEach(line => {
+                            if (!line.startsWith('data: ')) {
+                                return;
+                            }
+                            const msg = line.substring(6).trim();
+                            if (msg === '[DONE]') {
+                                return;
+                            }
+                            if (msg.startsWith('[CPT_READY]')) {
+                                window.latestCptModelName = msg.replace('[CPT_READY]', '').trim();
+                                $('#cptOutput').append(`> [SUCCESS] 已生成可用于教师微调的 CPT 模型: ${window.latestCptModelName}\n`);
+                                return;
+                            }
+                            $('#cptOutput').append(msg + '\n');
+                            const output = document.getElementById('cptOutput');
+                            output.scrollTop = output.scrollHeight;
+                        });
+
+                        readStream();
+                    }).catch(error => {
+                        if (error.name === 'AbortError') {
+                            $('#cptOutput').append('> CPT 训练已在前端终止，正在通知后端停止进程...\n');
+                        }
+                    });
+                }
+
+                readStream();
+            }).catch(error => {
+                if (error.name !== 'AbortError') {
+                    $('#cptOutput').append(`> 任务提交失败: ${error}\n`);
+                }
+                resetCptButtons();
+            });
+        }
+
+        function stopCptTraining() {
+            if (currentCptAbortController) {
+                currentCptAbortController.abort();
+                currentCptAbortController = null;
+            }
+            $.post('/api/cpt/stop', function(res) {
+                $('#cptOutput').append(`> ${res.message}\n`);
+                resetCptButtons();
+            });
+        }
 
         function startFinetune() {
             var model = $('#baseModelSelect').val();
@@ -1596,6 +2067,7 @@
                 analysis_model_category: selectedDataPrepModel ? selectedDataPrepModel.category : null,
                 analysis_model: selectedDataPrepModel ? selectedDataPrepModel.model : null
             };
+            window.preferredCleanedDataset = payload.output_name;
 
             $('#startDataPrepBtn').prop('disabled', true).text('正在处理中...');
             $('#dataPrepOutput').empty().append('> 正在提交数据准备任务...\n');
@@ -1824,26 +2296,58 @@
             fetch('/api/task/status')
                 .then(r => r.json())
                 .then(status => {
-                    // 阶段2：微调状态
+                    if (status.cpt && status.cpt.running) {
+                        var cptOutput = document.getElementById('cptOutput');
+                        if (cptOutput && !cptOutput.dataset.runningShown) {
+                            cptOutput.innerHTML += '<div class="text-warning">⏳ CPT 任务正在后台运行中（模型: ' +
+                                (status.cpt.details.model || 'Unknown') + '）...</div>';
+                            cptOutput.dataset.runningShown = 'true';
+                        }
+                        startCptStatusPolling();
+                    }
+
                     if (status.finetune && status.finetune.running) {
                         var output = document.getElementById('terminalOutput');
                         if (output && !window._finetuneStreaming) {
-                            // 检查是否已经显示过运行中提示
                             if (!output.dataset.runningShown) {
                                 output.innerHTML += '<div class="text-warning">⏳ 训练任务正在后台运行中（模型: ' + 
                                     (status.finetune.details.model || 'Unknown') + '）...</div>';
                                 output.dataset.runningShown = 'true';
                             }
-                            // 启动轮询
                             startStatusPolling();
                         }
                     }
-                    // 阶段4：部署状态
                     if (status.deploy) {
                         updateDeployStatus(status.deploy);
                     }
                 })
                 .catch(err => console.log('Status check failed:', err));
+        }
+
+        function startCptStatusPolling() {
+            if (window._cptStatusPollingTimer) return;
+            window._cptStatusPollingTimer = setInterval(function() {
+                fetch('/api/task/status')
+                    .then(r => r.json())
+                    .then(status => {
+                        if (!status.cpt.running) {
+                            clearInterval(window._cptStatusPollingTimer);
+                            window._cptStatusPollingTimer = null;
+                            var output = document.getElementById('cptOutput');
+                            if (output) {
+                                output.innerHTML += '<div class="text-success">✅ CPT 任务已完成</div>';
+                                delete output.dataset.runningShown;
+                            }
+                            if (status.cpt.details && status.cpt.details.model) {
+                                window.latestCptModelName = status.cpt.details.model;
+                            }
+                            if (typeof loadFinetunedModels === 'function') loadFinetunedModels();
+                            if (typeof loadModels === 'function') loadModels();
+                            applyLatestCptModelToTeacher(false);
+                        }
+                    })
+                    .catch(err => console.log('CPT status polling error:', err));
+            }, 5000);
         }
 
         // 轮询任务状态
@@ -1862,7 +2366,6 @@
                                 output.innerHTML += '<div class="text-success">✅ 训练任务已完成</div>';
                                 delete output.dataset.runningShown;
                             }
-                            // 刷新模型列表
                             if (typeof loadFinetunedModels === 'function') loadFinetunedModels();
                             if (typeof loadModels === 'function') loadModels();
                         }
