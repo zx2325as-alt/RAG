@@ -791,6 +791,11 @@ def start_finetune():
                 train_config["per_device_eval_batch_size"] = 1
                 train_config["val_size"] = 0.1
                 train_config["predict_with_generate"] = True
+                
+            # LLaMA-Factory 0.8.3 会默认在代码内部处理 trust_remote_code
+            # 如果从配置文件直接传入可能被 HfArgumentParser 拒绝
+            if 'trust_remote_code' in train_config:
+                del train_config['trust_remote_code']
             
             import yaml
             with open(config_path, 'w', encoding='utf-8') as f:
@@ -814,10 +819,14 @@ def start_finetune():
                 env['TORCH_FORCE_WEIGHTS_ONLY_LOAD'] = '0'
                 # 兼容部分老版本 numpy 的 pickle 加载
                 env['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
-                # Windows 环境下防止多进程卡死的关键环境变量
-                env['OMP_NUM_THREADS'] = '1'  # 限制 OpenMP 线程数
-                env['MKL_NUM_THREADS'] = '1'  # 限制 MKL 线程数
-                env['TOKENIZERS_PARALLELISM'] = 'false'  # 禁用 tokenizer 并行，避免 Windows 下卡死
+                
+                # OMP_NUM_THREADS 设为 1 可能在部分 Linux/libgomp 下导致 Invalid value，或者对性能有影响
+                # 仅在 Windows 环境下限制线程数以防止卡死，Linux 下保持默认或合理值
+                if os.name == 'nt':
+                    env['OMP_NUM_THREADS'] = '1'
+                    env['MKL_NUM_THREADS'] = '1'
+                    env['TOKENIZERS_PARALLELISM'] = 'false'
+                
                 # 禁用 Hugging Face datasets 缓存，避免 Windows 下的文件冲突问题
                 env['HF_DATASETS_CACHE'] = os.path.join(root_path, '..', 'cache', 'datasets')
                 env['HF_DATASETS_IN_MEMORY'] = '1'  # 尽量在内存中处理数据集

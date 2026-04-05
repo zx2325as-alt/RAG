@@ -86,33 +86,64 @@ class GraphService:
         chain = prompt | self.llm
         
         # 完整实现：处理所有文本块
-        with self.driver.session() as session:
-            for i, chunk in enumerate(chunks):
-                text = chunk.content
-                # 过滤掉过短的无意义文本块
-                if len(text.strip()) < 20:
-                    continue
+        import concurrent.futures
+        
+        def process_chunk(chunk_data):
+            i, chunk = chunk_data
+            text = chunk.content
+            # 过滤掉过短的无意义文本块
+            if len(text.strip()) < 20:
+                return []
+                
+            try:
+                # 适当限制单次请求文本长度，避免超出上下文限制
+                response = chain.invoke({"text": text[:2000]}) 
+                result_text = response.content.strip()
+                # 清理可能的 markdown 标记
+                if result_text.startswith("```json"):
+                    result_text = result_text[7:-3].strip()
+                elif result_text.startswith("```"):
+                    result_text = result_text[3:-3].strip()
                     
+                # 尝试解析 JSON
+                import re
+                json_match = re.search(r'(\{.*\})', result_text, re.DOTALL)
+                if json_match:
+                    result_text = json_match.group(1)
+                    
+                data = json.loads(result_text)
+                entities = data.get("entities", [])
+                relations = data.get("relations", [])
+                return {"chunk": chunk, "entities": entities, "relations": relations, "index": i}
+            except Exception as e:
+                print(f"Graph extraction LLM error on chunk {i}: {e}")
+                return []
+
+        print(f"[GraphService] Starting concurrent LLM extraction for {len(chunks)} chunks...")
+        # 1. 并发调用 LLM 获取实体和关系数据
+        results = []
+        # 增加并发数到 10，以进一步提升速度
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            # 提交所有任务
+            future_to_chunk = {executor.submit(process_chunk, (i, chunk)): i for i, chunk in enumerate(chunks)}
+            for future in concurrent.futures.as_completed(future_to_chunk):
                 try:
-                    # 适当限制单次请求文本长度，避免超出上下文限制
-                    response = chain.invoke({"text": text[:2000]}) 
-                    result_text = response.content.strip()
-                    # 清理可能的 markdown 标记
-                    if result_text.startswith("```json"):
-                        result_text = result_text[7:-3].strip()
-                    elif result_text.startswith("```"):
-                        result_text = result_text[3:-3].strip()
-                        
-                    # 尝试解析 JSON
-                    import re
-                    json_match = re.search(r'(\{.*\})', result_text, re.DOTALL)
-                    if json_match:
-                        result_text = json_match.group(1)
-                        
-                    data = json.loads(result_text)
-                    entities = data.get("entities", [])
-                    relations = data.get("relations", [])
-                    
+                    data = future.result()
+                    if data:
+                        results.append(data)
+                except Exception as exc:
+                    print(f"Chunk processing generated an exception: {exc}")
+        
+        print(f"[GraphService] LLM extraction completed. Starting batch Neo4j insertion...")
+        
+        # 2. 批量并发存入 Neo4j (使用 Neo4j 的并发机制或优化事务，提升写入速度)
+        def insert_to_neo4j(item):
+            try:
+                entities = item.get("entities", [])
+                relations = item.get("relations", [])
+                chunk = item.get("chunk")
+                
+                with self.driver.session() as session:
                     # 存入 Neo4j
                     for entity in entities:
                         # 构建全局唯一ID：仅基于名称，避免因类型不一致导致图分裂
@@ -166,8 +197,14 @@ class GraphService:
                             target_name=target_name, target_type=rel.get('target_type', 'Unknown'),
                             confidence=confidence, doc_id=doc_id, chunk_id=chunk_id
                         )
-                except Exception as e:
-                    print(f"Graph extraction error on chunk {i}: {e}")
+            except Exception as e:
+                print(f"Graph extraction DB error on chunk {item.get('index', 'unknown')}: {e}")
+
+        # 并发写入数据库，Neo4j 支持多 Session 并发执行
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as db_executor:
+            db_executor.map(insert_to_neo4j, results)
+
+        print(f"[GraphService] All chunks processed and inserted into Neo4j.")
 
     def extract_entities_from_query(self, query):
         """利用 LLM 动态提取查询中的实体，增强图谱检索召回率"""
