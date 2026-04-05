@@ -256,9 +256,18 @@
                         <div class="row compact-row">
                             <div class="col-md-6">
                                 <label class="form-label">CPT 基座模型</label>
+                                <select class="form-select form-select-sm mb-2" id="cptModelCategorySelect">
+                                    <option value="ollama">本地模型 (Ollama)</option>
+                                    <option value="vllm">本地模型 (vLLM)</option>
+                                    <option value="hf">本地模型 (Hugging Face)</option>
+                                    <option value="online">在线模型 (支持下载)</option>
+                                </select>
                                 <div class="input-group input-group-sm">
-                                    <input type="text" class="form-control" id="cptBaseModelSelect" list="cptBaseModelDatalist" placeholder="请选择本地模型，或直接输入 Hugging Face 模型 ID">
+                                    <input type="text" class="form-control" id="cptBaseModelSelect" list="cptBaseModelDatalist" placeholder="请选择或输入模型ID...">
                                     <datalist id="cptBaseModelDatalist"></datalist>
+                                    <button class="btn btn-outline-info" type="button" id="cptSearchModelBtn" onclick="searchOnlineModels('cpt')" style="display:none;">🔍</button>
+                                    <button class="btn btn-outline-primary" type="button" id="cptDownloadModelBtn" style="display:none;">⬇️</button>
+                                    <button class="btn btn-outline-danger" type="button" id="cptDeleteModelBtn" onclick="deleteCptBaseModel()" style="display:none;">🗑️</button>
                                     <button class="btn btn-outline-secondary" type="button" id="refreshCptModelBtn" onclick="loadModels()">🔄</button>
                                 </div>
                             </div>
@@ -280,6 +289,11 @@
                                     </select>
                                     <span id="cptTrainingModeIndicator" class="badge bg-info">指标关注: 领域语料收敛、无 OOM</span>
                                 </div>
+                            </div>
+                        </div>
+                        <div class="compact-row">
+                            <div class="alert alert-info py-2 mb-2">
+                                CPT 采用全参数持续预训练，目标是向基座模型注入领域语料分布，不再复用教师 SFT 页的 LoRA / QLoRA 配置。
                             </div>
                         </div>
                         <div class="row compact-row">
@@ -315,14 +329,6 @@
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="form-label small">QLoRA</label>
-                                        <select class="form-select form-select-sm" id="cptQuantizationSelect">
-                                            <option value="none" selected>不量化</option>
-                                            <option value="8">8-bit</option>
-                                            <option value="4">4-bit</option>
-                                        </select>
-                                    </div>
-                                    <div>
                                         <label class="form-label small">优化器</label>
                                         <select class="form-select form-select-sm" id="cptOptimizerSelect">
                                             <option value="adamw_torch" selected>adamw</option>
@@ -333,30 +339,10 @@
                             </div>
                         </div>
                         <div class="compact-row">
-                            <a class="advanced-toggle" data-bs-toggle="collapse" href="#cptAdvancedConfig">▶ 高级配置（LoRA、预热、日志、打包等）</a>
+                            <a class="advanced-toggle" data-bs-toggle="collapse" href="#cptAdvancedConfig">▶ 高级配置（调度器、预热、日志、打包等）</a>
                         </div>
                         <div class="collapse" id="cptAdvancedConfig">
                             <div class="param-grid mb-2">
-                                <div>
-                                    <label class="form-label small">LoRA Rank</label>
-                                    <input type="number" class="form-control form-control-sm" id="cptLoraRankInput" value="8" min="1" max="256">
-                                </div>
-                                <div>
-                                    <label class="form-label small">LoRA Alpha</label>
-                                    <input type="number" class="form-control form-control-sm" id="cptLoraAlphaInput" value="16" min="1" max="512">
-                                </div>
-                                <div>
-                                    <label class="form-label small">LoRA Dropout</label>
-                                    <input type="number" class="form-control form-control-sm" id="cptLoraDropoutInput" value="0.05" min="0" max="1" step="0.01">
-                                </div>
-                                <div>
-                                    <label class="form-label small">LoRA Target</label>
-                                    <select class="form-select form-select-sm" id="cptLoraTargetSelect">
-                                        <option value="all" selected>all（推荐）</option>
-                                        <option value="q_proj,v_proj">q_proj,v_proj</option>
-                                        <option value="q_proj,k_proj,v_proj,o_proj">q_proj,k_proj,v_proj,o_proj</option>
-                                    </select>
-                                </div>
                                 <div>
                                     <label class="form-label small">学习率调度器</label>
                                     <select class="form-select form-select-sm" id="cptLrSchedulerSelect">
@@ -395,7 +381,7 @@
                                     <input type="number" class="form-control form-control-sm" id="cptSeedInput" value="42" min="0">
                                 </div>
                                 <div>
-                                    <label class="form-label small">序列打包</label>
+                                    <label class="form-label small">词元打包</label>
                                     <select class="form-select form-select-sm" id="cptPackingSelect">
                                         <option value="false" selected>关闭</option>
                                         <option value="true">开启</option>
@@ -745,66 +731,43 @@
                 handle: "#tbModalHeader"
             });
             
-            // 下载模型绑定
-            $('#downloadModelBtn').click(function() {
-                var selectedModel = $('#baseModelSelect').val();
-                if (!selectedModel) {
-                    alert('请先选择要下载的模型！');
-                    return;
+            function getModelPickerMeta(kind) {
+                if (kind === 'cpt') {
+                    return {
+                        category: $('#cptModelCategorySelect'),
+                        input: $('#cptBaseModelSelect'),
+                        datalist: $('#cptBaseModelDatalist'),
+                        searchBtn: $('#cptSearchModelBtn'),
+                        downloadBtn: $('#cptDownloadModelBtn'),
+                        deleteBtn: $('#cptDeleteModelBtn')
+                    };
                 }
-                var btn = $(this);
-                btn.prop('disabled', true).text('下载中...');
-                
-                $.ajax({
-                    url: '/api/download_model',
-                    type: 'POST',
-                    contentType: 'application/json',
-                    data: JSON.stringify({ model_name: selectedModel }),
-                    success: function(res) {
-                        alert(res.message || '模型下载任务已提交到后台执行');
-                    },
-                    error: function(err) {
-                        alert('下载失败: ' + (err.responseJSON ? err.responseJSON.error : '未知错误'));
-                    },
-                    complete: function() {
-                        btn.prop('disabled', false).text('⬇️ 下载');
-                    }
-                });
-            });
-            
-            // 监听模态框关闭事件，清除 iframe 的 src 以释放资源
-            $('#tensorboardModal').on('hidden.bs.modal', function () {
-                $('#tbIframe').attr('src', '');
-            });
-            
-            // 缓存模型数据
-            let cachedFinetuneModels = {
-                ollama: [],
-                vllm: [],
-                vllm_detail: [],  // 新增：包含详细信息的vLLM模型列表
-                hf: [],
-                online: []
-            };
-            
+                return {
+                    category: $('#modelCategorySelect'),
+                    input: $('#baseModelSelect'),
+                    datalist: $('#baseModelDatalist'),
+                    searchBtn: $('#searchModelBtn'),
+                    downloadBtn: $('#downloadModelBtn'),
+                    deleteBtn: $('#deleteModelBtn')
+                };
+            }
 
-
-            function updateBaseModelOptions() {
-                var category = $('#modelCategorySelect').val();
-                var datalist = $('#baseModelDatalist');
-                var input = $('#baseModelSelect');
+            function renderModelPickerOptions(kind) {
+                var meta = getModelPickerMeta(kind);
+                var category = meta.category.val();
+                var datalist = meta.datalist;
+                var input = meta.input;
+                var currentValue = input.data('target-value') || input.val();
                 datalist.empty();
-                
-                // 如果是 vllm 类别，使用带详细信息的列表
+
                 if (category === 'vllm') {
                     var details = cachedFinetuneModels.vllm_detail || [];
-                    
+
                     if (details.length > 0) {
-                        // 分组显示
                         var deployedModels = details.filter(m => m.deployed);
                         var localFinetuned = details.filter(m => !m.deployed && (m.type === 'finetuned' || m.type === 'merged'));
                         var hfModels = details.filter(m => !m.deployed && m.type === 'base');
-                        
-                        // 已部署模型组
+
                         if (deployedModels.length > 0) {
                             deployedModels.forEach(function(model) {
                                 var typeLabel = MODEL_TYPE_LABELS[model.type] || '';
@@ -812,8 +775,7 @@
                                 datalist.append(`<option value="${model.raw_name || model.name}" data-type="${model.type}">${label}</option>`);
                             });
                         }
-                        
-                        // 本地微调模型组
+
                         if (localFinetuned.length > 0) {
                             localFinetuned.forEach(function(model) {
                                 var typeLabel = MODEL_TYPE_LABELS[model.type] || '';
@@ -821,22 +783,20 @@
                                 datalist.append(`<option value="${model.raw_name || model.name}" data-type="${model.type}">${label}</option>`);
                             });
                         }
-                        
-                        // HuggingFace模型组
+
                         if (hfModels.length > 0) {
                             hfModels.forEach(function(model) {
                                 datalist.append(`<option value="${model.raw_name || model.name}" data-type="${model.type}">${model.name}</option>`);
                             });
                         }
-                        
+
                         input.attr('placeholder', '请选择或输入模型ID...');
                     } else {
                         input.attr('placeholder', '无可用模型，可手动输入...');
                     }
                 } else {
                     var models = cachedFinetuneModels[category] || [];
-                    
-                    // 如果是 hf 类别，只显示已下载的模型
+
                     if (category === 'hf') {
                         if (models.length > 0) {
                             models.forEach(function(model) {
@@ -862,70 +822,85 @@
                         input.attr('placeholder', '无可用模型，可手动输入...');
                     }
                 }
-                
-                // 清空当前输入值，除非用户想保留
-                input.val('');
-                
-                // 根据类别显示/隐藏按钮
-                if (category === 'online') {
-                    $('#downloadModelBtn').show();
-                    $('#deleteModelBtn').hide();
-                    $('#searchModelBtn').show();
-                } else if (category === 'hf') {
-                    $('#downloadModelBtn').hide(); // HF 本地模型不需要下载按钮
-                    $('#deleteModelBtn').show(); // 允许删除本地 HF 模型
-                    $('#searchModelBtn').hide();
+
+                if (currentValue) {
+                    input.val(currentValue);
+                    input.removeData('target-value');
                 } else {
-                    $('#downloadModelBtn').hide();
-                    $('#deleteModelBtn').show();
-                    $('#searchModelBtn').hide();
+                    input.val('');
+                }
+
+                if (category === 'online') {
+                    meta.downloadBtn.show();
+                    meta.deleteBtn.hide();
+                    meta.searchBtn.show();
+                } else if (category === 'hf') {
+                    meta.downloadBtn.hide();
+                    meta.deleteBtn.show();
+                    meta.searchBtn.hide();
+                } else {
+                    meta.downloadBtn.hide();
+                    meta.deleteBtn.show();
+                    meta.searchBtn.hide();
                 }
             }
 
-            function updateCptBaseModelOptions() {
-                var datalist = $('#cptBaseModelDatalist');
-                var input = $('#cptBaseModelSelect');
-                var currentValue = input.val();
-                var seen = {};
-                datalist.empty();
-
-                (cachedFinetuneModels.vllm_detail || []).forEach(function(model) {
-                    var optionValue = model.raw_name || model.name;
-                    if (!optionValue || seen[optionValue]) {
-                        return;
-                    }
-                    seen[optionValue] = true;
-                    datalist.append(`<option value="${optionValue}">${getModelDisplayText(model)}</option>`);
-                });
-
-                (cachedFinetuneModels.hf || []).forEach(function(model) {
-                    if (!model || seen[model]) {
-                        return;
-                    }
-                    seen[model] = true;
-                    datalist.append(`<option value="${model}">${model}</option>`);
-                });
-
-                (cachedFinetuneModels.ollama || []).forEach(function(model) {
-                    if (!model || seen[model]) {
-                        return;
-                    }
-                    seen[model] = true;
-                    datalist.append(`<option value="${model}">${model}</option>`);
-                });
-
-                (cachedFinetuneModels.online || []).slice(0, 20).forEach(function(model) {
-                    if (!model || seen[model]) {
-                        return;
-                    }
-                    seen[model] = true;
-                    datalist.append(`<option value="${model}">${model}</option>`);
-                });
-
-                input.attr('placeholder', '请选择本地模型，或直接输入 Hugging Face 模型 ID');
-                if (currentValue) {
-                    input.val(currentValue);
+            function handleDownloadModel(kind) {
+                var meta = getModelPickerMeta(kind);
+                var selectedModel = meta.input.val();
+                if (!selectedModel) {
+                    alert('请先选择要下载的模型！');
+                    return;
                 }
+                var btn = meta.downloadBtn;
+                btn.prop('disabled', true).text('下载中...');
+                
+                $.ajax({
+                    url: '/api/download_model',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ model_name: selectedModel }),
+                    success: function(res) {
+                        alert(res.message || '模型下载任务已提交到后台执行');
+                    },
+                    error: function(err) {
+                        alert('下载失败: ' + (err.responseJSON ? err.responseJSON.error : '未知错误'));
+                    },
+                    complete: function() {
+                        btn.prop('disabled', false).text('⬇️ 下载');
+                    }
+                });
+            }
+
+            $('#downloadModelBtn').click(function() {
+                handleDownloadModel('teacher');
+            });
+            $('#cptDownloadModelBtn').click(function() {
+                handleDownloadModel('cpt');
+            });
+            
+            // 监听模态框关闭事件，清除 iframe 的 src 以释放资源
+            $('#tensorboardModal').on('hidden.bs.modal', function () {
+                $('#tbIframe').attr('src', '');
+            });
+            
+            // 缓存模型数据
+            let cachedFinetuneModels = {
+                ollama: [],
+                vllm: [],
+                vllm_detail: [],  // 新增：包含详细信息的vLLM模型列表
+                hf: [],
+                online: []
+            };
+            
+
+
+            function updateBaseModelOptions() {
+                renderModelPickerOptions('teacher');
+            }
+
+            function updateCptBaseModelOptions() {
+                renderModelPickerOptions('cpt');
             }
 
             window.refreshBaseModelOptions = updateBaseModelOptions;
@@ -1012,6 +987,9 @@
             $('#modelCategorySelect').change(function() {
                 updateBaseModelOptions();
             });
+            $('#cptModelCategorySelect').change(function() {
+                updateCptBaseModelOptions();
+            });
 
             window.loadModels = function() {
                 var refreshBtn = $('#refreshModelBtn');
@@ -1054,14 +1032,16 @@
             }
             
             // 搜索在线模型（通过 hf-mirror.com 国内源）
-            window.searchOnlineModels = function() {
-                var query = $('#baseModelSelect').val();
+            window.searchOnlineModels = function(kind) {
+                var pickerKind = kind || 'teacher';
+                var meta = getModelPickerMeta(pickerKind);
+                var query = meta.input.val();
                 if (!query || query.trim().length < 2) {
                     alert('请输入至少2个字符的搜索关键词');
                     return;
                 }
                 
-                var searchBtn = $('#searchModelBtn');
+                var searchBtn = meta.searchBtn;
                 searchBtn.prop('disabled', true).html('搜索中...');
                 
                 $.ajax({
@@ -1070,7 +1050,7 @@
                     data: { q: query.trim() },
                     success: function(response) {
                         var models = response.models || [];
-                        var datalist = $('#baseModelDatalist');
+                        var datalist = meta.datalist;
                         datalist.empty();
                         
                         if (models.length > 0) {
@@ -1107,18 +1087,17 @@
             window.loadModels();
 
             // 删除选中的基座模型
-            window.deleteBaseModel = function() {
-                var category = $('#modelCategorySelect').val();
-                var selectedModel = $('#baseModelSelect').val();
-                
-                console.log('删除模型 - 类别:', category, '模型:', selectedModel);
-                
+            function deleteSelectedBaseModel(kind) {
+                var pickerKind = kind || 'teacher';
+                var meta = getModelPickerMeta(pickerKind);
+                var category = meta.category.val();
+                var selectedModel = meta.input.val();
+
                 if (!selectedModel) {
                     alert('请先选择一个要删除的模型');
                     return;
                 }
                 
-                // 确定模型类型标签
                 var modelLabel = '';
                 if (category === 'vllm') modelLabel = 'vLLM';
                 else if (category === 'hf') modelLabel = 'Hugging Face';
@@ -1129,7 +1108,7 @@
                 }
                 
                 if (confirm(`确定要删除本地 ${modelLabel} 模型 [${selectedModel}] 吗？\n注意：此操作不可逆！`)) {
-                    var btn = $('#deleteModelBtn');
+                    var btn = meta.deleteBtn;
                     btn.prop('disabled', true).html('删除中...');
                     $.ajax({
                         url: '/ollama/models',
@@ -1138,7 +1117,7 @@
                         data: JSON.stringify({ model_name: selectedModel, model_type: category }),
                         success: function(res) {
                             alert(res.message || '删除成功');
-                            $('#baseModelSelect').val('');
+                            meta.input.val('');
                             window.loadModels(); // 重新加载列表
                         },
                         error: function(err) {
@@ -1149,6 +1128,12 @@
                         }
                     });
                 }
+            }
+            window.deleteBaseModel = function() {
+                deleteSelectedBaseModel('teacher');
+            }
+            window.deleteCptBaseModel = function() {
+                deleteSelectedBaseModel('cpt');
             }
             
             // 获取并加载 uploads/datasets/raw 目录下的 JSONL 文件列表
@@ -1465,18 +1450,13 @@
             var mode = $('#cptTrainingModeSelect').val();
 
             if (mode === 'local') {
-                $('#cptLearningRateInput').val('0.0001');
+                $('#cptLearningRateInput').val('0.00005');
                 $('#cptEpochsInput').val('1.0');
                 $('#cptBatchSizeInput').val('1');
                 $('#cptMaxLengthInput').val('512');
                 $('#cptGradAccInput').val('4');
                 $('#cptPrecisionSelect').val('fp32');
-                $('#cptQuantizationSelect').val('4');
                 $('#cptOptimizerSelect').val('adamw_torch');
-                $('#cptLoraRankInput').val('8');
-                $('#cptLoraAlphaInput').val('16');
-                $('#cptLoraDropoutInput').val('0.05');
-                $('#cptLoraTargetSelect').val('all');
                 $('#cptLrSchedulerSelect').val('cosine');
                 $('#cptWarmupStepsInput').val('0');
                 $('#cptWarmupRatioInput').val('0.1');
@@ -1493,12 +1473,7 @@
                 $('#cptMaxLengthInput').val('1024');
                 $('#cptGradAccInput').val('8');
                 $('#cptPrecisionSelect').val('bf16');
-                $('#cptQuantizationSelect').val('4');
                 $('#cptOptimizerSelect').val('adamw_torch');
-                $('#cptLoraRankInput').val('16');
-                $('#cptLoraAlphaInput').val('32');
-                $('#cptLoraDropoutInput').val('0.05');
-                $('#cptLoraTargetSelect').val('all');
                 $('#cptLrSchedulerSelect').val('cosine');
                 $('#cptWarmupStepsInput').val('0');
                 $('#cptWarmupRatioInput').val('0.1');
@@ -1536,6 +1511,7 @@
 
             $('#modelCategorySelect').val('vllm');
             if (typeof window.refreshBaseModelOptions === 'function') {
+                $('#baseModelSelect').data('target-value', window.latestCptModelName);
                 window.refreshBaseModelOptions();
             }
             $('#baseModelSelect').val(window.latestCptModelName);
@@ -1578,15 +1554,10 @@
             formData.append('epochs', $('#cptEpochsInput').val());
             formData.append('batchSize', $('#cptBatchSizeInput').val());
             formData.append('learningRate', $('#cptLearningRateInput').val());
-            formData.append('loraRank', $('#cptLoraRankInput').val());
-            formData.append('loraAlpha', $('#cptLoraAlphaInput').val());
-            formData.append('loraDropout', $('#cptLoraDropoutInput').val());
-            formData.append('loraTarget', $('#cptLoraTargetSelect').val());
             formData.append('optimizer', $('#cptOptimizerSelect').val());
             formData.append('lrScheduler', $('#cptLrSchedulerSelect').val());
             formData.append('maxLength', $('#cptMaxLengthInput').val());
             formData.append('precision', $('#cptPrecisionSelect').val());
-            formData.append('quantization', $('#cptQuantizationSelect').val());
             formData.append('packing', $('#cptPackingSelect').val());
             formData.append('warmupSteps', $('#cptWarmupStepsInput').val());
             formData.append('warmupRatio', $('#cptWarmupRatioInput').val());

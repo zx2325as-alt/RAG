@@ -229,6 +229,45 @@ def _prepare_cpt_dataset(root_path, dataset_file_name):
     return cpt_dataset_name, cpt_dataset_dir, cpt_dataset_path, len(converted_lines)
 
 
+def _ensure_cpt_output_ready(output_dir):
+    model_config_path = os.path.join(output_dir, 'config.json')
+    if os.path.exists(model_config_path):
+        return True
+
+    checkpoints = []
+    if os.path.exists(output_dir):
+        checkpoints = [
+            d for d in os.listdir(output_dir)
+            if d.startswith('checkpoint-') and os.path.isdir(os.path.join(output_dir, d))
+        ]
+
+    checkpoints.sort(
+        key=lambda x: int(x.split('-')[1]) if x.split('-')[1].isdigit() else 0,
+        reverse=True
+    )
+
+    if not checkpoints:
+        return False
+
+    import shutil
+
+    latest_checkpoint_dir = os.path.join(output_dir, checkpoints[0])
+    if not os.path.exists(os.path.join(latest_checkpoint_dir, 'config.json')):
+        return False
+
+    for name in os.listdir(latest_checkpoint_dir):
+        source_path = os.path.join(latest_checkpoint_dir, name)
+        target_path = os.path.join(output_dir, name)
+        if os.path.isdir(source_path):
+            if os.path.exists(target_path):
+                shutil.rmtree(target_path, ignore_errors=True)
+            shutil.copytree(source_path, target_path)
+        else:
+            shutil.copy2(source_path, target_path)
+
+    return os.path.exists(model_config_path)
+
+
 def _get_eval_data_for_model(model_name):
     """内部函数：获取单个模型的评估数据，返回字典"""
     model_dir = os.path.join(current_app.root_path, '..', 'finetuned_models', model_name)
@@ -576,15 +615,10 @@ def start_cpt():
         epochs = request.form.get('epochs')
         batch_size = request.form.get('batchSize')
         learning_rate = request.form.get('learningRate')
-        lora_rank = request.form.get('loraRank')
-        lora_alpha = request.form.get('loraAlpha')
-        lora_dropout = request.form.get('loraDropout')
-        lora_target = request.form.get('loraTarget')
         optimizer = request.form.get('optimizer')
         lr_scheduler = request.form.get('lrScheduler')
         max_length = request.form.get('maxLength')
         precision = request.form.get('precision')
-        quantization = request.form.get('quantization')
         packing = request.form.get('packing')
         grad_acc = request.form.get('gradAcc')
         save_steps = request.form.get('saveSteps')
@@ -637,11 +671,7 @@ def start_cpt():
                     "model_name_or_path": hf_model_path,
                     "dataset": cpt_dataset_name,
                     "dataset_dir": cpt_dataset_dir,
-                    "finetuning_type": "lora",
-                    "lora_target": lora_target if lora_target and lora_target != 'all' and lora_target != 'undefined' else "all",
-                    "lora_rank": int(lora_rank) if lora_rank and lora_rank != 'undefined' else 8,
-                    "lora_alpha": int(lora_alpha) if lora_alpha and lora_alpha != 'undefined' else 16,
-                    "lora_dropout": float(lora_dropout) if lora_dropout and lora_dropout != 'undefined' else 0.05,
+                    "finetuning_type": "full",
                     "output_dir": output_dir,
                     "logging_dir": logging_dir,
                     "overwrite_cache": True,
@@ -665,7 +695,6 @@ def start_cpt():
                     "plot_loss": True,
                     "report_to": "tensorboard",
                     "low_cpu_mem_usage": True,
-                    "trust_remote_code": True,
                     "use_fast_tokenizer": False,
                     "resize_vocab": False,
                     "streaming": False,
@@ -689,9 +718,6 @@ def start_cpt():
                 else:
                     train_config["fp16"] = False
                     train_config["bf16"] = False
-
-                if quantization and quantization != 'none':
-                    train_config["quantization_bit"] = int(quantization)
 
                 if packing == 'true':
                     train_config["packing"] = True
@@ -760,75 +786,13 @@ def start_cpt():
                     del active_finetune_processes['cpt_current']
 
                 if process.returncode == 0:
-                    yield f"data: > [SUCCESS] CPT 训练完成，LoRA 权重已保存至: {output_dir}\n\n"
-                    yield f"data: > 正在合并 CPT LoRA 权重与基座模型，供后续教师微调直接复用...\n\n"
-                    try:
-                        export_dir = os.path.join(root_path, '..', 'finetuned_models', f"{new_model}_merged")
-                        os.makedirs(export_dir, exist_ok=True)
-                        export_config_path = os.path.join(config_dir, f"cpt_export_{datetime.now().strftime('%Y%m%d%H%M%S')}.yaml")
-                        export_config = {
-                            "model_name_or_path": hf_model_path,
-                            "adapter_name_or_path": output_dir,
-                            "finetuning_type": "lora",
-                            "export_dir": export_dir,
-                            "export_size": 2,
-                            "export_legacy_format": False
-                        }
-
-                        with open(export_config_path, 'w', encoding='utf-8') as f:
-                            safe_yaml_dump(export_config, f, allow_unicode=True)
-
-                        export_process = subprocess.Popen(
-                            [get_llamafactory_cli_path(), "export", export_config_path],
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT,
-                            text=True,
-                            bufsize=1,
-                            universal_newlines=True,
-                            encoding='utf-8',
-                            errors='replace',
-                            env=env
-                        )
-
-                        buffer_e = ""
-                        while True:
-                            char = export_process.stdout.read(1)
-                            if not char:
-                                break
-                            if char == '\n' or char == '\r':
-                                if buffer_e:
-                                    clean_line = buffer_e.strip().replace('"', "'")
-                                    if clean_line:
-                                        yield f"data: > [合并] {clean_line}\n\n"
-                                    buffer_e = ""
-                            else:
-                                buffer_e += char
-                                if len(buffer_e) > 150:
-                                    clean_line = buffer_e.strip().replace('"', "'")
-                                    if clean_line:
-                                        yield f"data: > [合并] {clean_line}\n\n"
-                                    buffer_e = ""
-
-                        export_process.wait()
-                        if export_process.returncode != 0:
-                            yield f"data: > [ERROR] CPT 模型合并失败，状态码: {export_process.returncode}\n\n"
-                            yield f"data: [DONE]\n\n"
-                            return
-
-                        time.sleep(1)
-                        lora_dir = os.path.join(root_path, '..', 'finetuned_models', f"{new_model}_lora")
-                        if os.path.exists(output_dir):
-                            if os.path.exists(lora_dir):
-                                import shutil
-                                shutil.rmtree(lora_dir)
-                            os.rename(output_dir, lora_dir)
-                        if os.path.exists(export_dir):
-                            os.rename(export_dir, output_dir)
-
-                        yield f"data: > [SUCCESS] CPT 模型 [{new_model}] 已就绪，可直接作为下一阶段教师微调的基座模型。\n\n"
-                        yield f"data: [CPT_READY] {new_model}\n\n"
-                    except Exception as merge_err:
-                        yield f"data: > [ERROR] 合并 CPT 模型时出错: {str(merge_err)}\n\n"
+                    yield f"data: > [SUCCESS] CPT 训练完成，完整模型目录已保存至: {output_dir}\n\n"
+                    if not _ensure_cpt_output_ready(output_dir):
+                        yield f"data: > [ERROR] CPT 输出目录缺少可直接加载的完整模型文件，请检查训练日志。\n\n"
+                        yield f"data: [DONE]\n\n"
+                        return
+                    yield f"data: > [SUCCESS] CPT 模型 [{new_model}] 已就绪，可直接作为下一阶段教师微调的基座模型。\n\n"
+                    yield f"data: [CPT_READY] {new_model}\n\n"
                 else:
                     if process.returncode == -15 or process.returncode == 15:
                         yield f"data: > [WARNING] CPT 训练进程已被用户手动终止。\n\n"
