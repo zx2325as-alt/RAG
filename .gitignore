@@ -18,3 +18,8 @@ faiss_index/
 cache/
 .env
 .trae/
+.cache/
+.ipynb_checkpoints/
+aaa.py1
+app/config/.ipynb_checkpoints/
+start.py
