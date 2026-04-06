@@ -1,5 +1,5 @@
 """
-公共工具函数和共享变量
+公共工具函数和共享变量1111
 """
 from flask import Blueprint, current_app
 from app.services.document_service import DocumentService
