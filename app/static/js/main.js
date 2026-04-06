@@ -413,7 +413,7 @@ function appendEmptyBotMessage(msgId) {
             <div class="chat-bubble bot markdown-body" style="position: relative; width: 100%;">
                 <details class="mb-2" id="${msgId}-thinking-container" style="display: none; background-color: #f8f9fa; border-radius: 6px; padding: 5px 10px; border: 1px solid #e9ecef;">
                     <summary style="cursor: pointer; color: #6c757d; font-size: 0.9em; font-weight: bold; user-select: none;">
-                        🧠 思考过程 <span class="spinner-border spinner-border-sm ms-1" role="status" aria-hidden="true" style="width: 0.8rem; height: 0.8rem; vertical-align: text-bottom;"></span>
+                        🧠 思考过程999 <span class="spinner-border spinner-border-sm ms-1" role="status" aria-hidden="true" style="width: 0.8rem; height: 0.8rem; vertical-align: text-bottom;"></span>
                     </summary>
                     <div class="mt-2 text-muted" id="${msgId}-thinking-text" style="font-size: 0.85em; white-space: pre-wrap; max-height: 300px; overflow-y: auto;"></div>
                     <div id="${msgId}-sources-thinking" class="mt-2"></div>
