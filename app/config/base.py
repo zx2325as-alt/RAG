@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 # 获取项目根目录
 BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-# 加载 .env 文件（如果存在）
+# 加载 .env 文件（如果11存在）
 load_dotenv()
 
 class BaseConfig:
@@ -53,11 +53,16 @@ class BaseConfig:
     # 5. Neo4j 图数据库配置 (Graph RAG)
     NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://127.0.0.1:7687')
     NEO4J_USER = os.getenv('NEO4J_USER', 'neo4j')
-    NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD', 'password')
+    NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD', '11111111')
     
     # 6. 智能体工具调用配置 (Agent Function Calling)
     # 支持在配置中启用或禁用特定的工具
-    ENABLED_TOOLS = os.getenv('ENABLED_TOOLS', 'execute_shell_command,query_api_endpoint').split(',')
+    ENABLED_TOOLS = os.getenv('ENABLED_TOOLS', 'execute_shell_command,query_api_endpoint,query_metrics').split(',')
     
     # Hugging Face 模型下载与存放目录
     HF_MODEL_DIR = os.getenv('HF_MODEL_DIR', os.path.join(BASE_DIR, 'hugface'))
+    
+    # GPU/CUDA 加速配置
+    CUDA_ENABLED = os.getenv('CUDA_ENABLED', 'true').lower() == 'true'
+    CUDA_DEVICE_ID = int(os.getenv('CUDA_DEVICE_ID', '0'))
+    FAISS_GPU_MODE = os.getenv('FAISS_GPU_MODE', 'true').lower() == 'true'

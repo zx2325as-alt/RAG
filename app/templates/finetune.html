@@ -3,217 +3,695 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>模型微调 (Ollama) - 湖北移动运维知识助手</title>
+    <title>模型训练与部署 - 湖北移动运维知识助手</title>
     <link href="/static/vendor/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        /* 统一颜色方案 */
+        :root {
+            --primary-color: #1e3c72;
+            --primary-light: #2a5298;
+            --secondary-color: #f8f9fa;
+            --border-color: #dee2e6;
+            --text-muted: #6c757d;
+        }
+        
+        /* 导航栏样式 */
+        .navbar-custom {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            height: 56px;
+        }
+        
+        /* 页面容器 - 减少边距 */
+        .page-container {
+            max-width: 1400px;
+            padding: 1rem;
+        }
+        
+        /* 统一卡片样式 */
+        .stage-card {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            margin-bottom: 1rem;
+        }
+        
+        .stage-card .card-header {
+            background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+            border-bottom: 2px solid var(--primary-color);
+            padding: 0.75rem 1rem;
+        }
+        
+        .stage-card .card-header h6 {
+            color: var(--primary-color);
+            font-size: 0.95rem;
+            margin-bottom: 0.25rem;
+        }
+        
+        .stage-card .card-header p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 0;
+        }
+        
+        .stage-card .card-body {
+            padding: 1rem;
+        }
+        
+        /* 统一表单控件 */
+        .form-label {
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #495057;
+            margin-bottom: 0.25rem;
+        }
+        
+        .form-control, .form-select {
+            font-size: 0.85rem;
+            padding: 0.375rem 0.5rem;
+        }
+        
+        /* 统一按钮样式 */
+        .btn-primary-custom {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
+            border: none;
+            color: white;
+        }
+        
+        .btn-primary-custom:hover {
+            background: linear-gradient(135deg, #152a52 0%, #1e3c72 100%);
+            color: white;
+        }
+        
+        /* 统一输出区域 */
+        .output-terminal {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            border-radius: 6px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.8rem;
+            padding: 0.75rem;
+            height: 100px;
+            overflow-y: auto;
+            border: 1px solid #333;
+        }
+        
+        /* Tab样式统一 */
+        .nav-tabs .nav-link {
+            color: var(--text-muted);
+            font-weight: 500;
+            padding: 0.6rem 1.2rem;
+            border: none;
+            border-bottom: 3px solid transparent;
+        }
+        
+        .nav-tabs .nav-link.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+            background: transparent;
+        }
+        
+        /* 紧凑布局 */
+        .compact-row {
+            margin-bottom: 0.75rem;
+        }
+        
+        .compact-row > [class*="col-"] {
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }
+        
+        /* 参数网格 */
+        .param-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 0.5rem;
+        }
+        
+        /* 高级配置折叠 */
+        .advanced-toggle {
+            font-size: 0.8rem;
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        
+        .advanced-toggle:hover {
+            color: var(--primary-light);
+        }
+    </style>
 </head>
 <body class="bg-light">
-    <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); box-shadow: 0 2px 10px rgba(0,0,0,0.1); height: 56px;">
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-custom">
         <div class="container-fluid px-4">
-            <a class="navbar-brand" href="/">运维知识助手 (RAG)</a>
+            <a class="navbar-brand fw-bold" href="/">运维知识助手 (RAG)</a>
             <div class="collapse navbar-collapse">
                 <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/">问答系统</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" href="/finetune">模型微调(Ollama)</a>
-                    </li>
+                    <li class="nav-item"><a class="nav-link" href="/">问答系统</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/chat">纯净聊天</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/finetune">模型训练与部署</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/eval_system">评估系统</a></li>
                 </ul>
             </div>
         </div>
     </nav>
 
-    <div class="container mt-4">
-        <h3 class="mb-4">本地模型微调 (Ollama / vLLM)</h3>
-        
-        <div class="row">
-            <!-- 左侧：基础配置（变窄） -->
-            <div class="col-md-4">
-                <div class="card border-0 shadow-sm mb-4 rounded-3">
-                    <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
-                        <h6 class="mb-0 fw-bold" style="color: #1e3c72;">1. 选择基座模型</h6>
-                    </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <label class="form-label">选择基座模型：</label>
-                            <select class="form-select mb-2" id="modelCategorySelect">
-                                <option value="ollama">本地模型 (Ollama)</option>
-                                <option value="vllm">本地模型 (vLLM)</option>
-                                <option value="hf">本地模型 (Hugging Face)</option>
-                                <option value="online">在线模型 (支持下载)</option>
-                            </select>
-                            <div class="input-group mb-2">
-                                <input type="text" class="form-control" id="baseModelSelect" list="baseModelDatalist" placeholder="请选择或输入模型ID...">
-                                <datalist id="baseModelDatalist">
-                                </datalist>
-                                <button class="btn btn-outline-primary" type="button" id="downloadModelBtn" title="下载选中的模型" style="display:none;">
-                                    ⬇️ 下载
-                                </button>
-                                <button class="btn btn-outline-secondary" type="button" id="refreshModelBtn" title="刷新本地缓存" onclick="loadModels()">
-                                    🔄 刷新
-                                </button>
-                                <button class="btn btn-outline-danger" type="button" id="deleteModelBtn" title="删除选中的本地模型">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
-                                      <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
-                                      <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                        <!-- 移除了“微调后的新模型名称”输入框 -->
-                    </div>
-                </div>
+    <div class="container-fluid page-container">
+        <!-- 导航 Tabs -->
+        <ul class="nav nav-tabs mb-3" id="pipelineTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="step1-tab" data-bs-toggle="tab" data-bs-target="#step1" type="button">1. 数据准备</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="step-cpt-tab" data-bs-toggle="tab" data-bs-target="#step-cpt" type="button">2. Continued Pre-Training（CPT）</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="step2-tab" data-bs-toggle="tab" data-bs-target="#step2" type="button">3. 教师模型微调</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="step3-tab" data-bs-toggle="tab" data-bs-target="#step3" type="button">4. 知识蒸馏</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="step4-tab" data-bs-toggle="tab" data-bs-target="#step4" type="button">5. 量化与部署</button>
+            </li>
+        </ul>
 
-                <div class="card border-0 shadow-sm rounded-3">
-                    <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
-                        <h6 class="mb-0 fw-bold" style="color: #1e3c72;">2. 选择微调数据集</h6>
+        <div class="tab-content" id="pipelineTabsContent">
+            <!-- 阶段 1: 数据准备 -->
+            <div class="tab-pane fade show active" id="step1">
+                <div class="stage-card">
+                    <div class="card-header">
+                        <h6>📊 阶段 1: 数据清洗与筛选</h6>
+                        <p>从原始数据中提取高质量文本，支持 TXT/JSON/JSONL，自动去重与格式化为 Alpaca 格式</p>
                     </div>
                     <div class="card-body">
-                        <div class="mb-3">
-                            <label class="form-label">从 uploads/datasets/raw 目录选择数据集</label>
-                            <div class="input-group">
-                                <select class="form-select" id="datasetSelect">
-                                    <option value="">加载中...</option>
+                        <div class="row compact-row">
+                            <div class="col-md-4">
+                                <label class="form-label">输入原始数据</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control" value="读取目录下所有文件" disabled id="rawDatasetSelect">
+                                    <button class="btn btn-outline-secondary" type="button" disabled>🔄</button>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">去重策略</label>
+                                <select class="form-select form-select-sm" id="dedupStrategySelect">
+                                    <option value="exact">精确去重 (MD5)</option>
+                                    <option value="minhash">近似去重 (MinHash)</option>
+                                    <option value="none">不去重</option>
                                 </select>
-                                <button class="btn btn-outline-secondary" type="button" id="refreshDatasetBtn" title="刷新文件列表">
-                                    🔄 刷新
-                                </button>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">数据转换策略</label>
+                                <select class="form-select form-select-sm" id="conversionStrategySelect" onchange="toggleModelAnalysis()">
+                                    <option value="knowledge_qa" selected>知识问答生成</option>
+                                    <option value="text_completion">文本续写</option>
+                                    <option value="keep_original">保留原格式</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">输出文件名</label>
+                                <input type="text" class="form-control form-control-sm" id="coreDatasetNameInput" value="core_dataset.jsonl">
                             </div>
                         </div>
-                        <div class="alert alert-info" style="font-size: 0.85rem;">
-                            <strong>提示：</strong>由于 Ollama 官方主要用于模型推理，本界面的微调底层需要借助外部工具（如 unsloth 或 LLaMA-Factory）完成训练，再通过 Ollama Modelfile 导入。
+                        <!-- 模型介入分析配置 -->
+                        <div class="row compact-row" id="modelAnalysisConfig" style="display: none;">
+                            <div class="col-12">
+                                <div class="card bg-light border-0 p-2">
+                                    <p class="mb-2 fw-bold text-primary small">当前分析模型: <span id="dataPrepCurrentModelBadge">使用问答系统配置</span></p>
+                                    <div class="row g-2">
+                                        <div class="col-md-3">
+                                            <select class="form-select form-select-sm" id="dataPrepModelCategorySelect">
+                                                <option value="online">在线模型</option>
+                                                <option value="ollama" selected>本地模型 (Ollama)</option>
+                                                <option value="vllm">本地模型 (vLLM)</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <select class="form-select form-select-sm" id="dataPrepModelSelect"><option value="">加载中...</option></select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <button class="btn btn-primary-custom btn-sm w-100" type="button" id="applyDataPrepModelBtn">应用为分析模型</button>
+                                        </div>
+                                    </div>
+                                    <small class="text-muted mt-1" id="dataPrepModelStatus"></small>
+                                </div>
+                            </div>
                         </div>
+                        <div class="d-flex gap-2 mt-2">
+                            <button class="btn btn-primary-custom btn-sm" id="startDataPrepBtn" onclick="startDataPreparation()">开始数据清洗</button>
+                        </div>
+                        <div class="output-terminal mt-2" id="dataPrepOutput">> 等待开始数据准备任务...</div>
                     </div>
                 </div>
             </div>
 
-            <!-- 右侧：训练配置与状态 -->
-            <div class="col-md-8">
-                <div class="card border-0 shadow-sm h-100 rounded-3">
-                    <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
-                        <h6 class="mb-0 fw-bold" style="color: #1e3c72;">3. 训练高级配置与状态</h6>
+            <div class="tab-pane fade" id="step-cpt">
+                <div class="stage-card">
+                    <div class="card-header">
+                        <h6>🧠 阶段 2: Continued Pre-Training（CPT）</h6>
+                        <p>基于阶段 1 产出的高质量领域语料继续预训练基座模型，为后续教师模型微调补充领域知识底座</p>
                     </div>
-                    <div class="card-body d-flex flex-column" style="font-size: 0.85rem;">
-                        <div class="row g-2 mb-2">
-                            <div class="col-2">
-                                <label class="form-label mb-0" title="控制模型权重更新的幅度。推荐：1e-4 到 2e-4 (即 0.0001 到 0.0002)">学习率</label>
-                                <input type="number" step="0.00001" id="learningRateInput" class="form-control form-control-sm" value="0.0001">
+                    <div class="card-body">
+                        <div class="row compact-row">
+                            <div class="col-md-6">
+                                <label class="form-label">CPT 基座模型</label>
+                                <select class="form-select form-select-sm mb-2" id="cptModelCategorySelect">
+                                    <option value="ollama">本地模型 (Ollama)</option>
+                                    <option value="vllm">本地模型 (vLLM)</option>
+                                    <option value="hf">本地模型 (Hugging Face)</option>
+                                    <option value="online">在线模型 (支持下载)</option>
+                                </select>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control" id="cptBaseModelSelect" list="cptBaseModelDatalist" placeholder="请选择或输入模型ID...">
+                                    <datalist id="cptBaseModelDatalist"></datalist>
+                                    <button class="btn btn-outline-info" type="button" id="cptSearchModelBtn" onclick="searchOnlineModels('cpt')" style="display:none;">🔍</button>
+                                    <button class="btn btn-outline-primary" type="button" id="cptDownloadModelBtn" style="display:none;">⬇️</button>
+                                    <button class="btn btn-outline-danger" type="button" id="cptDeleteModelBtn" onclick="deleteCptBaseModel()" style="display:none;">🗑️</button>
+                                    <button class="btn btn-outline-secondary" type="button" id="refreshCptModelBtn" onclick="loadModels()">🔄</button>
+                                </div>
                             </div>
-                            <div class="col-2">
-                                <label class="form-label mb-0" title="模型在整个数据集上训练的次数。推荐：3.0 到 5.0">训练轮数</label>
-                                <input type="number" step="0.1" id="epochsInput" class="form-control form-control-sm" value="3.0">
-                            </div>
-                            <div class="col-2">
-                                <label class="form-label mb-0" title="每次处理的样本数量。推荐：1 或 2 (防止OOM)">批处理大小</label>
-                                <input type="number" id="batchSizeInput" class="form-control form-control-sm" value="1">
-                            </div>
-                            <div class="col-2">
-                                <label class="form-label mb-0" title="输入文本的最大 Token 长度。推荐：1024 或更低">最大长度</label>
-                                <input type="number" id="maxLengthInput" class="form-control form-control-sm" value="1024">
-                            </div>
-                            <div class="col-2">
-                                <label class="form-label mb-0" title="更新梯度前累积的步数，用于变相增加Batch Size。推荐：8 或 16">梯度累积</label>
-                                <input type="number" id="gradAccInput" class="form-control form-control-sm" value="8">
-                            </div>
-                            <div class="col-2">
-                                <label class="form-label mb-0" title="梯度裁剪阈值，防止梯度爆炸。推荐：1.0">梯度裁剪</label>
-                                <input type="number" step="0.1" id="maxGradNormInput" class="form-control form-control-sm" value="1.0">
+                            <div class="col-md-6">
+                                <label class="form-label">CPT 语料来源</label>
+                                <div class="input-group input-group-sm">
+                                    <select class="form-select" id="cptDatasetSelect"><option value="">加载中...</option></select>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="loadRawDatasets()">🔄</button>
+                                </div>
                             </div>
                         </div>
-                        
-                        <div class="row g-2 mb-2">
-                            <div class="col-2">
-                                <label class="form-label mb-0" title="优化算法。推荐：adamw_torch">优化器</label>
-                                <select class="form-select form-select-sm" id="optimizerSelect">
-                                    <option value="adamw_torch" selected>adamw_torch</option>
-                                    <option value="adamw_8bit">adamw_8bit</option>
-                                    <option value="paged_adamw_32bit">paged_adamw_32bit</option>
-                                    <option value="sgd">sgd</option>
-                                    <option value="rmsprop">rmsprop</option>
-                                    <option value="lion_32bit">lion_32bit</option>
-                                </select>
-                            </div>
-                            <div class="col-2">
-                                <label class="form-label mb-0" title="学习率的变化策略。推荐：cosine (余弦退火)">LR 策略</label>
-                                <select class="form-select form-select-sm" id="lrSchedulerSelect">
-                                    <option value="cosine" selected>cosine</option>
-                                    <option value="linear">linear</option>
-                                    <option value="polynomial">polynomial</option>
-                                    <option value="constant">constant</option>
-                                </select>
-                            </div>
-                            <div class="col-2">
-                                <label class="form-label mb-0" title="训练过程中的数据精度。推荐：bf16 (如果显卡支持)">精度</label>
-                                <select class="form-select form-select-sm" id="precisionSelect">
-                                    <option value="fp16">FP16</option>
-                                    <option value="bf16" selected>BF16</option>
-                                    <option value="fp32">FP32</option>
-                                </select>
-                            </div>
-                            <div class="col-2">
-                                <label class="form-label mb-0" title="加载基座模型时的量化方式。推荐：none (全精度微调更稳定)">量化等级</label>
-                                <select class="form-select form-select-sm" id="quantizationSelect">
-                                    <option value="none" selected>none</option>
-                                    <option value="8">8-bit</option>
-                                    <option value="4">4-bit</option>
-                                </select>
-                            </div>
-                            <div class="col-2">
-                                <label class="form-label mb-0" title="加速训练并降低显存。推荐：Auto">FlashAttn</label>
-                                <select class="form-select form-select-sm" id="flashAttnSelect">
-                                    <option value="auto" selected>Auto</option>
-                                    <option value="fa2">开启 (FA2)</option>
-                                    <option value="sdpa">开启 (SDPA)</option>
-                                    <option value="none">关闭</option>
-                                </select>
-                            </div>
-                            <div class="col-2">
-                                <label class="form-label mb-0" title="L2正则化系数，防止过拟合。推荐：0.1">权重衰减</label>
-                                <input type="number" step="0.001" id="weightDecayInput" class="form-control form-control-sm" value="0.1">
+                        <div class="row compact-row">
+                            <div class="col-12">
+                                <div class="d-flex align-items-center gap-2">
+                                    <label class="form-label mb-0 text-nowrap">训练模式</label>
+                                    <select class="form-select form-select-sm" id="cptTrainingModeSelect" style="width: auto;" onchange="applyCptTrainingPreset(); updateCptTrainingModeIndicator();">
+                                        <option value="local" selected>🖥️ 本地调试（先验证流程）</option>
+                                        <option value="online">☁️ 线上训练（正式领域续训）</option>
+                                    </select>
+                                    <span id="cptTrainingModeIndicator" class="badge bg-info">指标关注: 领域语料收敛、无 OOM</span>
+                                </div>
                             </div>
                         </div>
+                        <div class="compact-row">
+                            <div class="alert alert-info py-2 mb-2">
+                                CPT 采用全参数持续预训练，目标是向基座模型注入领域语料分布，不再复用教师 SFT 页的 LoRA / QLoRA 配置。
+                            </div>
+                        </div>
+                        <div class="row compact-row">
+                            <div class="col-12">
+                                <label class="form-label">训练参数</label>
+                                <div class="param-grid">
+                                    <div>
+                                        <label class="form-label small">学习率</label>
+                                        <input type="number" step="0.00001" id="cptLearningRateInput" class="form-control form-control-sm" value="0.0001">
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">训练轮数</label>
+                                        <input type="number" step="0.1" id="cptEpochsInput" class="form-control form-control-sm" value="1.0">
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">批大小</label>
+                                        <input type="number" id="cptBatchSizeInput" class="form-control form-control-sm" value="1">
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">最大长度</label>
+                                        <input type="number" id="cptMaxLengthInput" class="form-control form-control-sm" value="512">
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">梯度累积</label>
+                                        <input type="number" id="cptGradAccInput" class="form-control form-control-sm" value="4">
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">精度</label>
+                                        <select class="form-select form-select-sm" id="cptPrecisionSelect">
+                                            <option value="fp16">FP16</option>
+                                            <option value="bf16">BF16</option>
+                                            <option value="fp32" selected>FP32</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">优化器</label>
+                                        <select class="form-select form-select-sm" id="cptOptimizerSelect">
+                                            <option value="adamw_torch" selected>adamw</option>
+                                            <option value="paged_adamw_32bit">paged</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="compact-row">
+                            <a class="advanced-toggle" data-bs-toggle="collapse" href="#cptAdvancedConfig">▶ 高级配置（调度器、预热、日志、打包等）</a>
+                        </div>
+                        <div class="collapse" id="cptAdvancedConfig">
+                            <div class="param-grid mb-2">
+                                <div>
+                                    <label class="form-label small">学习率调度器</label>
+                                    <select class="form-select form-select-sm" id="cptLrSchedulerSelect">
+                                        <option value="cosine" selected>cosine（推荐）</option>
+                                        <option value="linear">linear</option>
+                                        <option value="constant">constant</option>
+                                        <option value="constant_with_warmup">constant_with_warmup</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="form-label small">预热步数</label>
+                                    <input type="number" class="form-control form-control-sm" id="cptWarmupStepsInput" value="0" min="0">
+                                </div>
+                                <div>
+                                    <label class="form-label small">预热比率</label>
+                                    <input type="number" class="form-control form-control-sm" id="cptWarmupRatioInput" value="0.1" min="0" max="1" step="0.01">
+                                </div>
+                                <div>
+                                    <label class="form-label small">日志步数</label>
+                                    <input type="number" class="form-control form-control-sm" id="cptLoggingStepsInput" value="5" min="1">
+                                </div>
+                                <div>
+                                    <label class="form-label small">保存步数</label>
+                                    <input type="number" class="form-control form-control-sm" id="cptSaveStepsInput" value="50" min="1">
+                                </div>
+                                <div>
+                                    <label class="form-label small">权重衰减</label>
+                                    <input type="number" class="form-control form-control-sm" id="cptWeightDecayInput" value="0.0" min="0" max="1" step="0.001">
+                                </div>
+                                <div>
+                                    <label class="form-label small">梯度裁剪</label>
+                                    <input type="number" class="form-control form-control-sm" id="cptMaxGradNormInput" value="1.0" min="0" step="0.1">
+                                </div>
+                                <div>
+                                    <label class="form-label small">随机种子</label>
+                                    <input type="number" class="form-control form-control-sm" id="cptSeedInput" value="42" min="0">
+                                </div>
+                                <div>
+                                    <label class="form-label small">词元打包</label>
+                                    <select class="form-select form-select-sm" id="cptPackingSelect">
+                                        <option value="false" selected>关闭</option>
+                                        <option value="true">开启</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 mt-2">
+                            <button class="btn btn-primary-custom btn-sm flex-grow-1" id="startCptBtn" onclick="startCptTraining()">开始 CPT 任务</button>
+                            <button class="btn btn-danger btn-sm d-none" id="stopCptBtn" onclick="stopCptTraining()">终止训练</button>
+                            <button class="btn btn-sm btn-outline-info" type="button" id="openCptTbBtn" onclick="openTensorBoardModal('cpt')">📈 实时监控 (TensorBoard)</button>
+                            <button class="btn btn-sm btn-outline-success" type="button" onclick="goToTeacherFinetune()">进入教师微调</button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="$('#cptOutput').empty()">清屏</button>
+                        </div>
+                        <div class="output-terminal mt-2" id="cptOutput" style="height: 100px;">> 等待开始 Continued Pre-Training（CPT）任务...</div>
+                    </div>
+                </div>
+            </div>
 
-                        <div class="row g-2 mb-3">
-                            <div class="col-2">
-                                <label class="form-label mb-0" title="学习率预热的绝对步数。推荐：0 (通常使用比例)">预热步数</label>
-                                <input type="number" id="warmupStepsInput" class="form-control form-control-sm" value="0">
+            <div class="tab-pane fade" id="step2">
+                <div class="stage-card">
+                    <div class="card-header">
+                        <h6>🎓 阶段 3: 教师模型 QLoRA 微调</h6>
+                        <p>使用高质量标注数据对教师模型进行微调，生成领域专家模型</p>
+                    </div>
+                    <div class="card-body">
+                        <!-- 模型和数据集选择 -->
+                        <div class="row compact-row">
+                            <div class="col-md-6">
+                                <label class="form-label">教师基座模型</label>
+                                <select class="form-select form-select-sm mb-2" id="modelCategorySelect">
+                                    <option value="ollama">本地模型 (Ollama)</option>
+                                    <option value="vllm">本地模型 (vLLM)</option>
+                                    <option value="hf">本地模型 (Hugging Face)</option>
+                                    <option value="online">在线模型 (支持下载)</option>
+                                </select>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control" id="baseModelSelect" list="baseModelDatalist" placeholder="请选择或输入模型ID...">
+                                    <datalist id="baseModelDatalist"></datalist>
+                                    <button class="btn btn-outline-info" type="button" id="searchModelBtn" onclick="searchOnlineModels()" style="display:none;">🔍</button>
+                                    <button class="btn btn-outline-primary" type="button" id="downloadModelBtn" style="display:none;">⬇️</button>
+                                    <button class="btn btn-outline-danger" type="button" id="deleteModelBtn" onclick="deleteBaseModel()" style="display:none;">🗑️</button>
+                                    <button class="btn btn-outline-secondary" type="button" id="refreshModelBtn" onclick="loadModels()">🔄</button>
+                                </div>
                             </div>
-                            <div class="col-2">
-                                <label class="form-label mb-0" title="学习率预热占总步数的比例。推荐：0.1 (10%)">预热比例</label>
-                                <input type="number" step="0.01" id="warmupRatioInput" class="form-control form-control-sm" value="0.1">
-                            </div>
-                            <div class="col-2">
-                                <label class="form-label mb-0" title="每隔多少步保存一次 Checkpoint。推荐：500">保存步数</label>
-                                <input type="number" id="saveStepsInput" class="form-control form-control-sm" value="500">
-                            </div>
-                            <div class="col-2">
-                                <label class="form-label mb-0" title="每隔多少步进行一次验证并在TensorBoard中绘图。推荐：50">验证步数</label>
-                                <input type="number" id="evalStepsInput" class="form-control form-control-sm" value="50">
-                            </div>
-                            <div class="col-2">
-                                <label class="form-label mb-0" title="每隔多少步打印一次日志。推荐：10">日志步数</label>
-                                <input type="number" id="loggingStepsInput" class="form-control form-control-sm" value="10">
-                            </div>
-                            <div class="col-2">
-                                <label class="form-label mb-0" title="随机种子，保证实验可复现。推荐：42">随机种子</label>
-                                <input type="number" id="seedInput" class="form-control form-control-sm" value="42">
+                            <div class="col-md-6">
+                                <label class="form-label">训练数据集</label>
+                                <div class="input-group input-group-sm">
+                                    <select class="form-select" id="datasetSelect"><option value="">加载中...</option></select>
+                                    <button class="btn btn-outline-secondary" type="button" id="refreshDatasetBtn">🔄</button>
+                                </div>
                             </div>
                         </div>
                         
-                        <div class="d-flex gap-2 mb-2 align-items-center">
-                            <button class="btn btn-primary btn-sm flex-grow-1" id="startFinetuneBtn" onclick="startFinetune()">开始微调任务</button>
+                        <!-- 训练模式选择 -->
+                        <div class="row compact-row">
+                            <div class="col-12">
+                                <div class="d-flex align-items-center gap-2">
+                                    <label class="form-label mb-0 text-nowrap">训练模式</label>
+                                    <select class="form-select form-select-sm" id="trainingModeSelect" style="width: auto;" onchange="applyTrainingPreset(); updateTrainingModeIndicator();">
+                                        <option value="local" selected>🖥️ 本地调试 (流程验证，低资源)</option>
+                                        <option value="online">☁️ 线上训练 (正式训练，高质量)</option>
+                                    </select>
+                                    <span id="trainingModeIndicator" class="badge bg-info">指标: loss趋势、收敛性</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 训练参数配置 -->
+                        <div class="row compact-row">
+                            <div class="col-12">
+                                <label class="form-label">训练参数</label>
+                                <div class="param-grid">
+                                    <div>
+                                        <label class="form-label small">学习率</label>
+                                        <input type="number" step="0.00001" id="learningRateInput" class="form-control form-control-sm" value="0.0002">
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">训练轮数</label>
+                                        <input type="number" step="0.1" id="epochsInput" class="form-control form-control-sm" value="2.0">
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">批大小</label>
+                                        <input type="number" id="batchSizeInput" class="form-control form-control-sm" value="1">
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">最大长度</label>
+                                        <input type="number" id="maxLengthInput" class="form-control form-control-sm" value="256">
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">梯度累积</label>
+                                        <input type="number" id="gradAccInput" class="form-control form-control-sm" value="2">
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">精度</label>
+                                        <select class="form-select form-select-sm" id="precisionSelect">
+                                            <option value="fp16">FP16</option>
+                                            <option value="bf16">BF16</option>
+                                            <option value="fp32" selected>FP32</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">QLoRA</label>
+                                        <select class="form-select form-select-sm" id="quantizationSelect">
+                                            <option value="none" selected>不量化</option>
+                                            <option value="8">8-bit</option>
+                                            <option value="4">4-bit</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="form-label small">优化器</label>
+                                        <select class="form-select form-select-sm" id="optimizerSelect">
+                                            <option value="adamw_torch" selected>adamw</option>
+                                            <option value="paged_adamw_32bit">paged</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 高级配置折叠区 -->
+                        <div class="compact-row">
+                            <a class="advanced-toggle" data-bs-toggle="collapse" href="#advancedConfig">▶ 高级配置 (LoRA参数、预热、调度器等)</a>
+                        </div>
+                        <div class="collapse" id="advancedConfig">
+                            <div class="param-grid mb-2">
+                                <div>
+                                    <label class="form-label small">LoRA Rank</label>
+                                    <input type="number" class="form-control form-control-sm" id="loraRankInput" value="8" min="1" max="256">
+                                </div>
+                                <div>
+                                    <label class="form-label small">LoRA Alpha</label>
+                                    <input type="number" class="form-control form-control-sm" id="loraAlphaInput" value="16" min="1" max="512">
+                                </div>
+                                <div>
+                                    <label class="form-label small">LoRA Dropout</label>
+                                    <input type="number" class="form-control form-control-sm" id="loraDropoutInput" value="0.1" min="0" max="1" step="0.01">
+                                </div>
+                                <div>
+                                    <label class="form-label small">LoRA Target</label>
+                                    <select class="form-select form-select-sm" id="loraTargetSelect">
+                                        <option value="all" selected>all (推荐)</option>
+                                        <option value="q_proj,v_proj">q_proj,v_proj</option>
+                                        <option value="q_proj,k_proj,v_proj,o_proj">q_proj,k_proj,v_proj,o_proj</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="form-label small">学习率调度器</label>
+                                    <select class="form-select form-select-sm" id="lrSchedulerSelect">
+                                        <option value="cosine" selected>cosine (推荐)</option>
+                                        <option value="linear">linear</option>
+                                        <option value="constant">constant</option>
+                                        <option value="constant_with_warmup">constant_with_warmup</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="form-label small">预热步数</label>
+                                    <input type="number" class="form-control form-control-sm" id="warmupStepsInput" value="0" min="0">
+                                </div>
+                                <div>
+                                    <label class="form-label small">预热比率</label>
+                                    <input type="number" class="form-control form-control-sm" id="warmupRatioInput" value="0.1" min="0" max="1" step="0.01">
+                                </div>
+                                <div>
+                                    <label class="form-label small">日志步数</label>
+                                    <input type="number" class="form-control form-control-sm" id="loggingStepsInput" value="1" min="1">
+                                </div>
+                                <div>
+                                    <label class="form-label small">权重衰减</label>
+                                    <input type="number" class="form-control form-control-sm" id="weightDecayInput" value="0.0" min="0" max="1" step="0.001">
+                                </div>
+                                <div>
+                                    <label class="form-label small">梯度裁剪</label>
+                                    <input type="number" class="form-control form-select-sm" id="maxGradNormInput" value="1.0" min="0" step="0.1">
+                                </div>
+                                <div>
+                                    <label class="form-label small">随机种子</label>
+                                    <input type="number" class="form-control form-control-sm" id="seedInput" value="42" min="0">
+                                </div>
+                                <div>
+                                    <label class="form-label small">序列打包</label>
+                                    <select class="form-select form-select-sm" id="packingSelect">
+                                        <option value="false" selected>关闭</option>
+                                        <option value="true">开启</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="form-label small">RoPE缩放</label>
+                                    <select class="form-select form-select-sm" id="ropeScalingSelect">
+                                        <option value="none" selected>不使用</option>
+                                        <option value="linear">linear</option>
+                                        <option value="dynamic">dynamic</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="form-label small">DeepSpeed</label>
+                                    <select class="form-select form-select-sm" id="deepspeedSelect">
+                                        <option value="none" selected>不使用</option>
+                                        <option value="zero2">ZeRO-2</option>
+                                        <option value="zero3">ZeRO-3</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex gap-2 mt-2">
+                            <button class="btn btn-primary-custom btn-sm flex-grow-1" id="startFinetuneBtn" onclick="startFinetune()">开始教师微调任务</button>
                             <button class="btn btn-danger btn-sm d-none" id="stopFinetuneBtn" onclick="stopFinetune()">终止训练</button>
-                            <!-- 新增 TensorBoard 按钮 -->
-                            <button class="btn btn-sm btn-outline-info" type="button" id="openTbBtn" onclick="openTensorBoardModal()">
-                                📈 实时监控 (TensorBoard)
-                            </button>
+                            <button class="btn btn-sm btn-outline-info" type="button" id="openTbBtn" onclick="openTensorBoardModal('teacher')">📈 实时监控 (TensorBoard)</button>
                             <button class="btn btn-sm btn-outline-secondary" onclick="$('#terminalOutput').empty()">清屏</button>
                         </div>
-                        
-                        <div class="flex-grow-1 bg-dark text-light p-2 rounded overflow-auto" id="terminalOutput" style="font-family: monospace; font-size: 0.85rem; max-height: 200px;">
-                            > 准备就绪... 等待分配微调任务。
+                        <div class="output-terminal mt-2" id="terminalOutput" style="height: 100px;">> 准备就绪... 等待分配教师模型微调任务。</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="step3">
+                <div class="stage-card">
+                    <div class="card-header">
+                        <h6>🧪 阶段 4: 学生模型知识蒸馏</h6>
+                        <p>基于教师模型生成的软标签，对轻量级学生模型进行 SFT 训练</p>
+                    </div>
+                    <div class="card-body">
+                        <div class="row compact-row">
+                            <div class="col-md-4">
+                                <label class="form-label">教师模型</label>
+                                <select class="form-select form-select-sm" id="teacherModelSelect">
+                                    <option value="">加载中...</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">学生基础模型</label>
+                                <div class="input-group input-group-sm">
+                                    <select class="form-select" id="studentBaseModelSelect">
+                                        <option value="">加载中...</option>
+                                    </select>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="loadStudentModels()">🔄</button>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">训练数据集</label>
+                                <select class="form-select form-select-sm" id="distillDatasetSelect">
+                                    <option value="">加载中...</option>
+                                </select>
+                            </div>
                         </div>
+                        <div class="row compact-row">
+                            <div class="col-md-3">
+                                <label class="form-label">蒸馏策略</label>
+                                <select class="form-select form-select-sm" id="distillStrategySelect">
+                                    <option value="text_sft">文本级蒸馏</option>
+                                    <option value="soft_label">软标签 KL 蒸馏</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">温度系数</label>
+                                <input type="number" class="form-control form-control-sm" id="distillTempInput" value="4.0" step="0.5">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">蒸馏损失权重</label>
+                                <input type="number" class="form-control form-control-sm" id="distillWeightInput" value="0.7" step="0.1" min="0" max="1">
+                            </div>
+                            <div class="col-md-3 d-flex align-items-end">
+                                <button class="btn btn-primary-custom btn-sm w-100" id="startDistillBtn" onclick="startDistillation()">开始知识蒸馏</button>
+                            </div>
+                        </div>
+                        <div class="output-terminal mt-2" id="distillOutput" style="height: 100px;">> 等待开始蒸馏任务...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="step4">
+                <div class="stage-card">
+                    <div class="card-header">
+                        <h6>🚀 阶段 5: AWQ 量化与 vLLM 部署</h6>
+                        <p>将蒸馏后的学生模型压缩为 4-bit 精度，并一键部署为推理 API</p>
+                    </div>
+                    <div class="card-body">
+                        <div class="row compact-row">
+                            <div class="col-md-4">
+                                <label class="form-label">待量化模型</label>
+                                <div class="input-group input-group-sm">
+                                    <select class="form-select form-select-sm" id="quantizeModelSelect">
+                                        <option value="">加载中...</option>
+                                    </select>
+                                    <button class="btn btn-outline-danger" type="button" id="deleteQuantizeModelBtn" onclick="deleteQuantizeModel()" style="display:none;">🗑️</button>
+                                    <button class="btn btn-outline-secondary" type="button" id="refreshQuantizeModelBtn" onclick="loadFinetunedModels()">🔄</button>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">量化方法</label>
+                                <select class="form-select form-select-sm" id="quantMethodSelect">
+                                    <option value="awq">AWQ 4-bit</option>
+                                    <option value="gguf">GGUF</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">部署端口</label>
+                                <input type="number" class="form-control form-control-sm" id="deployPortInput" value="8000">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">GPU利用率</label>
+                                <input type="number" class="form-control form-control-sm" id="gpuMemUtilInput" value="0.8" step="0.05" min="0.1" max="1.0">
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 mt-2">
+                            <button class="btn btn-warning btn-sm text-dark" id="startQuantizeBtn" onclick="startQuantization()">开始量化压缩</button>
+                            <button class="btn btn-success btn-sm" id="startDeployBtn" onclick="startDeploy()">一键部署服务</button>
+                        </div>
+                        <div class="output-terminal mt-2" id="deployOutput" style="height: 100px;">> 等待执行量化或部署指令...</div>
                     </div>
                 </div>
             </div>
@@ -229,7 +707,7 @@
                 <div class="modal-header bg-light" id="tbModalHeader" style="cursor: move;">
                     <h5 class="modal-title" id="tensorboardModalLabel">📈 TensorBoard 实时训练监控 (可拖动/缩放)</h5>
                     <div class="ms-auto">
-                        <a href="javascript:void(0);" onclick="window.open('http://' + window.location.hostname + ':6006')" class="btn btn-sm btn-outline-primary me-2">新窗口打开全屏</a>
+                        <a href="javascript:void(0);" onclick="window.open(getAutoDLUrl({{ tensorboard_port }}))" class="btn btn-sm btn-outline-primary me-2">新窗口打开全屏</a>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                 </div>
@@ -253,14 +731,128 @@
                 handle: "#tbModalHeader"
             });
             
-            // 下载模型绑定
-            $('#downloadModelBtn').click(function() {
-                var selectedModel = $('#baseModelSelect').val();
+            function getModelPickerMeta(kind) {
+                if (kind === 'cpt') {
+                    return {
+                        category: $('#cptModelCategorySelect'),
+                        input: $('#cptBaseModelSelect'),
+                        datalist: $('#cptBaseModelDatalist'),
+                        searchBtn: $('#cptSearchModelBtn'),
+                        downloadBtn: $('#cptDownloadModelBtn'),
+                        deleteBtn: $('#cptDeleteModelBtn')
+                    };
+                }
+                return {
+                    category: $('#modelCategorySelect'),
+                    input: $('#baseModelSelect'),
+                    datalist: $('#baseModelDatalist'),
+                    searchBtn: $('#searchModelBtn'),
+                    downloadBtn: $('#downloadModelBtn'),
+                    deleteBtn: $('#deleteModelBtn')
+                };
+            }
+
+            function renderModelPickerOptions(kind) {
+                var meta = getModelPickerMeta(kind);
+                var category = meta.category.val();
+                var datalist = meta.datalist;
+                var input = meta.input;
+                var currentValue = input.data('target-value') || input.val();
+                datalist.empty();
+
+                if (category === 'vllm') {
+                    var details = cachedFinetuneModels.vllm_detail || [];
+
+                    if (details.length > 0) {
+                        var deployedModels = details.filter(m => m.deployed);
+                        var localFinetuned = details.filter(m => !m.deployed && (m.type === 'finetuned' || m.type === 'merged'));
+                        var hfModels = details.filter(m => !m.deployed && m.type === 'base');
+
+                        if (deployedModels.length > 0) {
+                            deployedModels.forEach(function(model) {
+                                var typeLabel = MODEL_TYPE_LABELS[model.type] || '';
+                                var label = `🟢 ${model.name} ${typeLabel}`.trim();
+                                datalist.append(`<option value="${model.raw_name || model.name}" data-type="${model.type}">${label}</option>`);
+                            });
+                        }
+
+                        if (localFinetuned.length > 0) {
+                            localFinetuned.forEach(function(model) {
+                                var typeLabel = MODEL_TYPE_LABELS[model.type] || '';
+                                var label = `${model.name} ${typeLabel}`.trim();
+                                datalist.append(`<option value="${model.raw_name || model.name}" data-type="${model.type}">${label}</option>`);
+                            });
+                        }
+
+                        if (hfModels.length > 0) {
+                            hfModels.forEach(function(model) {
+                                datalist.append(`<option value="${model.raw_name || model.name}" data-type="${model.type}">${model.name}</option>`);
+                            });
+                        }
+
+                        input.attr('placeholder', '请选择或输入模型ID...');
+                    } else {
+                        input.attr('placeholder', '无可用模型，可手动输入...');
+                    }
+                } else {
+                    var models = cachedFinetuneModels[category] || [];
+
+                    if (category === 'hf') {
+                        if (models.length > 0) {
+                            models.forEach(function(model) {
+                                datalist.append(`<option value="${model}">${model}</option>`);
+                            });
+                            input.attr('placeholder', '请选择已下载的模型...');
+                        } else {
+                            input.attr('placeholder', '暂无本地模型，请到"在线模型"下载...');
+                        }
+                    } else if (category === 'online') {
+                        if (models.length > 0) {
+                            models.forEach(function(model) {
+                                datalist.append(`<option value="${model}">${model}</option>`);
+                            });
+                        }
+                        input.attr('placeholder', '输入关键词搜索模型（如 Qwen、LLaMA）...');
+                    } else if (models.length > 0) {
+                        models.forEach(function(model) {
+                            datalist.append(`<option value="${model}">${model}</option>`);
+                        });
+                        input.attr('placeholder', '请选择或输入模型ID...');
+                    } else {
+                        input.attr('placeholder', '无可用模型，可手动输入...');
+                    }
+                }
+
+                if (currentValue) {
+                    input.val(currentValue);
+                    input.removeData('target-value');
+                } else {
+                    input.val('');
+                }
+
+                if (category === 'online') {
+                    meta.downloadBtn.show();
+                    meta.deleteBtn.hide();
+                    meta.searchBtn.show();
+                } else if (category === 'hf') {
+                    meta.downloadBtn.hide();
+                    meta.deleteBtn.show();
+                    meta.searchBtn.hide();
+                } else {
+                    meta.downloadBtn.hide();
+                    meta.deleteBtn.show();
+                    meta.searchBtn.hide();
+                }
+            }
+
+            function handleDownloadModel(kind) {
+                var meta = getModelPickerMeta(kind);
+                var selectedModel = meta.input.val();
                 if (!selectedModel) {
                     alert('请先选择要下载的模型！');
                     return;
                 }
-                var btn = $(this);
+                var btn = meta.downloadBtn;
                 btn.prop('disabled', true).text('下载中...');
                 
                 $.ajax({
@@ -278,6 +870,13 @@
                         btn.prop('disabled', false).text('⬇️ 下载');
                     }
                 });
+            }
+
+            $('#downloadModelBtn').click(function() {
+                handleDownloadModel('teacher');
+            });
+            $('#cptDownloadModelBtn').click(function() {
+                handleDownloadModel('cpt');
             });
             
             // 监听模态框关闭事件，清除 iframe 的 src 以释放资源
@@ -289,68 +888,118 @@
             let cachedFinetuneModels = {
                 ollama: [],
                 vllm: [],
+                vllm_detail: [],  // 新增：包含详细信息的vLLM模型列表
                 hf: [],
                 online: []
             };
             
-            // 预设的 Hugging Face 常用模型示例
-            const defaultHfModels = [
-                "Qwen/Qwen2.5-0.5B-Instruct",
-                "Qwen/Qwen2.5-1.5B-Instruct",
-                "Qwen/Qwen2.5-7B-Instruct",
-                "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct",
-                "THUDM/glm-4-9b-chat"
-            ];
+
 
             function updateBaseModelOptions() {
-                var category = $('#modelCategorySelect').val();
-                var datalist = $('#baseModelDatalist');
-                var input = $('#baseModelSelect');
-                datalist.empty();
+                renderModelPickerOptions('teacher');
+            }
+
+            function updateCptBaseModelOptions() {
+                renderModelPickerOptions('cpt');
+            }
+
+            window.refreshBaseModelOptions = updateBaseModelOptions;
+            window.refreshCptBaseModelOptions = updateCptBaseModelOptions;
+
+            // 训练模式预设配置
+            function applyTrainingPreset() {
+                var mode = $('#trainingModeSelect').val();
                 
-                var models = cachedFinetuneModels[category] || [];
-                
-                // 如果是 hf 类别，把本地已有的和预设的合并，方便用户选择或直接下载
-                if (category === 'hf') {
-                    let combinedHfModels = [...new Set([...models, ...defaultHfModels])];
-                    combinedHfModels.forEach(function(model) {
-                        let label = models.includes(model) ? `${model} (已缓存)` : `${model} (未下载)`;
-                        datalist.append(`<option value="${model}">${label}</option>`);
-                    });
-                    input.attr('placeholder', '请选择或输入Hugging Face模型ID...');
-                } else if (models.length > 0) {
-                    models.forEach(function(model) {
-                        datalist.append(`<option value="${model}">${model}</option>`);
-                    });
-                    input.attr('placeholder', '请选择或输入模型ID...');
+                if (mode === 'local') {
+                    // 本地调试模式：低资源消耗，快速验证流程
+                    $('#learningRateInput').val('0.0002');
+                    $('#epochsInput').val('2.0');
+                    $('#batchSizeInput').val('1');
+                    $('#maxLengthInput').val('256');
+                    $('#gradAccInput').val('2');
+                    $('#precisionSelect').val('fp32');
+                    $('#quantizationSelect').val('4');
+                    $('#optimizerSelect').val('adamw_torch');
+                    $('#flashAttnSelect').val('auto');
+                    $('#evalStepsInput').val('0');
+                    $('#saveStepsInput').val('10');
+                    // 高级配置
+                    $('#loraRankInput').val('8');
+                    $('#loraAlphaInput').val('16');
+                    $('#loraDropoutInput').val('0.1');
+                    $('#loraTargetSelect').val('all');
+                    $('#lrSchedulerSelect').val('cosine');
+                    $('#warmupStepsInput').val('0');
+                    $('#warmupRatioInput').val('0.1');
+                    $('#loggingStepsInput').val('1');
+                    $('#weightDecayInput').val('0.0');
+                    $('#maxGradNormInput').val('1.0');
+                    $('#seedInput').val('42');
+                    $('#packingSelect').val('false');
+                    $('#ropeScalingSelect').val('none');
+                    $('#deepspeedSelect').val('none');
                 } else {
-                    input.attr('placeholder', '无可用模型，可手动输入...');
-                }
-                
-                // 清空当前输入值，除非用户想保留
-                input.val('');
-                
-                // 根据类别显示/隐藏按钮
-                if (category === 'online') {
-                    $('#downloadModelBtn').show();
-                    $('#deleteModelBtn').hide();
-                } else if (category === 'hf') {
-                    $('#downloadModelBtn').show(); // 允许对 hf 类别进行下载，按输入的ID下载
-                    $('#deleteModelBtn').show(); // 允许删除本地 HF 模型
-                } else {
-                    $('#downloadModelBtn').hide();
-                    $('#deleteModelBtn').show();
+                    // 线上训练模式：高质量训练
+                    $('#learningRateInput').val('0.0001');
+                    $('#epochsInput').val('5.0');
+                    $('#batchSizeInput').val('2');
+                    $('#maxLengthInput').val('1024');
+                    $('#gradAccInput').val('8');
+                    $('#precisionSelect').val('bf16');
+                    $('#quantizationSelect').val('4');
+                    $('#optimizerSelect').val('adamw_torch');
+                    $('#flashAttnSelect').val('auto');
+                    $('#evalStepsInput').val('50');
+                    $('#saveStepsInput').val('100');
+                    // 高级配置
+                    $('#loraRankInput').val('16');
+                    $('#loraAlphaInput').val('32');
+                    $('#loraDropoutInput').val('0.05');
+                    $('#loraTargetSelect').val('all');
+                    $('#lrSchedulerSelect').val('cosine');
+                    $('#warmupStepsInput').val('0');
+                    $('#warmupRatioInput').val('0.1');
+                    $('#loggingStepsInput').val('10');
+                    $('#weightDecayInput').val('0.01');
+                    $('#maxGradNormInput').val('1.0');
+                    $('#seedInput').val('42');
+                    $('#packingSelect').val('false');
+                    $('#ropeScalingSelect').val('none');
+                    $('#deepspeedSelect').val('none');
                 }
             }
 
+            // 更新训练模式指标指示器
+            function updateTrainingModeIndicator() {
+                var mode = $('#trainingModeSelect').val();
+                var indicator = $('#trainingModeIndicator');
+                if (mode === 'local') {
+                    indicator.removeClass('bg-primary').addClass('bg-info');
+                    indicator.text('指标关注: loss趋势、收敛性、无OOM');
+                } else {
+                    indicator.removeClass('bg-info').addClass('bg-primary');
+                    indicator.text('指标关注: eval_loss、perplexity、BLEU/ROUGE、泛化能力');
+                }
+            }
+            // 初始化指示器
+            updateTrainingModeIndicator();
+
             $('#modelCategorySelect').change(function() {
                 updateBaseModelOptions();
+            });
+            $('#cptModelCategorySelect').change(function() {
+                updateCptBaseModelOptions();
             });
 
             window.loadModels = function() {
                 var refreshBtn = $('#refreshModelBtn');
                 var originalRefreshText = refreshBtn.html();
+                var cptRefreshBtn = $('#refreshCptModelBtn');
+                var cptOriginalRefreshText = cptRefreshBtn.length ? cptRefreshBtn.html() : '';
                 refreshBtn.prop('disabled', true).html('...');
+                if (cptRefreshBtn.length) {
+                    cptRefreshBtn.prop('disabled', true).html('...');
+                }
                 
                 $.ajax({
                     url: '/ollama/models',
@@ -358,55 +1007,357 @@
                     success: function(response) {
                         cachedFinetuneModels.ollama = response.ollama_models || [];
                         cachedFinetuneModels.vllm = response.vllm_models || [];
+                        cachedFinetuneModels.vllm_detail = response.vllm_models_detail || [];
                         cachedFinetuneModels.hf = response.hf_models || [];
                         cachedFinetuneModels.online = response.online_models || [];
                         updateBaseModelOptions();
+                        updateCptBaseModelOptions();
                     },
                     error: function() {
                         cachedFinetuneModels.ollama = [];
                         cachedFinetuneModels.vllm = [];
+                        cachedFinetuneModels.vllm_detail = [];
                         cachedFinetuneModels.hf = [];
                         cachedFinetuneModels.online = [];
                         updateBaseModelOptions();
+                        updateCptBaseModelOptions();
                     },
                     complete: function() {
                         refreshBtn.prop('disabled', false).html(originalRefreshText);
+                        if (cptRefreshBtn.length) {
+                            cptRefreshBtn.prop('disabled', false).html(cptOriginalRefreshText);
+                        }
                     }
                 });
             }
             
+            // 搜索在线模型（通过 hf-mirror.com 国内源）
+            window.searchOnlineModels = function(kind) {
+                var pickerKind = kind || 'teacher';
+                var meta = getModelPickerMeta(pickerKind);
+                var query = meta.input.val();
+                if (!query || query.trim().length < 2) {
+                    alert('请输入至少2个字符的搜索关键词');
+                    return;
+                }
+                
+                var searchBtn = meta.searchBtn;
+                searchBtn.prop('disabled', true).html('搜索中...');
+                
+                $.ajax({
+                    url: '/api/search_models',
+                    type: 'GET',
+                    data: { q: query.trim() },
+                    success: function(response) {
+                        var models = response.models || [];
+                        var datalist = meta.datalist;
+                        datalist.empty();
+                        
+                        if (models.length > 0) {
+                            // 标记已下载的模型
+                            var localHfModels = cachedFinetuneModels.hf || [];
+                            models.forEach(function(model) {
+                                var modelId = model.id || model;
+                                var downloads = model.downloads ? ` (${formatDownloads(model.downloads)}次下载)` : '';
+                                var isLocal = localHfModels.includes(modelId);
+                                var label = isLocal ? `${modelId} ✅ 已下载${downloads}` : `${modelId}${downloads}`;
+                                datalist.append(`<option value="${modelId}">${label}</option>`);
+                            });
+                        } else {
+                            alert('未找到匹配的模型，请尝试其他关键词');
+                        }
+                    },
+                    error: function(err) {
+                        alert('搜索失败: ' + (err.responseJSON ? err.responseJSON.error : '网络错误'));
+                    },
+                    complete: function() {
+                        searchBtn.prop('disabled', false).html('🔍 搜索');
+                    }
+                });
+            }
+
+            // 格式化下载次数
+            function formatDownloads(num) {
+                if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+                if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+                return num.toString();
+            }
+            
             // 初始加载
             window.loadModels();
+
+            // 删除选中的基座模型
+            function deleteSelectedBaseModel(kind) {
+                var pickerKind = kind || 'teacher';
+                var meta = getModelPickerMeta(pickerKind);
+                var category = meta.category.val();
+                var selectedModel = meta.input.val();
+
+                if (!selectedModel) {
+                    alert('请先选择一个要删除的模型');
+                    return;
+                }
+                
+                var modelLabel = '';
+                if (category === 'vllm') modelLabel = 'vLLM';
+                else if (category === 'hf') modelLabel = 'Hugging Face';
+                else if (category === 'ollama') modelLabel = 'Ollama';
+                else {
+                    alert('在线模型不支持删除操作');
+                    return;
+                }
+                
+                if (confirm(`确定要删除本地 ${modelLabel} 模型 [${selectedModel}] 吗？\n注意：此操作不可逆！`)) {
+                    var btn = meta.deleteBtn;
+                    btn.prop('disabled', true).html('删除中...');
+                    $.ajax({
+                        url: '/ollama/models',
+                        type: 'DELETE',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ model_name: selectedModel, model_type: category }),
+                        success: function(res) {
+                            alert(res.message || '删除成功');
+                            meta.input.val('');
+                            window.loadModels(); // 重新加载列表
+                        },
+                        error: function(err) {
+                            alert('删除失败: ' + (err.responseJSON ? err.responseJSON.error : '未知错误'));
+                        },
+                        complete: function() {
+                            btn.prop('disabled', false).html('🗑️ 删除');
+                        }
+                    });
+                }
+            }
+            window.deleteBaseModel = function() {
+                deleteSelectedBaseModel('teacher');
+            }
+            window.deleteCptBaseModel = function() {
+                deleteSelectedBaseModel('cpt');
+            }
             
             // 获取并加载 uploads/datasets/raw 目录下的 JSONL 文件列表
             function loadDatasets() {
                 var select = $('#datasetSelect');
+                var cptSelect = $('#cptDatasetSelect');
+                var rawSelect = $('#rawDatasetSelect');
                 var refreshBtn = $('#refreshDatasetBtn');
                 var originalRefreshText = refreshBtn.html();
+                var selectedTeacherDataset = select.val();
+                var selectedCptDataset = cptSelect.val();
+                var preferredDataset = window.preferredCleanedDataset || '';
                 refreshBtn.prop('disabled', true).html('...');
                 select.html('<option value="">加载中...</option>');
+                cptSelect.html('<option value="">加载中...</option>');
+                rawSelect.html('<option value="">加载中...</option>');
                 
                 $.ajax({
                     url: '/api/get_datasets',
                     type: 'GET',
                     success: function(response) {
                         select.empty();
-                        if (response.datasets && response.datasets.length > 0) {
-                            response.datasets.forEach(function(file) {
+                        cptSelect.empty();
+                        rawSelect.empty();
+                        
+                        if (response.cleaned_datasets && response.cleaned_datasets.length > 0) {
+                            response.cleaned_datasets.forEach(function(file) {
                                 select.append(`<option value="${file}">${file}</option>`);
+                                cptSelect.append(`<option value="${file}">${file}</option>`);
                             });
                         } else {
-                            select.append('<option value="">uploads/datasets/raw 目录下未找到 .jsonl 文件</option>');
+                            select.append('<option value="">uploads/datasets/cleaned 目录下未找到清洗后的数据集</option>');
+                            cptSelect.append('<option value="">uploads/datasets/cleaned 目录下未找到清洗后的数据集</option>');
+                        }
+
+                        var teacherTarget = preferredDataset || selectedTeacherDataset;
+                        var cptTarget = preferredDataset || selectedCptDataset;
+                        if (teacherTarget && select.find(`option[value="${teacherTarget}"]`).length > 0) {
+                            select.val(teacherTarget);
+                        }
+                        if (cptTarget && cptSelect.find(`option[value="${cptTarget}"]`).length > 0) {
+                            cptSelect.val(cptTarget);
+                        }
+                        
+                        if (response.raw_datasets && response.raw_datasets.length > 0) {
+                            response.raw_datasets.forEach(function(file) {
+                                rawSelect.append(`<option value="${file}">${file}</option>`);
+                            });
+                        } else {
+                            rawSelect.append('<option value="">未找到原始文件</option>');
                         }
                     },
                     error: function() {
                         select.html('<option value="">获取数据集列表失败</option>');
+                        cptSelect.html('<option value="">获取数据集列表失败</option>');
+                        rawSelect.html('<option value="">获取数据集列表失败</option>');
                     },
                     complete: function() {
                         refreshBtn.prop('disabled', false).html(originalRefreshText);
                     }
                 });
             }
+            
+            // 暴露给全局，供第一个Tab的按钮调用
+            window.loadRawDatasets = loadDatasets;
+            $('#step2-tab').on('shown.bs.tab', function() {
+                if (typeof applyLatestCptModelToTeacher === 'function') {
+                    applyLatestCptModelToTeacher(false);
+                }
+            });
+            
+            // 加载微调过的模型列表，供第三、四阶段选择
+            function loadFinetunedModels() {
+                // 同时获取微调模型列表和vLLM部署模型列表
+                $.ajax({
+                    url: '/finetuned_models_list',
+                    type: 'GET',
+                    success: function(res) {
+                        var teacherSelect = $('#teacherModelSelect');
+                        var quantizeSelect = $('#quantizeModelSelect');
+                        teacherSelect.empty();
+                        quantizeSelect.empty();
+                        
+                        // ========== 教师模型选项 ==========
+                        // 1. 已部署的vLLM模型（从ollama/models获取）
+                        $.ajax({
+                            url: '/ollama/models',
+                            type: 'GET',
+                            success: function(vllmRes) {
+                                var vllmDetails = vllmRes.vllm_models_detail || [];
+                                var deployedModels = vllmDetails.filter(m => m.deployed);
+                                
+                                // 已部署模型组
+                                if (deployedModels.length > 0) {
+                                    var deployedGroup = $('<optgroup label="已部署模型"></optgroup>');
+                                    deployedModels.forEach(function(model) {
+                                        var typeLabel = MODEL_TYPE_LABELS[model.type] || '';
+                                        var label = `🟢 ${model.name} ${typeLabel}`.trim();
+                                        deployedGroup.append(`<option value="${model.raw_name || model.name}">${label}</option>`);
+                                    });
+                                    teacherSelect.append(deployedGroup);
+                                }
+                                
+                                // 2. 已合并的完整模型组
+                                var mergedModels = res.merged_models || [];
+                                if (mergedModels.length > 0) {
+                                    var mergedGroup = $('<optgroup label="已合并模型"></optgroup>');
+                                    mergedModels.forEach(function(m) {
+                                        var modelName = (typeof m === 'object') ? m.name : m;
+                                        var modelPath = (typeof m === 'object') ? (m.path || m.name) : m;
+                                        mergedGroup.append(`<option value="${modelPath}">${modelName} (完整模型)</option>`);
+                                    });
+                                    teacherSelect.append(mergedGroup);
+                                }
+                                
+                                // 3. 量化模型组
+                                var quantizedModels = res.quantized_models || [];
+                                if (quantizedModels.length > 0) {
+                                    var quantizedGroup = $('<optgroup label="量化模型"></optgroup>');
+                                    quantizedModels.forEach(function(m) {
+                                        var typeLabel = MODEL_TYPE_LABELS[m.type] || '';
+                                        quantizedGroup.append(`<option value="${m.path || m.name}">${m.name} ${typeLabel}</option>`);
+                                    });
+                                    teacherSelect.append(quantizedGroup);
+                                }
+                                
+                                // 4. LoRA模型组
+                                var loraModels = res.lora_models || [];
+                                if (loraModels.length > 0) {
+                                    var loraGroup = $('<optgroup label="LoRA模型"></optgroup>');
+                                    loraModels.forEach(function(m) {
+                                        var modelName = (typeof m === 'object') ? m.name : m;
+                                        var modelPath = (typeof m === 'object') ? (m.path || m.name) : m;
+                                        loraGroup.append(`<option value="${modelPath}">${modelName} (LoRA)</option>`);
+                                    });
+                                    teacherSelect.append(loraGroup);
+                                }
+                                
+                                if (teacherSelect.children().length === 0) {
+                                    teacherSelect.append('<option value="">未找到可用的教师模型</option>');
+                                }
+                            },
+                            error: function() {
+                                // 如果获取vLLM模型失败，只显示微调模型
+                                var mergedModels = res.merged_models || [];
+                                if (mergedModels.length > 0) {
+                                    mergedModels.forEach(function(m) {
+                                        var modelName = (typeof m === 'object') ? m.name : m;
+                                        var modelPath = (typeof m === 'object') ? (m.path || m.name) : m;
+                                        teacherSelect.append(`<option value="${modelPath}">${modelName} (完整模型)</option>`);
+                                    });
+                                } else {
+                                    teacherSelect.append('<option value="">未找到已合并的模型（请先完成微调并合并）</option>');
+                                }
+                            }
+                        });
+                        
+                        // ========== 待量化/部署模型选项 ==========
+                        // 量化模型下拉列表：包含 LoRA 模型、其他模型、以及已量化模型（用于部署）
+                        var loraModels = res.lora_models || [];
+                        var otherModels = res.other_models || [];
+                        var quantizedModels = res.quantized_models || [];
+                        var mergedModels = res.merged_models || [];
+                        
+                        // 添加分组：已量化模型（可用于部署）
+                        if (quantizedModels.length > 0) {
+                            var quantizedGroup = $('<optgroup label="已量化模型（可直接部署）"></optgroup>');
+                            quantizedModels.forEach(function(m) {
+                                var typeLabel = MODEL_TYPE_LABELS[m.type] || '(量化)';
+                                quantizedGroup.append(`<option value="${m.name}">${m.name} ${typeLabel}</option>`);
+                            });
+                            quantizeSelect.append(quantizedGroup);
+                        }
+                        
+                        // 添加分组：可量化模型（LoRA/合并模型）
+                        var availableForQuantize = [];
+                        loraModels.forEach(function(m) {
+                            var modelName = (typeof m === 'object') ? m.name : m;
+                            var modelPath = (typeof m === 'object') ? (m.path || m.name) : m;
+                            availableForQuantize.push({name: modelName, path: modelPath, type: 'lora'});
+                        });
+                        mergedModels.forEach(function(m) {
+                            var modelName = (typeof m === 'object') ? m.name : m;
+                            var modelPath = (typeof m === 'object') ? (m.path || m.name) : m;
+                            availableForQuantize.push({name: modelName, path: modelPath, type: 'merged'});
+                        });
+                        otherModels.forEach(function(m) {
+                            var modelName = (typeof m === 'object') ? m.name : m;
+                            var modelPath = (typeof m === 'object') ? (m.path || m.name) : m;
+                            availableForQuantize.push({name: modelName, path: modelPath, type: 'other'});
+                        });
+                        
+                        if (availableForQuantize.length > 0) {
+                            var quantizeGroup = $('<optgroup label="可量化模型"></optgroup>');
+                            availableForQuantize.forEach(function(m) {
+                                if (m.type === 'lora') {
+                                    quantizeGroup.append(`<option value="${m.path}">${m.name} (LoRA)</option>`);
+                                } else if (m.type === 'merged') {
+                                    quantizeGroup.append(`<option value="${m.path}">${m.name} (完整模型)</option>`);
+                                } else {
+                                    quantizeGroup.append(`<option value="${m.path}">${m.name}</option>`);
+                                }
+                            });
+                            quantizeSelect.append(quantizeGroup);
+                        }
+                        
+                        if (quantizeSelect.children().length === 0) {
+                            quantizeSelect.append('<option value="">未找到可用模型</option>');
+                        }
+                        
+                        // 绑定模型选择变化事件，控制删除按钮显示
+                        quantizeSelect.change(function() {
+                            var selectedModel = $(this).val();
+                            if (selectedModel) {
+                                $('#deleteQuantizeModelBtn').show();
+                            } else {
+                                $('#deleteQuantizeModelBtn').hide();
+                            }
+                        });
+                    }
+                });
+            }
+            window.loadFinetunedModels = loadFinetunedModels;
+            loadFinetunedModels();
             
             // 绑定刷新数据集按钮事件
             $('#refreshDatasetBtn').click(function() {
@@ -424,7 +1375,7 @@
                     alert('请先选择要删除的模型！');
                     return;
                 }
-                
+                            
                 if (category === 'ollama' || category === 'vllm' || category === 'hf') {
                     var modelLabel = category === 'ollama' ? 'Ollama' : (category === 'vllm' ? 'vLLM' : 'Hugging Face');
                     if (confirm(`确定要删除本地 ${modelLabel} 模型 [${selectedModel}] 吗？\n注意：此操作不可逆！`)) {
@@ -440,7 +1391,7 @@
                                 window.loadModels(); // 重新加载列表
                             },
                             error: function(err) {
-                                alert('删除失败: ' + (err.responseJSON ? err.responseJSON.error : '未知错误'));
+                                alert('删除失败：' + (err.responseJSON ? err.responseJSON.error : '未知错误'));
                             },
                             complete: function() {
                                 btn.prop('disabled', false);
@@ -449,9 +1400,254 @@
                     }
                 }
             });
+                        
+            // 删除选中的待量化模型
+            window.deleteQuantizeModel = function() {
+                var selectedModel = $('#quantizeModelSelect').val();
+                if (!selectedModel) {
+                    alert('请先选择要删除的模型！');
+                    return;
+                }
+                            
+                // 判断模型类型
+                var modelType = 'vllm'; // 默认为 vllm 类型
+                var modelName = selectedModel;
+                            
+                if (selectedModel.includes('_lora')) {
+                    modelType = 'vllm';
+                } else if (selectedModel.includes('_awq_4bit') || selectedModel.includes('_gptq')) {
+                    modelType = 'vllm';
+                }
+                            
+                if (confirm(`确定要删除本地模型 [${selectedModel}] 吗？\n注意：此操作不可逆！`)) {
+                    var btn = $('#deleteQuantizeModelBtn');
+                    btn.prop('disabled', true);
+                    $.ajax({
+                        url: '/ollama/models',
+                        type: 'DELETE',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ model_name: modelName, model_type: modelType }),
+                        success: function(res) {
+                            alert(res.message || '删除成功');
+                            loadFinetunedModels(); // 重新加载列表
+                        },
+                        error: function(err) {
+                            alert('删除失败：' + (err.responseJSON ? err.responseJSON.error : '未知错误'));
+                        },
+                        complete: function() {
+                            btn.prop('disabled', false);
+                        }
+                    });
+                }
+            };
         });
 
         let currentAbortController = null;
+        let currentCptAbortController = null;
+        window.latestCptModelName = '';
+
+        function applyCptTrainingPreset() {
+            var mode = $('#cptTrainingModeSelect').val();
+
+            if (mode === 'local') {
+                $('#cptLearningRateInput').val('0.00005');
+                $('#cptEpochsInput').val('1.0');
+                $('#cptBatchSizeInput').val('1');
+                $('#cptMaxLengthInput').val('512');
+                $('#cptGradAccInput').val('4');
+                $('#cptPrecisionSelect').val('fp32');
+                $('#cptOptimizerSelect').val('adamw_torch');
+                $('#cptLrSchedulerSelect').val('cosine');
+                $('#cptWarmupStepsInput').val('0');
+                $('#cptWarmupRatioInput').val('0.1');
+                $('#cptLoggingStepsInput').val('5');
+                $('#cptSaveStepsInput').val('50');
+                $('#cptWeightDecayInput').val('0.0');
+                $('#cptMaxGradNormInput').val('1.0');
+                $('#cptSeedInput').val('42');
+                $('#cptPackingSelect').val('false');
+            } else {
+                $('#cptLearningRateInput').val('0.00005');
+                $('#cptEpochsInput').val('2.0');
+                $('#cptBatchSizeInput').val('2');
+                $('#cptMaxLengthInput').val('1024');
+                $('#cptGradAccInput').val('8');
+                $('#cptPrecisionSelect').val('bf16');
+                $('#cptOptimizerSelect').val('adamw_torch');
+                $('#cptLrSchedulerSelect').val('cosine');
+                $('#cptWarmupStepsInput').val('0');
+                $('#cptWarmupRatioInput').val('0.1');
+                $('#cptLoggingStepsInput').val('10');
+                $('#cptSaveStepsInput').val('100');
+                $('#cptWeightDecayInput').val('0.01');
+                $('#cptMaxGradNormInput').val('1.0');
+                $('#cptSeedInput').val('42');
+                $('#cptPackingSelect').val('true');
+            }
+        }
+
+        function updateCptTrainingModeIndicator() {
+            var mode = $('#cptTrainingModeSelect').val();
+            var indicator = $('#cptTrainingModeIndicator');
+            if (mode === 'local') {
+                indicator.removeClass('bg-primary').addClass('bg-info');
+                indicator.text('指标关注: 领域语料收敛、无 OOM');
+            } else {
+                indicator.removeClass('bg-info').addClass('bg-primary');
+                indicator.text('指标关注: 领域知识注入、稳定收敛、泛化保持');
+            }
+        }
+
+        applyCptTrainingPreset();
+        updateCptTrainingModeIndicator();
+
+        function applyLatestCptModelToTeacher(showMessage) {
+            if (!window.latestCptModelName) {
+                if (showMessage) {
+                    alert('当前还没有可衔接到教师微调的 CPT 模型');
+                }
+                return;
+            }
+
+            $('#modelCategorySelect').val('vllm');
+            if (typeof window.refreshBaseModelOptions === 'function') {
+                $('#baseModelSelect').data('target-value', window.latestCptModelName);
+                window.refreshBaseModelOptions();
+            }
+            $('#baseModelSelect').val(window.latestCptModelName);
+
+            if (showMessage) {
+                $('#terminalOutput').append(`> 已自动预填 CPT 基座模型: ${window.latestCptModelName}<br>`);
+            }
+        }
+
+        function goToTeacherFinetune() {
+            applyLatestCptModelToTeacher(true);
+            var teacherTab = document.getElementById('step2-tab');
+            if (teacherTab) {
+                bootstrap.Tab.getOrCreateInstance(teacherTab).show();
+            }
+        }
+
+        function resetCptButtons() {
+            $('#startCptBtn').prop('disabled', false).removeClass('d-none').text('开始 CPT 任务');
+            $('#stopCptBtn').addClass('d-none');
+        }
+
+        function startCptTraining() {
+            var model = $('#cptBaseModelSelect').val();
+            var dataset = $('#cptDatasetSelect').val();
+
+            if (!model) {
+                alert('请选择一个 CPT 基座模型');
+                return;
+            }
+            if (!dataset) {
+                alert('请选择阶段 1 产出的清洗数据集');
+                return;
+            }
+
+            var formData = new FormData();
+            formData.append('baseModel', model);
+            formData.append('datasetFileName', dataset);
+            formData.append('trainingMode', $('#cptTrainingModeSelect').val());
+            formData.append('epochs', $('#cptEpochsInput').val());
+            formData.append('batchSize', $('#cptBatchSizeInput').val());
+            formData.append('learningRate', $('#cptLearningRateInput').val());
+            formData.append('optimizer', $('#cptOptimizerSelect').val());
+            formData.append('lrScheduler', $('#cptLrSchedulerSelect').val());
+            formData.append('maxLength', $('#cptMaxLengthInput').val());
+            formData.append('precision', $('#cptPrecisionSelect').val());
+            formData.append('packing', $('#cptPackingSelect').val());
+            formData.append('warmupSteps', $('#cptWarmupStepsInput').val());
+            formData.append('warmupRatio', $('#cptWarmupRatioInput').val());
+            formData.append('gradAcc', $('#cptGradAccInput').val());
+            formData.append('saveSteps', $('#cptSaveStepsInput').val());
+            formData.append('loggingSteps', $('#cptLoggingStepsInput').val());
+            formData.append('weightDecay', $('#cptWeightDecayInput').val());
+            formData.append('maxGradNorm', $('#cptMaxGradNormInput').val());
+            formData.append('seed', $('#cptSeedInput').val());
+
+            $('#startCptBtn').prop('disabled', true).addClass('d-none');
+            $('#stopCptBtn').removeClass('d-none');
+            $('#cptOutput').empty().append('> 正在向服务器提交 CPT 任务...\n');
+
+            currentCptAbortController = new AbortController();
+
+            fetch('/api/cpt/start', {
+                method: 'POST',
+                body: formData,
+                signal: currentCptAbortController.signal
+            }).then(response => {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder('utf-8');
+                let buffer = '';
+
+                function readStream() {
+                    reader.read().then(({done, value}) => {
+                        if (done) {
+                            resetCptButtons();
+                            if (window.latestCptModelName) {
+                                if (typeof loadModels === 'function') {
+                                    loadModels();
+                                }
+                                if (typeof loadFinetunedModels === 'function') {
+                                    loadFinetunedModels();
+                                }
+                                applyLatestCptModelToTeacher(false);
+                            }
+                            return;
+                        }
+
+                        buffer += decoder.decode(value, {stream: true});
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop();
+
+                        lines.forEach(line => {
+                            if (!line.startsWith('data: ')) {
+                                return;
+                            }
+                            const msg = line.substring(6).trim();
+                            if (msg === '[DONE]') {
+                                return;
+                            }
+                            if (msg.startsWith('[CPT_READY]')) {
+                                window.latestCptModelName = msg.replace('[CPT_READY]', '').trim();
+                                $('#cptOutput').append(`> [SUCCESS] 已生成可用于教师微调的 CPT 模型: ${window.latestCptModelName}\n`);
+                                return;
+                            }
+                            $('#cptOutput').append(msg + '\n');
+                            const output = document.getElementById('cptOutput');
+                            output.scrollTop = output.scrollHeight;
+                        });
+
+                        readStream();
+                    }).catch(error => {
+                        if (error.name === 'AbortError') {
+                            $('#cptOutput').append('> CPT 训练已在前端终止，正在通知后端停止进程...\n');
+                        }
+                    });
+                }
+
+                readStream();
+            }).catch(error => {
+                if (error.name !== 'AbortError') {
+                    $('#cptOutput').append(`> 任务提交失败: ${error}\n`);
+                }
+                resetCptButtons();
+            });
+        }
+
+        function stopCptTraining() {
+            if (currentCptAbortController) {
+                currentCptAbortController.abort();
+                currentCptAbortController = null;
+            }
+            $.post('/api/cpt/stop', function(res) {
+                $('#cptOutput').append(`> ${res.message}\n`);
+                resetCptButtons();
+            });
+        }
 
         function startFinetune() {
             var model = $('#baseModelSelect').val();
@@ -471,15 +1667,17 @@
             var formData = new FormData();
             formData.append('baseModel', model);
             formData.append('datasetFileName', selectedDataset); // 传递选中的文件名
+            // 训练模式：本地调试 vs 线上训练
+            var trainingMode = $('#trainingModeSelect').val();
+            formData.append('trainingMode', trainingMode);
             // newModelName 由后端自动生成版本号，前端不再传递
             formData.append('epochs', $('#epochsInput').val());
             formData.append('batchSize', $('#batchSizeInput').val());
-            formData.append('learningRate', $('#lrInput').val());
-            formData.append('warmupSteps', $('#warmupStepsInput').val());
+            formData.append('learningRate', $('#learningRateInput').val());
             formData.append('loraRank', $('#loraRankInput').val());
             formData.append('loraAlpha', $('#loraAlphaInput').val());
             formData.append('loraDropout', $('#loraDropoutInput').val());
-            formData.append('loraTarget', $('#loraTargetInput').val());
+            formData.append('loraTarget', $('#loraTargetSelect').val());
             formData.append('optimizer', $('#optimizerSelect').val());
             formData.append('lrScheduler', $('#lrSchedulerSelect').val());
             formData.append('maxLength', $('#maxLengthInput').val());
@@ -568,8 +1766,8 @@
         }
 
         // TensorBoard 弹出框逻辑
-        function openTensorBoardModal() {
-            var btn = $('#openTbBtn');
+        function openTensorBoardModal(source) {
+            var btn = source === 'cpt' ? $('#openCptTbBtn') : $('#openTbBtn');
             var originalText = btn.html();
             btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 正在拉起...');
 
@@ -577,16 +1775,15 @@
             $.post('/api/start_tensorboard', function(res) {
                 if (res.status === 'ok' || res.status === 'already_running') {
                     // 使用轮询检测端口是否真正可用，防止拒绝连接
-                    var maxRetries = 15; // 稍微延长等待次数，服务器冷启动可能较慢
+                    var maxRetries = 30; // 延长等待次数，线上环境启动可能较慢
                     var retries = 0;
                     
                     function checkTbReady() {
                         $.get('/api/check_tensorboard', function(checkRes) {
                             if (checkRes.running) {
-                                // 支持自定义线上外网地址映射
-                                var tbUrl = '{{ tensorboard_public_url }}';
+                                var tbUrl = checkRes.public_url || '{{ tensorboard_public_url }}';
                                 if (!tbUrl) {
-                                    tbUrl = 'http://' + window.location.hostname + ':{{ tensorboard_port }}';
+                                    tbUrl = getAutoDLUrl({{ tensorboard_port }});
                                 }
                                 
                                 $('#tbIframe').attr('src', tbUrl);
@@ -621,11 +1818,659 @@
                     setTimeout(checkTbReady, 1500);
                 } else {
                     btn.prop('disabled', false).html(originalText);
-                    alert('拉起 TensorBoard 失败: ' + res.error);
+                    alert('拉起 TensorBoard 失败: ' + (res.error || '未知错误'));
                 }
-            }).fail(function() {
+            }).fail(function(xhr) {
                 btn.prop('disabled', false).html(originalText);
-                alert('请求后端接口失败');
+                var errorMsg = '请求后端接口失败';
+                if (xhr && xhr.responseJSON && (xhr.responseJSON.error || xhr.responseJSON.message)) {
+                    errorMsg = '请求后端接口失败：' + (xhr.responseJSON.error || xhr.responseJSON.message);
+                }
+                alert(errorMsg);
+            });
+        }
+    </script>
+    <script>
+        function getAutoDLUrl(port) {
+            let hostname = window.location.hostname;
+            if (hostname.includes('seetacloud.com')) {
+                if (port === 7860 || port === 6006 || port === 6008) {
+                    let mappedHost = hostname.replace(/^uu/, 'u');
+                    return `https://${mappedHost}:8443`;
+                }
+            }
+            return `${window.location.protocol}//${window.location.hostname}:${port}`;
+        }
+
+        function openAutoDLUrl(port) {
+            let targetUrl = getAutoDLUrl(port);
+            window.open(targetUrl, '_blank');
+        }
+
+        // 切换模型分析配置显示
+        function toggleModelAnalysis() {
+            var strategy = $('#conversionStrategySelect').val();
+            var configDiv = $('#modelAnalysisConfig');
+            if (strategy === 'knowledge_qa') {
+                configDiv.show();
+            } else {
+                configDiv.hide();
+            }
+        }
+        // 初始化显示状态
+        toggleModelAnalysis();
+
+        // ==================== 数据准备模型选择 - 与问答系统完全复用 ====================
+        let dataPrepCachedModels = {
+            ollama_models: [],
+            vllm_models: [],
+            vllm_models_detail: [],  // 新增：包含详细信息的vLLM模型列表
+            query_online_models: []
+        };
+        let selectedDataPrepModel = null;  // 存储选择的模型
+
+        // 标签映射规则
+        const MODEL_TYPE_LABELS = {
+            'quantized_awq': '(AWQ-4bit)',
+            'quantized_gptq': '(GPTQ-4bit)',
+            'finetuned': '(微调)',
+            'merged': '(合并)',
+            'base': ''
+        };
+
+        // 生成模型显示文本
+        function getModelDisplayText(model) {
+            if (typeof model === 'string') {
+                return model;
+            }
+            // 处理带detail的对象
+            if (model.name && model.type) {
+                var typeLabel = MODEL_TYPE_LABELS[model.type] || '';
+                var deployedPrefix = model.deployed ? '🟢 ' : '';
+                return `${deployedPrefix}${model.name} ${typeLabel}`.trim();
+            }
+            if (model.name) {
+                return model.name;
+            }
+            return model.id || model;
+        }
+
+        // 监听模型类别变化
+        $('#dataPrepModelCategorySelect').change(function() {
+            var category = $(this).val();
+            updateDataPrepModelOptions(category);
+        });
+
+        // 更新模型选项 - 使用optgroup分组显示
+        function updateDataPrepModelOptions(category) {
+            var select = $('#dataPrepModelSelect');
+            var currentValue = select.val() || select.data('target-value');
+            select.empty();
+            
+            if (category === 'vllm') {
+                // vLLM模型使用optgroup分组显示
+                var details = dataPrepCachedModels.vllm_models_detail || [];
+                
+                // 分组模型
+                var deployedModels = details.filter(m => m.deployed);
+                var localFinetuned = details.filter(m => !m.deployed && (m.type === 'finetuned' || m.type === 'merged'));
+                var hfModels = details.filter(m => !m.deployed && m.type === 'base');
+                
+                // 已部署模型组
+                if (deployedModels.length > 0) {
+                    var deployedGroup = $('<optgroup label="已部署模型"></optgroup>');
+                    deployedModels.forEach(function(model) {
+                        var displayText = getModelDisplayText(model);
+                        deployedGroup.append(`<option value="${model.raw_name || model.name}">${displayText}</option>`);
+                    });
+                    select.append(deployedGroup);
+                }
+                
+                // 本地微调模型组
+                if (localFinetuned.length > 0) {
+                    var localGroup = $('<optgroup label="本地微调模型"></optgroup>');
+                    localFinetuned.forEach(function(model) {
+                        var displayText = getModelDisplayText(model);
+                        localGroup.append(`<option value="${model.raw_name || model.name}">${displayText}</option>`);
+                    });
+                    select.append(localGroup);
+                }
+                
+                // HuggingFace模型组
+                if (hfModels.length > 0) {
+                    var hfGroup = $('<optgroup label="HuggingFace模型"></optgroup>');
+                    hfModels.forEach(function(model) {
+                        var displayText = getModelDisplayText(model);
+                        hfGroup.append(`<option value="${model.raw_name || model.name}">${displayText}</option>`);
+                    });
+                    select.append(hfGroup);
+                }
+                
+                if (details.length === 0) {
+                    select.append('<option value="">暂无可用模型</option>');
+                }
+            } else {
+                // Ollama和在线模型保持原有逻辑
+                var models = [];
+                if (category === 'ollama') {
+                    models = dataPrepCachedModels.ollama_models;
+                } else if (category === 'online') {
+                    models = dataPrepCachedModels.query_online_models;
+                }
+                
+                if (models && models.length > 0) {
+                    models.forEach(function(model) {
+                        if (typeof model === 'object') {
+                            select.append(`<option value="${model.id}">${model.name}</option>`);
+                        } else {
+                            select.append(`<option value="${model}">${model}</option>`);
+                        }
+                    });
+                } else {
+                    select.append('<option value="">暂无可用模型</option>');
+                }
+            }
+            
+            if (currentValue && select.find(`option[value="${currentValue}"]`).length > 0) {
+                select.val(currentValue);
+                select.removeData('target-value');
+            }
+        }
+
+        // 加载模型列表 - 复用问答系统的loadOllamaModels
+        function loadDataPrepModels() {
+            $.ajax({
+                url: '/ollama/models',
+                type: 'GET',
+                success: function(response) {
+                    dataPrepCachedModels.ollama_models = response.ollama_models || [];
+                    dataPrepCachedModels.vllm_models = response.vllm_models || [];
+                    dataPrepCachedModels.vllm_models_detail = response.vllm_models_detail || [];
+                    dataPrepCachedModels.query_online_models = response.query_online_models || [];
+                    
+                    var currentCategory = $('#dataPrepModelCategorySelect').val();
+                    updateDataPrepModelOptions(currentCategory);
+                },
+                error: function() {
+                    $('#dataPrepModelSelect').html('<option value="">加载失败</option>');
+                }
+            });
+        }
+
+        // 应用选择的模型
+        $('#applyDataPrepModelBtn').click(function() {
+            var category = $('#dataPrepModelCategorySelect').val();
+            var model = $('#dataPrepModelSelect').val();
+            
+            if (!model) {
+                $('#dataPrepModelStatus').text('请先选择模型').addClass('text-danger').removeClass('text-success text-muted');
+                return;
+            }
+            
+            selectedDataPrepModel = {
+                category: category,
+                model: model
+            };
+            
+            // 显示选择的模型名称
+            var modelName = $('#dataPrepModelSelect option:selected').text();
+            $('#dataPrepCurrentModelBadge').text(modelName);
+            $('#dataPrepModelStatus').text('已应用').addClass('text-success').removeClass('text-danger text-muted');
+            
+            setTimeout(() => $('#dataPrepModelStatus').text(''), 3000);
+        });
+
+        // 页面加载时初始化模型列表
+        $(document).ready(function() {
+            loadDataPrepModels();
+        });
+
+        // 新增的阶段 1: 数据准备 API 交互
+        function startDataPreparation() {
+            var rawDataset = $('#rawDatasetSelect').val() || 'all';
+            
+            var payload = {
+                raw_dataset: rawDataset,
+                dedup_strategy: $('#dedupStrategySelect').val(),
+                enable_scoring: $('#enableScoringCheck').length > 0 ? $('#enableScoringCheck').is(':checked') : false,
+                score_threshold: $('#scoreThresholdInput').length > 0 ? $('#scoreThresholdInput').val() : 7.0,
+                output_name: $('#coreDatasetNameInput').val(),
+                conversion_strategy: $('#conversionStrategySelect').val(),
+                // 模型介入分析参数 - 使用与问答系统一致的模型选择
+                enable_model_analysis: $('#conversionStrategySelect').val() === 'knowledge_qa',
+                analysis_model_category: selectedDataPrepModel ? selectedDataPrepModel.category : null,
+                analysis_model: selectedDataPrepModel ? selectedDataPrepModel.model : null
+            };
+            window.preferredCleanedDataset = payload.output_name;
+
+            $('#startDataPrepBtn').prop('disabled', true).text('正在处理中...');
+            $('#dataPrepOutput').empty().append('> 正在提交数据准备任务...\n');
+
+            fetch('/api/data_prep/start', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            }).then(response => {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder('utf-8');
+                
+                function readStream() {
+                    reader.read().then(({done, value}) => {
+                        if (done) {
+                            $('#startDataPrepBtn').prop('disabled', false).text('开始数据清洗');
+                            window.loadRawDatasets();
+                            return;
+                        }
+                        
+                        const chunk = decoder.decode(value, {stream: true});
+                        const lines = chunk.split('\n');
+                        lines.forEach(line => {
+                            if (line.startsWith('data: ')) {
+                                const content = line.substring(6);
+                                if (content.trim() === '[DONE]') {
+                                    return;
+                                }
+                                $('#dataPrepOutput').append(content + '\n');
+                                // 自动滚动到底部
+                                const outDiv = document.getElementById('dataPrepOutput');
+                                outDiv.scrollTop = outDiv.scrollHeight;
+                            }
+                        });
+                        
+                        readStream();
+                    }).catch(err => {
+                        $('#dataPrepOutput').append(`> [流读取错误] ${err}\n`);
+                        $('#startDataPrepBtn').prop('disabled', false).text('开始数据清洗');
+                    });
+                }
+                
+                readStream();
+            }).catch(err => {
+                $('#dataPrepOutput').append(`> [网络请求错误] ${err}\n`);
+                $('#startDataPrepBtn').prop('disabled', false).text('开始数据清洗');
+            });
+        }
+
+        // 监听启用评分复选框（如果存在）
+        if ($('#enableScoringCheck').length > 0) {
+            $('#enableScoringCheck').change(function() {
+                $('#scoreThresholdInput').prop('disabled', !this.checked);
+            });
+        }
+
+        // 新增的阶段 3: 知识蒸馏 API 交互
+        function startDistillation() {
+            var teacher = $('#teacherModelSelect').val();
+            var student = $('#studentBaseModelSelect').val();
+            var dataset = $('#distillDatasetSelect').val();
+            if (!teacher || !student) {
+                alert("请完善教师模型和学生基础模型信息");
+                return;
+            }
+            if (!dataset) {
+                alert("请选择训练数据集");
+                return;
+            }
+
+            var payload = {
+                teacher_model: teacher,
+                student_model: student,
+                dataset: dataset,
+                strategy: $('#distillStrategySelect').val(),
+                temperature: $('#distillTempInput').val(),
+                loss_weight: $('#distillWeightInput').val()
+            };
+
+            $('#startDistillBtn').prop('disabled', true).text('正在蒸馏中...');
+            $('#distillOutput').empty().append('> 正在提交知识蒸馏任务...\n');
+
+            // 使用 fetch + ReadableStream 处理 SSE 流式响应
+            var controller = new AbortController();
+            var signal = controller.signal;
+            
+            fetch('/api/distill/start', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload),
+                signal: signal
+            }).then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => {
+                        throw new Error(err.error || '请求失败');
+                    });
+                }
+                
+                var reader = response.body.getReader();
+                var decoder = new TextDecoder();
+                var buffer = '';
+                
+                function read() {
+                    return reader.read().then(({done, value}) => {
+                        if (done) {
+                            $('#startDistillBtn').prop('disabled', false).text('开始知识蒸馏');
+                            return;
+                        }
+                        
+                        buffer += decoder.decode(value, {stream: true});
+                        var lines = buffer.split('\n');
+                        buffer = lines.pop(); // 保留不完整的行
+                        
+                        lines.forEach(function(line) {
+                            if (line.startsWith('data: ')) {
+                                var data = line.substring(6).trim();
+                                if (data === '[DONE]') {
+                                    $('#startDistillBtn').prop('disabled', false).text('开始知识蒸馏');
+                                } else if (data) {
+                                    $('#distillOutput').append(data + '\n');
+                                    $('#distillOutput').scrollTop($('#distillOutput')[0].scrollHeight);
+                                }
+                            }
+                        });
+                        
+                        return read();
+                    });
+                }
+                
+                return read();
+            }).catch(err => {
+                if (err.name === 'AbortError') {
+                    $('#distillOutput').append('> [INFO] 用户取消请求\n');
+                } else {
+                    $('#distillOutput').append(`> [警告] 连接中断: ${err.message}\n`);
+                    $('#distillOutput').append('> [INFO] 蒸馏任务可能仍在后台运行，请稍后检查模型列表\n');
+                    $('#distillOutput').append('> [INFO] 无需网络连接，蒸馏在本地GPU上运行\n');
+                }
+                $('#startDistillBtn').prop('disabled', false).text('开始知识蒸馏');
+            });
+        }
+
+        // 加载 Hugging Face 本地模型列表（用于学生模型选择）
+        function loadStudentModels() {
+            var select = $('#studentBaseModelSelect');
+            select.html('<option value="">加载中...</option>');
+            
+            $.ajax({
+                url: '/ollama/models',
+                type: 'GET',
+                success: function(response) {
+                    select.empty();
+                    var hfModels = response.hf_models || [];
+                    
+                    if (hfModels.length > 0) {
+                        hfModels.forEach(function(model) {
+                            select.append(`<option value="${model}">${model}</option>`);
+                        });
+                    } else {
+                        select.append('<option value="">hugface 目录下未找到模型</option>');
+                    }
+                },
+                error: function() {
+                    select.empty();
+                    select.append('<option value="">加载失败</option>');
+                }
+            });
+        }
+
+        // 加载蒸馏可用的数据集列表（cleaned 目录）
+        function loadDistillDatasets() {
+            var select = $('#distillDatasetSelect');
+            select.html('<option value="">加载中...</option>');
+            
+            $.ajax({
+                url: '/api/get_datasets',
+                type: 'GET',
+                success: function(res) {
+                    select.empty();
+                    var datasets = res.cleaned_datasets || [];
+                    if (datasets.length > 0) {
+                        datasets.forEach(function(ds) {
+                            select.append(`<option value="${ds}">${ds}</option>`);
+                        });
+                    } else {
+                        select.append('<option value="">无可用数据集</option>');
+                    }
+                },
+                error: function() {
+                    select.html('<option value="">加载失败</option>');
+                }
+            });
+        }
+
+        // 页面加载时自动加载学生模型列表
+        $(document).ready(function() {
+            // 当切换到知识蒸馏标签页时加载学生模型和数据集
+            $('#step3-tab').on('shown.bs.tab', function() {
+                loadStudentModels();
+                loadDistillDatasets();
+            });
+            // 初始加载（如果默认在 step3）
+            if ($('#step3').hasClass('active')) {
+                loadStudentModels();
+                loadDistillDatasets();
+            }
+            
+            // 页面加载时检查任务状态和已部署服务
+            checkTaskStatus();
+            loadDeployedServices();
+        });
+
+        // Tab切换时检查任务状态
+        document.querySelectorAll('#pipelineTabs button[data-bs-toggle="tab"]').forEach(function(tab) {
+            tab.addEventListener('shown.bs.tab', function(event) {
+                checkTaskStatus();
+            });
+        });
+
+        // 查询各阶段任务运行状态
+        function checkTaskStatus() {
+            fetch('/api/task/status')
+                .then(r => r.json())
+                .then(status => {
+                    if (status.cpt && status.cpt.running) {
+                        var cptOutput = document.getElementById('cptOutput');
+                        if (cptOutput && !cptOutput.dataset.runningShown) {
+                            cptOutput.innerHTML += '<div class="text-warning">⏳ CPT 任务正在后台运行中（模型: ' +
+                                (status.cpt.details.model || 'Unknown') + '）...</div>';
+                            cptOutput.dataset.runningShown = 'true';
+                        }
+                        startCptStatusPolling();
+                    }
+
+                    if (status.finetune && status.finetune.running) {
+                        var output = document.getElementById('terminalOutput');
+                        if (output && !window._finetuneStreaming) {
+                            if (!output.dataset.runningShown) {
+                                output.innerHTML += '<div class="text-warning">⏳ 训练任务正在后台运行中（模型: ' + 
+                                    (status.finetune.details.model || 'Unknown') + '）...</div>';
+                                output.dataset.runningShown = 'true';
+                            }
+                            startStatusPolling();
+                        }
+                    }
+                    if (status.deploy) {
+                        updateDeployStatus(status.deploy);
+                    }
+                })
+                .catch(err => console.log('Status check failed:', err));
+        }
+
+        function startCptStatusPolling() {
+            if (window._cptStatusPollingTimer) return;
+            window._cptStatusPollingTimer = setInterval(function() {
+                fetch('/api/task/status')
+                    .then(r => r.json())
+                    .then(status => {
+                        if (!status.cpt.running) {
+                            clearInterval(window._cptStatusPollingTimer);
+                            window._cptStatusPollingTimer = null;
+                            var output = document.getElementById('cptOutput');
+                            if (output) {
+                                output.innerHTML += '<div class="text-success">✅ CPT 任务已完成</div>';
+                                delete output.dataset.runningShown;
+                            }
+                            if (status.cpt.details && status.cpt.details.model) {
+                                window.latestCptModelName = status.cpt.details.model;
+                            }
+                            if (typeof loadFinetunedModels === 'function') loadFinetunedModels();
+                            if (typeof loadModels === 'function') loadModels();
+                            applyLatestCptModelToTeacher(false);
+                        }
+                    })
+                    .catch(err => console.log('CPT status polling error:', err));
+            }, 5000);
+        }
+
+        // 轮询任务状态
+        function startStatusPolling() {
+            if (window._statusPollingTimer) return;
+            window._statusPollingTimer = setInterval(function() {
+                fetch('/api/task/status')
+                    .then(r => r.json())
+                    .then(status => {
+                        if (!status.finetune.running) {
+                            clearInterval(window._statusPollingTimer);
+                            window._statusPollingTimer = null;
+                            // 训练完成，更新UI
+                            var output = document.getElementById('terminalOutput');
+                            if (output) {
+                                output.innerHTML += '<div class="text-success">✅ 训练任务已完成</div>';
+                                delete output.dataset.runningShown;
+                            }
+                            if (typeof loadFinetunedModels === 'function') loadFinetunedModels();
+                            if (typeof loadModels === 'function') loadModels();
+                        }
+                    })
+                    .catch(err => console.log('Status polling error:', err));
+            }, 5000); // 每5秒轮询
+        }
+
+        // 加载已部署的vLLM服务列表
+        function loadDeployedServices() {
+            fetch('/api/deploy/list')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.services && data.services.length > 0) {
+                        updateDeployStatus({running: true, services: data.services});
+                    }
+                })
+                .catch(err => console.log('Deploy list check failed:', err));
+        }
+
+        // 更新部署状态显示
+        function updateDeployStatus(deployInfo) {
+            // 在阶段4的部署区域显示运行中的服务
+            var deploySection = document.querySelector('#step4 .stage-card');
+            if (!deploySection) return;
+            
+            // 查找或创建状态显示区
+            var statusDiv = document.getElementById('deploy-running-status');
+            if (!statusDiv) {
+                statusDiv = document.createElement('div');
+                statusDiv.id = 'deploy-running-status';
+                statusDiv.className = 'alert alert-success mt-2';
+                // 插入到card-body开头
+                var cardBody = deploySection.querySelector('.card-body');
+                if (cardBody) {
+                    cardBody.insertBefore(statusDiv, cardBody.firstChild);
+                }
+            }
+            
+            if (deployInfo.running && deployInfo.services.length > 0) {
+                var html = '<strong>🟢 运行中的服务:</strong><ul class="mb-0 mt-1">';
+                deployInfo.services.forEach(function(svc) {
+                    html += '<li>' + (svc.model || 'Unknown') + 
+                            ' - 端口: ' + (svc.port || 8000) + '</li>';
+                });
+                html += '</ul>';
+                statusDiv.innerHTML = html;
+                statusDiv.style.display = 'block';
+            } else {
+                statusDiv.style.display = 'none';
+            }
+        }
+
+        // 新增的阶段 4: 量化 API 交互
+        function startQuantization() {
+            var model = $('#quantizeModelSelect').val();
+            if (!model) {
+                alert("请选择要量化的模型");
+                return;
+            }
+
+            var payload = {
+                model_name: model,
+                method: $('#quantMethodSelect').val()
+            };
+
+            $('#startQuantizeBtn').prop('disabled', true).text('量化中...');
+            $('#deployOutput').empty();
+
+            // 使用 EventSource 处理 SSE 流式响应
+            var evtSource = new EventSource('/api/quantize/start?model_name=' + encodeURIComponent(model) + '&method=' + encodeURIComponent($('#quantMethodSelect').val()));
+            
+            evtSource.onmessage = function(event) {
+                var line = event.data;
+                if (!line || line === '[DONE]') {
+                    if (line === '[DONE]') {
+                        evtSource.close();
+                        $('#startQuantizeBtn').prop('disabled', false).text('开始量化压缩');
+                    }
+                    return;
+                }
+                // 后端已经带了 '> ' 前缀，直接追加
+                $('#deployOutput').append(line + '\n');
+                // 自动滚动到底部
+                var outputDiv = $('#deployOutput')[0];
+                outputDiv.scrollTop = outputDiv.scrollHeight;
+            };
+            
+            evtSource.onerror = function(err) {
+                console.error('EventSource failed:', err);
+                $('#deployOutput').append('> [错误] 连接失败，请检查网络\n');
+                evtSource.close();
+                $('#startQuantizeBtn').prop('disabled', false).text('开始量化压缩');
+            };
+        }
+
+        // 新增的阶段 4: 部署 API 交互
+        function startDeploy() {
+            var model = $('#quantizeModelSelect').val();
+            if (!model) {
+                alert("请选择要部署的模型");
+                return;
+            }
+
+            var payload = {
+                model_name: model,
+                port: $('#deployPortInput').val(),
+                gpu_util: $('#gpuMemUtilInput').val(),
+                is_quantized: $('#quantMethodSelect').val() === 'awq'
+            };
+
+            $('#startDeployBtn').prop('disabled', true).text('启动中...');
+            $('#deployOutput').empty().append(`> 正在尝试使用 vLLM 部署模型 ${model}...\n`);
+
+            $.ajax({
+                url: '/api/deploy/start',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(payload),
+                success: function(res) {
+                    $('#deployOutput').append(`> ${res.message}\n`);
+                    if (res.api_url) {
+                        $('#deployOutput').append(`> API 端点: ${res.api_url}\n`);
+                    }
+                },
+                error: function(err) {
+                    $('#deployOutput').append(`> [错误] ${err.responseJSON ? err.responseJSON.error : '请求失败'}\n`);
+                },
+                complete: function() {
+                    $('#startDeployBtn').prop('disabled', false).text('一键部署服务');
+                }
             });
         }
     </script>

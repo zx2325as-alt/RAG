@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- <title>模型训练评估系统 - 运维知识助手</title> -->
+    <link href="/static/vendor/css/bootstrap.min.css" rel="stylesheet">
+    <script src="/static/vendor/js/chart.js"></script>
+    <!-- MathJax for formula rendering -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                packages: {'[+]': ['ams', 'amsmath', 'amssymbols']},
+                macros: {
+                    text: ['\\text{% raw %}{#1}{% endraw %}', 1],
+                    mathbb: ['\\mathbb{% raw %}{#1}{% endraw %}', 1]
+                },
+                processEscapes: true,
+                processEnvironments: true
+            },
+            options: {
+                skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+                ignoreHtmlClass: 'tex2jax_ignore',
+                processHtmlClass: 'tex2jax_process'
+            },
+            startup: {
+                pageReady: () => {
+                    return MathJax.startup.defaultPageReady().then(() => {
+                        console.log('MathJax ready');
+                        // Force re-render all math elements
+                        MathJax.typesetPromise();
+                    });
+                }
+            }
+        };
+    </script>
+    <style>
+        html, body { 
+            background-color: #f8f9fa; 
+            overflow-x: hidden;
+            max-width: 100vw;
+        }
+        body {
+            min-height: 100vh;
+            overflow-y: auto;
+        }
+        
+        /* 导航栏样式 */
+        .navbar {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            height: 56px;
+        }
+        .navbar-brand { color: white !important; font-weight: bold; }
+        .nav-link { color: rgba(255,255,255,0.8) !important; }
+        .nav-link:hover, .nav-link.active { color: white !important; }
+        
+        /* Tab样式 */
+        .nav-tabs .nav-link {
+            color: #6c757d;
+            font-weight: 500;
+            border: none;
+            border-bottom: 3px solid transparent;
+            padding: 15px 25px;
+        }
+        .nav-tabs .nav-link:hover {
+            color: #1e3c72;
+            border-bottom-color: #dee2e6;
+        }
+        .nav-tabs .nav-link.active {
+            color: #1e3c72;
+            border-bottom: 3px solid #1e3c72;
+            background: transparent;
+        }
+        
+        /* 指标卡片 */
+        .metric-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            border-left: 4px solid #1e3c72;
+            transition: transform 0.2s;
+        }
+        .metric-card:hover { transform: translateY(-2px); }
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #1e3c72;
+        }
+        .metric-label {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        .metric-trend {
+            font-size: 0.85rem;
+            margin-top: 5px;
+        }
+        .trend-up { color: #28a745; }
+        .trend-down { color: #dc3545; }
+        
+        /* 进度条 */
+        .progress {
+            height: 8px;
+            border-radius: 4px;
+            background-color: #e9ecef;
+        }
+        .progress-bar {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            border-radius: 4px;
+        }
+        
+        /* 日志输出区域 */
+        .log-output {
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.85rem;
+            padding: 15px;
+            border-radius: 8px;
+            height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .log-output .log-info { color: #4fc1ff; }
+        .log-output .log-success { color: #4ec9b0; }
+        .log-output .log-error { color: #f48771; }
+        .log-output .log-warning { color: #dcdcaa; }
+        
+        /* 对比表格 */
+        .comparison-table {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        /* MathJax formula styling */
+        mjx-container {
+            overflow-x: auto;
+            overflow-y: hidden;
+            max-width: 100%;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        mjx-container[display="true"] {
+            display: block;
+            margin: 10px 0;
+        }
+        mjx-container svg {
+            max-width: 100%;
+            height: auto;
+        }
+        .formula-block {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            overflow-x: auto;
+            word-wrap: break-word;
+        }
+        .formula-inline {
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        /* Ensure long formulas don't overflow */
+        .math-display {
+            overflow-x: auto;
+            padding: 10px 0;
+        }
+        /* Fix for inline math */
+        code:has(.math-inline) {
+            background: transparent;
+            padding: 0;
+        }
+        .math-inline {
+            display: inline;
+        }
+        .comparison-table th {
+            background-color: #1e3c72;
+            color: white;
+            font-weight: 500;
+        }
+        .comparison-table td {
+            vertical-align: top;
+            max-width: 300px;
+        }
+        .output-cell {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        
+        /* 模型选择卡片 */
+        .model-select-card {
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .model-select-card:hover {
+            border-color: #1e3c72;
+        }
+        .model-select-card.selected {
+            border-color: #1e3c72;
+            background-color: #e8f0fe;
+        }
+        
+        /* 图表容器 */
+        .chart-container {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand" href="/">运维知识助手 (RAG)</a>
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item"><a class="nav-link" href="/">问答系统</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/chat">纯净聊天</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/finetune">模型训练与部署</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/eval_system">评估系统</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4 mb-5 px-4" style="max-width: 1400px; overflow-x: hidden;">
+        <!-- <h3 class="mb-4" style="color: #1e3c72;">模型训练评估系统</h3> -->
+
+        <!-- Tab导航 -->
+        <ul class="nav nav-tabs mb-4" id="evalTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="tab1-tab" data-bs-toggle="tab" data-bs-target="#tab1" type="button">
+                    <i class="bi bi-activity"></i> 训练监控
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab2-tab" data-bs-toggle="tab" data-bs-target="#tab2" type="button">
+                    <i class="bi bi-check-circle"></i> 模型评估
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab3-tab" data-bs-toggle="tab" data-bs-target="#tab3" type="button">
+                    <i class="bi bi-bar-chart"></i> 模型对比
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="evalTabsContent" style="overflow-x: hidden;">
+            <!-- Tab 1: 训练监控 -->
+            <div class="tab-pane fade show active" id="tab1" role="tabpanel" style="overflow-x: hidden;">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="card border-0 shadow-sm mb-4">
+                            <div class="card-header bg-white border-bottom-0 pt-3">
+                                <h6 class="mb-0 fw-bold" style="color: #1e3c72;">训练任务</h6>
+                            </div>
+                            <div class="card-body p-0">
+                                <div id="trainingJobsList" class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;">
+                                    <div class="list-group-item text-muted">加载中...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-9">
+                        <!-- 实时指标卡片 -->
+                        <div class="row mb-4" id="monitorMetrics">
+                            <div class="col-md-3 mb-3">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="currentLoss">-</div>
+                                    <div class="metric-label">当前Loss</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="currentStep">-</div>
+                                    <div class="metric-label">训练进度</div>
+                                    <div class="progress mt-2">
+                                        <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="currentEpoch">-</div>
+                                    <div class="metric-label">当前Epoch</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="remainingTime">-</div>
+                                    <div class="metric-label">预计剩余</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 训练曲线图表 -->
+                        <div class="chart-container mb-4" style="height: 300px;">
+                            <h6 class="fw-bold mb-3" style="color: #1e3c72;">Loss曲线</h6>
+                            <div style="height: 250px;">
+                                <canvas id="lossChart"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="chart-container" style="height: 250px;">
+                                    <h6 class="fw-bold mb-3" style="color: #1e3c72;">Learning Rate</h6>
+                                    <div style="height: 200px;">
+                                        <canvas id="lrChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="chart-container" style="height: 250px;">
+                                    <h6 class="fw-bold mb-3" style="color: #1e3c72;">Gradient Norm</h6>
+                                    <div style="height: 200px;">
+                                        <canvas id="gradNormChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 2: 模型评估 -->
+            <div class="tab-pane fade" id="tab2" role="tabpanel" style="overflow-x: hidden;">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="card border-0 shadow-sm mb-4">
+                            <div class="card-header bg-white border-bottom-0 pt-3">
+                                <h6 class="mb-0 fw-bold" style="color: #1e3c72;">评估配置</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label class="form-label">选择模型</label>
+                                    <select id="evalModelSelect" class="form-select">
+                                        <option value="">加载中...</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">评估数据集</label>
+                                    <select id="evalDatasetSelect" class="form-select">
+                                        <option value="">加载中...</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">样本数量</label>
+                                    <input type="number" id="evalSampleCount" class="form-control" value="50" min="10" max="200">
+                                </div>
+                                <button id="startEvalBtn" class="btn text-white w-100" style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);">
+                                    开始评估
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 历史评估记录 -->
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-header bg-white border-bottom-0 pt-3">
+                                <h6 class="mb-0 fw-bold" style="color: #1e3c72;">历史记录</h6>
+                            </div>
+                            <div class="card-body p-0">
+                                <div id="evalHistoryList" class="list-group list-group-flush">
+                                    <div class="list-group-item text-muted">暂无记录</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-8">
+                        <!-- 评估日志 -->
+                        <div class="card border-0 shadow-sm mb-4">
+                            <div class="card-header bg-white border-bottom-0 pt-3 d-flex justify-content-between">
+                                <h6 class="mb-0 fw-bold" style="color: #1e3c72;">评估日志</h6>
+                                <span id="evalStatus" class="badge bg-secondary">等待开始</span>
+                            </div>
+                            <div class="card-body p-0">
+                                <div id="evalLogOutput" class="log-output m-3">等待开始评估...</div>
+                            </div>
+                        </div>
+
+                        <!-- 评估结果 -->
+                        <div id="evalResults" style="display: none;">
+                            <h6 class="fw-bold mb-3" style="color: #1e3c72;">评估指标</h6>
+                            <div class="row mb-4">
+                                <div class="col-md-3 mb-3">
+                                    <div class="metric-card" style="border-left-color: #28a745;">
+                                        <div class="metric-value text-success" id="evalRougeL">-</div>
+                                        <div class="metric-label">ROUGE-L</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <div class="metric-card" style="border-left-color: #ffc107;">
+                                        <div class="metric-value text-warning" id="evalBleu">-</div>
+                                        <div class="metric-label">BLEU</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <div class="metric-card" style="border-left-color: #17a2b8;">
+                                        <div class="metric-value text-info" id="evalBertScore">-</div>
+                                        <div class="metric-label">BERTScore F1</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <div class="metric-card" style="border-left-color: #6f42c1;">
+                                        <div class="metric-value" style="color: #6f42c1;" id="evalRouge1">-</div>
+                                        <div class="metric-label">ROUGE-1</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 样例对比 -->
+                            <h6 class="fw-bold mb-3" style="color: #1e3c72;">样例对比</h6>
+                            <div class="table-responsive">
+                                <table class="table table-bordered comparison-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 30%">输入</th>
+                                            <th style="width: 35%">参考答案</th>
+                                            <th style="width: 35%">模型预测</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="evalSampleTable">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 3: 模型对比 -->
+            <div class="tab-pane fade" id="tab3" role="tabpanel" style="overflow-x: hidden;">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="card border-0 shadow-sm mb-4">
+                            <div class="card-header bg-white border-bottom-0 pt-3">
+                                <h6 class="mb-0 fw-bold" style="color: #1e3c72;">对比配置</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label class="form-label">对比名称</label>
+                                    <input type="text" id="comparisonName" class="form-control" placeholder="输入对比名称">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">选择模型 (2-4个)</label>
+                                    <div id="comparisonModelList" class="d-flex flex-column gap-2">
+                                        <!-- 动态填充 -->
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">评估数据集</label>
+                                    <select id="comparisonDatasetSelect" class="form-select">
+                                        <option value="">加载中...</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">样本数量</label>
+                                    <input type="number" id="comparisonSampleCount" class="form-control" value="30" min="10" max="100">
+                                </div>
+                                <button id="startComparisonBtn" class="btn text-white w-100" style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);" disabled>
+                                    开始对比
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 历史对比记录 -->
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-header bg-white border-bottom-0 pt-3">
+                                <h6 class="mb-0 fw-bold" style="color: #1e3c72;">历史对比</h6>
+                            </div>
+                            <div class="card-body p-0">
+                                <div id="comparisonHistoryList" class="list-group list-group-flush">
+                                    <div class="list-group-item text-muted">暂无记录</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-8">
+                        <!-- 对比日志 -->
+                        <div class="card border-0 shadow-sm mb-4">
+                            <div class="card-header bg-white border-bottom-0 pt-3 d-flex justify-content-between">
+                                <h6 class="mb-0 fw-bold" style="color: #1e3c72;">对比日志</h6>
+                                <span id="comparisonStatus" class="badge bg-secondary">等待开始</span>
+                            </div>
+                            <div class="card-body p-0">
+                                <div id="comparisonLogOutput" class="log-output m-3">等待开始对比...</div>
+                            </div>
+                        </div>
+
+                        <!-- 对比结果 -->
+                        <div id="comparisonResults" style="display: none;">
+                            <!-- 指标对比表 -->
+                            <h6 class="fw-bold mb-3" style="color: #1e3c72;">指标对比</h6>
+                            <div class="table-responsive mb-4">
+                                <table class="table table-bordered comparison-table" id="comparisonMetricsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>指标</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+
+                            <!-- 雷达图 -->
+                            <div class="chart-container mb-4" style="height: 400px;">
+                                <h6 class="fw-bold mb-3" style="color: #1e3c72;">多维度对比</h6>
+                                <div style="height: 350px;">
+                                    <canvas id="radarChart"></canvas>
+                                </div>
+                            </div>
+
+                            <!-- 样例并排对比 -->
+                            <h6 class="fw-bold mb-3" style="color: #1e3c72;">样例对比</h6>
+                            <div class="table-responsive">
+                                <table class="table table-bordered comparison-table" id="comparisonSampleTable">
+                                    <thead>
+                                        <tr>
+                                            <th>问题</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+
+                            <!-- 导出按钮 -->
+                            <div class="mt-3">
+                                <button id="exportComparisonBtn" class="btn btn-outline-primary">
+                                    导出对比报告
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/vendor/js/jquery-3.6.0.min.js"></script>
+    <script src="/static/vendor/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // ==================== 全局变量 ====================
+        window.charts = {};
+        let currentComparisonId = null;
+
+        // ==================== 工具函数 ====================
+        function destroyChart(chartName) {
+            if (window.charts[chartName]) {
+                window.charts[chartName].destroy();
+                delete window.charts[chartName];
+            }
+        }
+
+        function formatTime(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr);
+            return date.toLocaleString('zh-CN');
+        }
+
+        // ==================== Tab 1: 训练监控 ====================
+        let currentModel = null;
+        let metricsInterval = null;
+
+        function loadTrainingJobs() {
+            $.get('/api/training/jobs')
+                .done(function(res) {
+                    const container = $('#trainingJobsList');
+                    container.empty();
+                    
+                    if (res.jobs && res.jobs.length > 0) {
+                        res.jobs.forEach(function(job) {
+                            const statusClass = {
+                                'running': 'text-primary',
+                                'completed': 'text-success',
+                                'failed': 'text-danger'
+                            }[job.status] || 'text-muted';
+                            
+                            const item = $(`
+                                <a href="#" class="list-group-item list-group-item-action ${job.model_name === currentModel ? 'active' : ''}" 
+                                   data-model="${job.model_name}">
+                                    <div class="d-flex justify-content-between">
+                                        <span>${job.model_name}</span>
+                                        <span class="${statusClass}">${job.status}</span>
+                                    </div>
+                                </a>
+                            `);
+                            item.click(function(e) {
+                                e.preventDefault();
+                                selectModel(job.model_name);
+                            });
+                            container.append(item);
+                        });
+                    } else {
+                        container.html('<div class="list-group-item text-muted">暂无训练任务</div>');
+                    }
+                })
+                .fail(function() {
+                    $('#trainingJobsList').html('<div class="list-group-item text-danger">加载失败</div>');
+                });
+        }
+
+        function selectModel(modelName) {
+            currentModel = modelName;
+            $('#trainingJobsList .list-group-item').removeClass('active');
+            $(`[data-model="${modelName}"]`).addClass('active');
+            
+            // 加载训练指标
+            loadTrainingMetrics(modelName);
+            
+            // 启动定时刷新
+            if (metricsInterval) clearInterval(metricsInterval);
+            metricsInterval = setInterval(() => loadTrainingMetrics(modelName), 5000);
+        }
+
+        function loadTrainingMetrics(modelName) {
+            $.get(`/api/training/${modelName}/status`, function(res) {
+                // 处理可能为null或0的loss值
+                const latestLoss = res.latest_loss;
+                $('#currentLoss').text((latestLoss !== null && latestLoss !== undefined && !isNaN(latestLoss)) ? latestLoss.toFixed(4) : '-');
+                $('#currentStep').text(`${res.current_step || 0}/${res.total_steps || 0}`);
+                $('#currentEpoch').text((res.current_epoch !== null && res.current_epoch !== undefined) ? res.current_epoch.toFixed(1) : '-');
+                $('#remainingTime').text(res.estimated_remaining_time || '-');
+                
+                const progress = res.total_steps > 0 ? (res.current_step / res.total_steps * 100) : 0;
+                $('#progressBar').css('width', `${progress}%`);
+            }).fail(function() {
+                $('#currentLoss').text('-');
+                $('#currentStep').text('-/-');
+                $('#currentEpoch').text('-');
+                $('#remainingTime').text('-');
+            });
+            
+            $.get(`/api/training/${modelName}/metrics`, function(res) {
+                renderLossChart(res.loss_history, res.eval_loss_history);
+                renderLRChart(res.lr_history);
+                renderGradNormChart(res.grad_norm_history);
+            });
+        }
+
+        function renderLossChart(trainHistory, evalHistory) {
+            destroyChart('lossChart');
+            
+            // 过滤掉无效的loss值（null, undefined, NaN, 0）
+            const validTrainHistory = (trainHistory || []).filter(x => x.loss !== null && x.loss !== undefined && !isNaN(x.loss) && x.loss > 0);
+            const validEvalHistory = (evalHistory || []).filter(x => x.loss !== null && x.loss !== undefined && !isNaN(x.loss) && x.loss > 0);
+            
+            const datasets = [];
+            if (validTrainHistory.length > 0) {
+                datasets.push({
+                    label: 'Train Loss',
+                    data: validTrainHistory.map(x => ({x: x.step, y: x.loss})),
+                    borderColor: '#1e3c72',
+                    backgroundColor: 'rgba(30, 60, 114, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: false
+                });
+            }
+            if (validEvalHistory.length > 0) {
+                datasets.push({
+                    label: 'Eval Loss',
+                    data: validEvalHistory.map(x => ({x: x.step, y: x.loss})),
+                    borderColor: '#dc3545',
+                    backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: false
+                });
+            }
+            
+            if (datasets.length === 0) {
+                datasets.push({
+                    label: '暂无数据',
+                    data: [],
+                    borderColor: '#ccc',
+                    backgroundColor: 'rgba(200, 200, 200, 0.1)',
+                    borderWidth: 1
+                });
+            }
+            
+            const ctx = document.getElementById('lossChart').getContext('2d');
+            window.charts['lossChart'] = new Chart(ctx, {
+                type: 'line',
+                data: { datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: true } },
+                    scales: {
+                        x: { type: 'linear', title: { display: true, text: 'Step' } },
+                        y: { title: { display: true, text: 'Loss' } }
+                    }
+                }
+            });
+            // 设置canvas容器高度
+            document.getElementById('lossChart').parentElement.style.height = '250px';
+        }
+
+        function renderLRChart(lrHistory) {
+            destroyChart('lrChart');
+            // 过滤掉无效的lr值
+            const validLRHistory = (lrHistory || []).filter(x => x.lr !== null && x.lr !== undefined && !isNaN(x.lr) && x.lr > 0);
+            
+            const datasets = [];
+            if (validLRHistory.length > 0) {
+                datasets.push({
+                    label: 'Learning Rate',
+                    data: validLRHistory.map(x => ({x: x.step, y: x.lr})),
+                    borderColor: '#28a745',
+                    backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true
+                });
+            } else {
+                datasets.push({
+                    label: '暂无数据',
+                    data: [],
+                    borderColor: '#ccc',
+                    backgroundColor: 'rgba(200, 200, 200, 0.1)',
+                    borderWidth: 1
+                });
+            }
+            
+            const ctx = document.getElementById('lrChart').getContext('2d');
+            window.charts['lrChart'] = new Chart(ctx, {
+                type: 'line',
+                data: { datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: true } },
+                    scales: {
+                        x: { type: 'linear', title: { display: true, text: 'Step' } },
+                        y: { title: { display: true, text: 'Learning Rate' }, type: 'logarithmic' }
+                    }
+                }
+            });
+            document.getElementById('lrChart').parentElement.style.height = '200px';
+        }
+
+        function renderGradNormChart(gradNormHistory) {
+            destroyChart('gradNormChart');
+            // 过滤掉无效的grad_norm值
+            const validGradNormHistory = (gradNormHistory || []).filter(x => x.grad_norm !== null && x.grad_norm !== undefined && !isNaN(x.grad_norm) && x.grad_norm > 0);
+            
+            const datasets = [];
+            if (validGradNormHistory.length > 0) {
+                datasets.push({
+                    label: 'Gradient Norm',
+                    data: validGradNormHistory.map(x => ({x: x.step, y: x.grad_norm})),
+                    borderColor: '#ffc107',
+                    backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true
+                });
+            } else {
+                datasets.push({
+                    label: '暂无数据',
+                    data: [],
+                    borderColor: '#ccc',
+                    backgroundColor: 'rgba(200, 200, 200, 0.1)',
+                    borderWidth: 1
+                });
+            }
+            
+            const ctx = document.getElementById('gradNormChart').getContext('2d');
+            window.charts['gradNormChart'] = new Chart(ctx, {
+                type: 'line',
+                data: { datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: true } },
+                    scales: {
+                        x: { type: 'linear', title: { display: true, text: 'Step' } },
+                        y: { title: { display: true, text: 'Grad Norm' } }
+                    }
+                }
+            });
+            document.getElementById('gradNormChart').parentElement.style.height = '200px';
+        }
+
+        // ==================== Tab 2: 模型评估 ====================
+        function loadEvalModels() {
+            $.get('/api/eval/models')
+                .done(function(res) {
+                    const select = $('#evalModelSelect');
+                    select.empty().append('<option value="">请选择模型...</option>');
+                    if (res.models && res.models.length > 0) {
+                        res.models.forEach(function(m) {
+                            select.append(`<option value="${m}">${m}</option>`);
+                        });
+                    } else {
+                        select.append('<option value="" disabled>暂无可用模型</option>');
+                    }
+                })
+                .fail(function() {
+                    $('#evalModelSelect').empty().append('<option value="" disabled>加载失败</option>');
+                });
+        }
+
+        function loadEvalDatasets() {
+            $.get('/api/eval/datasets')
+                .done(function(res) {
+                    const select1 = $('#evalDatasetSelect');
+                    const select2 = $('#comparisonDatasetSelect');
+                    
+                    select1.empty().append('<option value="">请选择数据集...</option>');
+                    select2.empty().append('<option value="">请选择数据集...</option>');
+                    
+                    if (res.datasets && res.datasets.length > 0) {
+                        res.datasets.forEach(function(d) {
+                            select1.append(`<option value="${d}">${d}</option>`);
+                            select2.append(`<option value="${d}">${d}</option>`);
+                        });
+                    } else {
+                        select1.append('<option value="" disabled>暂无数据集</option>');
+                        select2.append('<option value="" disabled>暂无数据集</option>');
+                    }
+                })
+                .fail(function() {
+                    $('#evalDatasetSelect').empty().append('<option value="" disabled>加载失败</option>');
+                    $('#comparisonDatasetSelect').empty().append('<option value="" disabled>加载失败</option>');
+                });
+        }
+
+        function loadEvalHistory() {
+            $.get('/api/eval/model/results', function(res) {
+                const container = $('#evalHistoryList');
+                container.empty();
+                
+                if (res.results && res.results.length > 0) {
+                    res.results.forEach(function(r) {
+                        const rouge = r.metrics.rougeL || r.metrics.rouge_l || 0;
+                        container.append(`
+                            <a href="#" class="list-group-item list-group-item-action" data-eval-id="${r.id}">
+                                <div class="d-flex justify-content-between">
+                                    <span>${r.model_name}</span>
+                                    <span class="text-success">ROUGE-L: ${rouge.toFixed(3)}</span>
+                                </div>
+                                <small class="text-muted">${formatTime(r.created_at)}</small>
+                            </a>
+                        `);
+                    });
+                    
+                    container.find('a').click(function(e) {
+                        e.preventDefault();
+                        loadEvalDetail($(this).data('eval-id'));
+                    });
+                } else {
+                    container.html('<div class="list-group-item text-muted">暂无记录</div>');
+                }
+            });
+        }
+
+        function loadEvalDetail(evalId) {
+            $.get(`/api/eval/model/result/${evalId}`, function(res) {
+                $('#evalResults').show();
+                $('#evalRougeL').text(res.metrics.rougeL ? res.metrics.rougeL.toFixed(4) : '-');
+                $('#evalBleu').text(res.metrics.bleu ? res.metrics.bleu.toFixed(4) : '-');
+                $('#evalBertScore').text(res.metrics.bertscore_f1 ? res.metrics.bertscore_f1.toFixed(4) : '-');
+                $('#evalRouge1').text(res.metrics.rouge1 ? res.metrics.rouge1.toFixed(4) : '-');
+                
+                // 渲染样例表
+                const tbody = $('#evalSampleTable');
+                tbody.empty();
+                if (res.sample_comparisons) {
+                    res.sample_comparisons.forEach(function(s) {
+                        tbody.append(`
+                            <tr>
+                                <td><small>${s.input.substring(0, 100)}...</small></td>
+                                <td><small class="text-muted">${s.reference.substring(0, 150)}...</small></td>
+                                <td><small>${s.prediction.substring(0, 150)}...</small></td>
+                            </tr>
+                        `);
+                    });
+                }
+            });
+        }
+
+        function startModelEval() {
+            const model = $('#evalModelSelect').val();
+            const dataset = $('#evalDatasetSelect').val();
+            const sampleCount = $('#evalSampleCount').val();
+            
+            if (!model || !dataset) {
+                alert('请选择模型和数据集');
+                return;
+            }
+            
+            $('#startEvalBtn').prop('disabled', true);
+            $('#evalStatus').removeClass('bg-secondary').addClass('bg-warning').text('评估中');
+            $('#evalLogOutput').text('开始评估...\n');
+            $('#evalResults').hide();
+            
+            // 使用 XMLHttpRequest 处理 SSE
+            var xhr = new XMLHttpRequest();
+            var lastResponseLength = 0;
+            
+            xhr.open('POST', '/api/eval/model/start', true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.timeout = 0;
+            
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 3 || xhr.readyState === 4) {
+                    var newData = xhr.responseText.substring(lastResponseLength);
+                    lastResponseLength = xhr.responseText.length;
+                    
+                    var lines = newData.split('\n');
+                    lines.forEach(function(line) {
+                        if (line.startsWith('data: ')) {
+                            var data = line.substring(6).trim();
+                            if (data === '[DONE]') {
+                                $('#startEvalBtn').prop('disabled', false);
+                                $('#evalStatus').removeClass('bg-warning').addClass('bg-success').text('完成');
+                                loadEvalHistory();
+                            } else if (data) {
+                                $('#evalLogOutput').append(data + '\n');
+                                $('#evalLogOutput').scrollTop($('#evalLogOutput')[0].scrollHeight);
+                            }
+                        }
+                    });
+                }
+            };
+            
+            xhr.onerror = function() {
+                $('#evalLogOutput').append('[错误] 连接失败\n');
+                $('#startEvalBtn').prop('disabled', false);
+                $('#evalStatus').removeClass('bg-warning').addClass('bg-danger').text('错误');
+            };
+            
+            xhr.send(JSON.stringify({
+                model_name: model,
+                eval_dataset: dataset,
+                sample_count: parseInt(sampleCount)
+            }));
+        }
+
+        // ==================== Tab 3: 模型对比 ====================
+        let selectedModels = [];
+
+        function loadComparisonModels() {
+            $.get('/api/eval/models')
+                .done(function(res) {
+                    const container = $('#comparisonModelList');
+                    container.empty();
+                    
+                    if (res.models && res.models.length > 0) {
+                        res.models.forEach(function(m) {
+                            const card = $(`
+                                <div class="model-select-card" data-model="${m}">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" value="${m}" id="chk_${m}">
+                                        <label class="form-check-label" for="chk_${m}">${m}</label>
+                                    </div>
+                                </div>
+                            `);
+                            
+                            card.click(function(e) {
+                                if (e.target.type !== 'checkbox') {
+                                    const chk = $(this).find('.form-check-input');
+                                    chk.prop('checked', !chk.prop('checked'));
+                                }
+                                updateModelSelection();
+                            });
+                            
+                            container.append(card);
+                        });
+                    } else {
+                        container.html('<div class="text-muted">暂无可用模型</div>');
+                    }
+                })
+                .fail(function() {
+                    $('#comparisonModelList').html('<div class="text-danger">加载失败</div>');
+                });
+        }
+
+        function updateModelSelection() {
+            selectedModels = [];
+            $('.model-select-card input:checked').each(function() {
+                selectedModels.push($(this).val());
+            });
+            
+            $('.model-select-card').removeClass('selected');
+            $('.model-select-card input:checked').closest('.model-select-card').addClass('selected');
+            
+            $('#startComparisonBtn').prop('disabled', selectedModels.length < 2 || selectedModels.length > 4);
+        }
+
+        function loadComparisonHistory() {
+            $.get('/api/eval/comparison/list', function(res) {
+                const container = $('#comparisonHistoryList');
+                container.empty();
+                
+                if (res.comparisons && res.comparisons.length > 0) {
+                    res.comparisons.forEach(function(c) {
+                        container.append(`
+                            <a href="#" class="list-group-item list-group-item-action" data-comparison-id="${c.id}">
+                                <div class="fw-bold">${c.comparison_name}</div>
+                                <small class="text-muted">${c.model_names.join(', ')}</small>
+                                <div><small class="text-muted">${formatTime(c.created_at)}</small></div>
+                            </a>
+                        `);
+                    });
+                    
+                    container.find('a').click(function(e) {
+                        e.preventDefault();
+                        loadComparisonDetail($(this).data('comparison-id'));
+                    });
+                } else {
+                    container.html('<div class="list-group-item text-muted">暂无记录</div>');
+                }
+            });
+        }
+
+        function startModelComparison() {
+            const name = $('#comparisonName').val() || '模型对比';
+            const dataset = $('#comparisonDatasetSelect').val();
+            const sampleCount = $('#comparisonSampleCount').val();
+            
+            if (selectedModels.length < 2) {
+                alert('请至少选择2个模型');
+                return;
+            }
+            
+            $('#startComparisonBtn').prop('disabled', true);
+            $('#comparisonStatus').removeClass('bg-secondary').addClass('bg-warning').text('对比中');
+            $('#comparisonLogOutput').text('开始对比...\n');
+            $('#comparisonResults').hide();
+            
+            var xhr = new XMLHttpRequest();
+            var lastResponseLength = 0;
+            
+            xhr.open('POST', '/api/eval/comparison/start', true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.timeout = 0;
+            
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 3 || xhr.readyState === 4) {
+                    var newData = xhr.responseText.substring(lastResponseLength);
+                    lastResponseLength = xhr.responseText.length;
+                    
+                    var lines = newData.split('\n');
+                    lines.forEach(function(line) {
+                        if (line.startsWith('data: ')) {
+                            var data = line.substring(6).trim();
+                            if (data === '[DONE]') {
+                                $('#startComparisonBtn').prop('disabled', false);
+                                $('#comparisonStatus').removeClass('bg-warning').addClass('bg-success').text('完成');
+                                loadComparisonHistory();
+                                // 加载最新的对比结果
+                                setTimeout(() => {
+                                    $.get('/api/eval/comparison/list', function(res) {
+                                        if (res.comparisons && res.comparisons.length > 0) {
+                                            loadComparisonDetail(res.comparisons[0].id);
+                                        }
+                                    });
+                                }, 500);
+                            } else if (data) {
+                                $('#comparisonLogOutput').append(data + '\n');
+                                $('#comparisonLogOutput').scrollTop($('#comparisonLogOutput')[0].scrollHeight);
+                            }
+                        }
+                    });
+                }
+            };
+            
+            xhr.onerror = function() {
+                $('#comparisonLogOutput').append('[错误] 连接失败\n');
+                $('#startComparisonBtn').prop('disabled', false);
+                $('#comparisonStatus').removeClass('bg-warning').addClass('bg-danger').text('错误');
+            };
+            
+            xhr.send(JSON.stringify({
+                comparison_name: name,
+                model_names: selectedModels,
+                eval_dataset: dataset,
+                sample_count: parseInt(sampleCount)
+            }));
+        }
+
+        function loadComparisonDetail(comparisonId) {
+            currentComparisonId = comparisonId;
+            
+            $.get(`/api/eval/comparison/${comparisonId}`, function(res) {
+                $('#comparisonResults').show();
+                
+                // 渲染指标对比表
+                const thead = $('#comparisonMetricsTable thead tr');
+                const tbody = $('#comparisonMetricsTable tbody');
+                
+                thead.html('<th>指标</th>');
+                res.model_names.forEach(function(name) {
+                    thead.append(`<th>${name}</th>`);
+                });
+                
+                tbody.empty();
+                const metrics = ['rougeL', 'rouge1', 'bleu', 'bertscore_f1'];
+                const metricLabels = {'rougeL': 'ROUGE-L', 'rouge1': 'ROUGE-1', 'bleu': 'BLEU', 'bertscore_f1': 'BERTScore F1'};
+                
+                metrics.forEach(function(metric) {
+                    var row = `<tr><td>${metricLabels[metric]}</td>`;
+                    res.model_names.forEach(function(name) {
+                        const value = res.model_metrics[name] && res.model_metrics[name][metric];
+                        row += `<td>${value ? value.toFixed(4) : '-'}</td>`;
+                    });
+                    row += '</tr>';
+                    tbody.append(row);
+                });
+                
+                // 渲染雷达图
+                renderRadarChart(res.model_names, res.model_metrics);
+                
+                // 渲染样例对比表
+                const sampleThead = $('#comparisonSampleTable thead tr');
+                const sampleTbody = $('#comparisonSampleTable tbody');
+                
+                sampleThead.html('<th style="width: 25%">问题</th><th style="width: 25%">参考答案</th>');
+                res.model_names.forEach(function(name) {
+                    sampleThead.append(`<th style="width: 25%">${name}</th>`);
+                });
+                
+                sampleTbody.empty();
+                if (res.sample_comparisons) {
+                    res.sample_comparisons.forEach(function(s) {
+                        var row = `<tr><td><small>${s.input.substring(0, 80)}...</small></td>`;
+                        row += `<td><small class="text-muted">${s.reference.substring(0, 100)}...</small></td>`;
+                        res.model_names.forEach(function(name) {
+                            const output = s.model_outputs[name];
+                            if (output) {
+                                row += `<td><div class="output-cell"><small>${output.output.substring(0, 100)}...</small></div></td>`;
+                            } else {
+                                row += `<td>-</td>`;
+                            }
+                        });
+                        row += '</tr>';
+                        sampleTbody.append(row);
+                    });
+                }
+            });
+        }
+
+        function renderRadarChart(modelNames, modelMetrics) {
+            destroyChart('radarChart');
+            
+            const metrics = ['rougeL', 'bleu', 'bertscore_f1'];
+            const metricLabels = ['ROUGE-L', 'BLEU', 'BERTScore'];
+            
+            const datasets = modelNames.map(function(name, idx) {
+                const colors = ['#1e3c72', '#28a745', '#ffc107', '#dc3545'];
+                const data = metrics.map(function(m) {
+                    return modelMetrics[name] && modelMetrics[name][m] ? modelMetrics[name][m] : 0;
+                });
+                
+                return {
+                    label: name,
+                    data: data,
+                    borderColor: colors[idx % colors.length],
+                    backgroundColor: colors[idx % colors.length] + '33',
+                    borderWidth: 2
+                };
+            });
+            
+            const ctx = document.getElementById('radarChart').getContext('2d');
+            window.charts['radarChart'] = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: metricLabels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 1
+                        }
+                    }
+                }
+            });
+        }
+
+        function exportComparisonReport() {
+            if (!currentComparisonId) {
+                alert('请先进行模型对比');
+                return;
+            }
+            window.open(`/api/eval/comparison/${currentComparisonId}/export`, '_blank');
+        }
+
+        // ==================== 页面初始化 ====================
+        $(document).ready(function() {
+            // Tab 1: 训练监控
+            loadTrainingJobs();
+            
+            // Tab 2: 模型评估
+            loadEvalModels();
+            loadEvalDatasets();
+            loadEvalHistory();
+            $('#startEvalBtn').click(startModelEval);
+            
+            // Tab 3: 模型对比
+            loadComparisonModels();
+            loadEvalDatasets();
+            loadComparisonHistory();
+            $('#startComparisonBtn').click(startModelComparison);
+            $('#exportComparisonBtn').click(exportComparisonReport);
+            
+            // Tab切换时清理
+            $('button[data-bs-toggle="tab"]').on('shown.bs.tab', function(e) {
+                const target = $(e.target).attr('data-bs-target');
+                if (target === '#tab1' && currentModel) {
+                    loadTrainingMetrics(currentModel);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

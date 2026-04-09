@@ -1,20 +1,19 @@
 import os
 import hashlib
 import json
-import redis
 import logging
+import redis
 from datetime import timedelta
 from app.services.knowledge_base_service import KnowledgeBaseService
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_community.chat_message_histories import RedisChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from app.config import Config
 from app.db import db
 from app.db.models import QACache, QueryLog
 from datetime import datetime
-
-logger = logging.getLogger(__name__)
 
 class QAService:
     def __init__(self):
@@ -25,7 +24,7 @@ class QAService:
             self.redis_client.ping()
             self.use_redis = True
         except Exception as e:
-            logger.warning(f"Redis not available ({e}). Caching disabled.")
+            print(f"Warning: Redis not available ({e}). Caching disabled.")
             self.use_redis = False
             
         # Initialize LLM 根据配置动态切换大模型
@@ -77,14 +76,14 @@ class QAService:
 
     def initialize_llm(self):
         active_llm = Config.ACTIVE_LLM.lower()
-        logger.info(f"Initializing LLM with backend: {active_llm}")
+        print(f"Initializing LLM with backend: {active_llm}")
         
         if active_llm == 'deepseek':
             self.llm = ChatOpenAI(
                 base_url=Config.DEEPSEEK_API_URL.replace('/chat/completions', ''), 
                 api_key=Config.DEEPSEEK_API_KEY,
                 model=Config.DEEPSEEK_MODEL_NAME,
-                temperature=0.3,
+                temperature=0.1,
                 max_retries=1,
                 timeout=60
             )
@@ -92,7 +91,7 @@ class QAService:
             self.llm = ChatOpenAI(
                 api_key=os.getenv('OPENAI_API_KEY', 'EMPTY'),
                 model='gpt-3.5-turbo',
-                temperature=0.3,
+                temperature=0.1,
                 max_retries=1,
                 timeout=60
             )
@@ -101,7 +100,7 @@ class QAService:
             self.llm = ChatOllama(
                 base_url=Config.OLLAMA_BASE_URL,
                 model=Config.OLLAMA_MODEL_NAME,
-                temperature=0.3
+                temperature=0.1
             )
         elif active_llm == 'vllm':
             # vLLM 兼容 OpenAI 接口，需要将 /chat/completions 后缀去掉，保留到 /v1 级别
@@ -111,9 +110,9 @@ class QAService:
                 
             self.llm = ChatOpenAI(
                 base_url=base_url, 
-                api_key=Config.VLLM_API_KEY,
+                api_key=Config.VLLM_API_KEY or "EMPTY", # vLLM 本地服务通常不需要真实 API Key，但 OpenAI 客户端强校验此字段，必须给一个非空字符串
                 model=Config.VLLM_MODEL_NAME,
-                temperature=0.3,
+                temperature=0.1,
                 max_retries=1,
                 timeout=60
             )
@@ -127,7 +126,7 @@ class QAService:
                     base_url="https://dashscope.aliyuncs.com/compatible-mode/v1", 
                     api_key=os.getenv('DASHSCOPE_API_KEY', Config.QWEN_API_KEY),
                     model="qwen-plus", # 默认使用 qwen-plus
-                    temperature=0.3,
+                    temperature=0.1,
                     max_retries=1,
                     timeout=60
                 )
@@ -136,7 +135,7 @@ class QAService:
                     base_url=Config.QWEN_API_URL.replace('/chat/completions', ''), 
                     api_key=Config.QWEN_API_KEY,
                     model=Config.QWEN_MODEL_NAME,
-                    temperature=0.3,
+                    temperature=0.1,
                     max_retries=1,
                     timeout=60
                 )
@@ -153,172 +152,387 @@ class QAService:
 
     def get_cache_key(self, question):
         return hashlib.md5(question.encode('utf-8')).hexdigest()
+    
+    def _check_needs_rewrite(self, question, history_messages):
+        """
+        启发式判断是否需要问题重构
+        返回True表示需要重构，False表示可以直接使用原问题
+        """
+        if not history_messages:
+            return False
+        
+        # 指代词列表
+        pronouns = ['它', '他', '她', '这个', '那个', '这些', '那些', '这里', '那里', '这样', '那样']
+        
+        # 如果包含指代词，需要重构
+        if any(p in question for p in pronouns):
+            return True
+        
+        # 如果问题太短（<5字），可能需要上下文
+        # 注意：调用处已检查历史消息，只有存在历史消息时才会执行到这里
+        if len(question) < 5:
+            return True
+        
+        # 如果包含"为什么"、"怎么办"等，且历史中有相关内容
+        follow_up_keywords = ['为什么', '怎么办', '然后呢', '还有呢', '除此之外']
+        if any(kw in question for kw in follow_up_keywords):
+            return True
+        
+        return False
+    
+    def _post_process_rewrite(self, original, rewritten, history_text=None):
+        """
+        问题重构后处理：防止过度发散
+        """
+        # 如果改写结果过长（超过原问题5倍且长度大于20），可能过度发散
+        if len(rewritten) > len(original) * 5 and len(rewritten) > 20:
+            print(f"Warning: Rewritten query too long, falling back to original. Original: {original}, Rewritten: {rewritten}")
+            return original
+        
+        # 针对中文环境，使用字级别集合比较而不是 split()
+        original_chars = set(original.lower())
+        rewritten_chars = set(rewritten.lower())
+        new_chars = list(rewritten_chars - original_chars)
+        
+        # 在检查新字比例之前，过滤掉来自历史对话的字
+        if history_text:
+            history_chars = set(history_text.lower())
+            new_chars = [c for c in new_chars if c not in history_chars]
+        
+        # 如果新增字汇过多（超过70%），可能过度发散
+        if len(new_chars) > len(original_chars) * 0.7 and len(original_chars) > 5:
+            print(f"Warning: Rewritten query has too many new chars, using original.")
+            return original
+        
+        return rewritten
+
+    def _load_history_context(self, user_id):
+        history_obj = self.get_session_history(user_id)
+        messages = history_obj.messages
+        filtered_messages = []
+        for msg in messages:
+            if msg.type in ['human', 'ai'] and getattr(msg, 'name', None) is None:
+                filtered_messages.append(msg)
+        if len(filtered_messages) > 6:
+            filtered_messages = filtered_messages[-6:]
+        return history_obj, messages, filtered_messages
+
+    def _build_runtime_cache_key(self, question, db_names, enable_tools, filtered_messages):
+        history_signature = ""
+        if filtered_messages:
+            history_signature = "||".join(
+                f"{msg.type}:{str(msg.content)[:200]}"
+                for msg in filtered_messages[-4:]
+            )
+        raw_key = f"{Config.ACTIVE_LLM}|{question}|{'/'.join(db_names)}|{enable_tools}|{history_signature}"
+        return self.get_cache_key(raw_key)
+
+    def _resolve_enabled_tool_names(self):
+        configured = [
+            tool_name.strip()
+            for tool_name in getattr(Config, 'ENABLED_TOOLS', [])
+            if tool_name and str(tool_name).strip()
+        ]
+        preferred = ['search_knowledge_base', 'get_document_details', 'query_metrics']
+        resolved = []
+        for tool_name in preferred + configured:
+            if tool_name not in resolved:
+                resolved.append(tool_name)
+        return resolved
+
+    def _normalize_llm_text(self, content):
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            texts = []
+            for item in content:
+                if isinstance(item, str):
+                    texts.append(item)
+                elif isinstance(item, dict) and item.get("type") == "text":
+                    texts.append(item.get("text", ""))
+            return "".join(texts)
+        return str(content or "")
+
+    def _persist_history_turn(self, history_obj, question, answer):
+        history_obj.add_message(HumanMessage(content=question))
+        history_obj.add_message(AIMessage(content=answer))
+
+    def _run_tool_calling_workflow(self, base_system_prompt, user_query_with_rule, filtered_messages, db_names):
+        from flask import current_app
+        from app.services.agent_tools import AVAILABLE_TOOLS, get_tools_by_names
+
+        enabled_tool_names = self._resolve_enabled_tool_names()
+        tools = get_tools_by_names(enabled_tool_names)
+        if not tools:
+            raise RuntimeError("当前未配置可用工具")
+
+        llm_with_tools = self.llm.bind_tools(tools)
+        current_app.tool_runtime_context = {
+            "db_names": db_names,
+            "enabled_tool_names": enabled_tool_names
+        }
+
+        tool_prompt = (
+            base_system_prompt
+            + "\n\n【工具调用策略】：\n"
+            + "1. 当用户询问知识库内容、文档依据、系统状态、训练状态或部署状态时，优先调用工具获取真实结果。\n"
+            + "2. 先调用 search_knowledge_base 获取候选证据，再决定是否继续调用 get_document_details 深挖具体文档。\n"
+            + "3. 需要系统运行状态、训练状态、部署状态时，调用 query_metrics，不要凭空猜测。\n"
+            + "4. 只有在工具结果和参考资料都不足时，才允许给出保守兜底结论。\n"
+            + "5. 工具参数必须完整、准确，尤其是 query 与文档标识。"
+        )
+
+        messages = [SystemMessage(content=tool_prompt)]
+        if filtered_messages:
+            messages.extend(filtered_messages)
+        messages.append(HumanMessage(content=user_query_with_rule))
+
+        tool_traces = []
+        final_answer = ""
+        try:
+            for step_index in range(4):
+                ai_message = llm_with_tools.invoke(messages)
+                messages.append(ai_message)
+                tool_calls = getattr(ai_message, "tool_calls", None) or []
+                if not tool_calls:
+                    final_answer = self._normalize_llm_text(ai_message.content).strip()
+                    break
+
+                for tool_index, tool_call in enumerate(tool_calls, 1):
+                    tool_name = tool_call.get("name")
+                    tool_args = tool_call.get("args", {}) or {}
+                    tool_call_id = tool_call.get("id") or f"tool_call_{step_index}_{tool_index}"
+                    tool_impl = AVAILABLE_TOOLS.get(tool_name)
+
+                    if tool_impl is None:
+                        tool_result = json.dumps({"error": f"未知工具: {tool_name}"}, ensure_ascii=False)
+                    else:
+                        tool_result = tool_impl.invoke(tool_args)
+
+                    tool_traces.append({
+                        "name": tool_name,
+                        "args": tool_args,
+                        "result_preview": str(tool_result)[:400]
+                    })
+                    messages.append(ToolMessage(content=str(tool_result), tool_call_id=tool_call_id))
+            return final_answer, tool_traces
+        finally:
+            if hasattr(current_app, "tool_runtime_context"):
+                delattr(current_app, "tool_runtime_context")
 
     def stream_answer_question(self, question, user_id="anonymous", db_names=['default'], enable_tools=True):
         start_time = datetime.utcnow()
-        cache_key = self.get_cache_key(question + "_" + "_".join(db_names) + "_" + str(enable_tools))
-        
-        # 1. Check Redis Cache
-        if self.use_redis:
-            try:
-                cached_response = self.redis_client.get(cache_key)
-                if cached_response:
-                    logger.info("Hit Redis Cache")
-                    data = json.loads(cached_response)
-                    # 模拟流式输出缓存内容
-                    yield json.dumps({"type": "chunk", "content": data["answer"]}) + "\n"
-                    yield json.dumps({"type": "sources", "sources": data["sources"]}) + "\n"
-                    return
-            except Exception as e:
-                logger.error(f"Redis get error: {e}")
 
-        # 1.5 改写用户问题 (Standalone Question)
+        # ========== 思考过程开始 ==========
+        # yield json.dumps({"type": "chunk", "content": "> 🧠 **思考过程**\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": "> ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"}) + "\n"
+        
+        # 步骤1: 接收请求
+        yield json.dumps({"type": "chunk", "content": "> **步骤 1/6: 接收用户请求** ✅\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": f">   📌 原始问题: `{question}`\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": f">   📌 查询范围: {', '.join(db_names)}\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": f">   📌 工具模式: {'开启' if enable_tools else '关闭'}\n"}) + "\n"
+        
+        # 步骤2: 历史上下文处理
+        yield json.dumps({"type": "chunk", "content": "> **步骤 2/6: 历史上下文处理**\n"}) + "\n"
+        
         search_query = question
-        yield json.dumps({"type": "thought", "content": "- [x] 收到用户请求，正在解析意图...\n"}) + "\n"
-        
+        history_obj = None
+        filtered_messages = []
+        cache_key = None
         try:
-            history_obj = self.get_session_history(user_id)
-            if len(history_obj.messages) > 0:
-                yield json.dumps({"type": "thought", "content": "- [x] 检测到多轮对话，正在结合历史上下文重构问题...\n"}) + "\n"
-                from langchain_core.messages import SystemMessage, HumanMessage
-                history_text = "\n".join([f"{msg.type}: {msg.content}" for msg in history_obj.messages[-4:]])
-                rewrite_prompt = f"""你是一个智能运维助手。请根据用户的历史对话和当前提问，将当前提问重写为一个独立、完整且表意清晰的搜索查询（Query）。
-如果当前提问是一个系统命令（如 ping, df -h），请不要重写，直接返回原命令。
-如果当前提问已经很完整，也直接返回原提问。
+            history_obj, messages, filtered_messages = self._load_history_context(user_id)
+            
+            yield json.dumps({"type": "chunk", "content": f">   📜 历史消息数: {len(messages)} 条\n"}) + "\n"
+            yield json.dumps({"type": "chunk", "content": f">   📜 有效上下文: {len(filtered_messages)} 条\n"}) + "\n"
 
-历史对话：
+            cache_key = self._build_runtime_cache_key(question, db_names, enable_tools, filtered_messages)
+            can_use_cache = self.use_redis and not enable_tools and len(filtered_messages) == 0
+            if can_use_cache:
+                try:
+                    cached_response = self.redis_client.get(cache_key)
+                    if cached_response:
+                        print("Hit Redis Cache")
+                        data = json.loads(cached_response)
+                        yield json.dumps({"type": "chunk", "content": ">   ⚡ 命中无上下文缓存，直接返回结果\n"}) + "\n"
+                        yield json.dumps({"type": "chunk", "content": "> ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"}) + "\n"
+                        yield json.dumps({"type": "chunk", "content": data["answer"]}) + "\n"
+                        yield json.dumps({"type": "sources", "sources": data["sources"]}) + "\n"
+                        return
+                except Exception as e:
+                    print(f"Redis get error: {e}")
+            
+            needs_rewrite = self._check_needs_rewrite(question, filtered_messages)
+            
+            if needs_rewrite and len(filtered_messages) > 0:
+                yield json.dumps({"type": "chunk", "content": ">   🔄 执行问题重构...\n"}) + "\n"
+                history_text = "\n".join([f"{msg.type}: {msg.content}" for msg in filtered_messages])
+                
+                history_summary = " | ".join([f"{msg.type[:1].upper()}: {msg.content[:30]}..." for msg in filtered_messages[-2:]])
+                yield json.dumps({"type": "chunk", "content": f">   💭 上下文摘要: {history_summary}\n"}) + "\n"
+                
+                rewrite_prompt = f"""请根据以下对话历史记录，将用户的最新问题改写为一个独立、完整且没有歧义的问题。
+
+【改写要求 - 严格遵守】：
+1. **仅补全指代词**：将"它"、"这个"、"那个"等指代词替换为上文提到的具体实体名称。
+2. **保持原始意图**：严禁添加原问题中没有的信息、严禁扩展问题范围、严禁改变问题类型。
+3. **系统指令原样返回**：如果问题是明确的系统命令（如ping、curl、kubectl等），直接原样返回。
+4. **清晰问题无需改写**：如果问题已经完整清晰（不含指代词），直接原样返回。
+5. **输出格式**：只返回改写后的纯文本问题，不要有任何解释、引号或额外内容。
+
+【对话历史】：
 {history_text}
 
-当前提问：{question}
-重写后的完整提问："""
-                rewrite_response = self.llm.invoke([HumanMessage(content=rewrite_prompt)])
-                search_query = rewrite_response.content.strip()
-                logger.info(f"Original Query: {question} -> Rewritten Query: {search_query}")
-                yield json.dumps({"type": "thought", "content": f"- [x] 问题重构完成: `{search_query}`\n"}) + "\n"
+【最新问题】：{question}
+
+【独立完整的问题】："""
+                try:
+                    rewrite_response = self.llm.invoke([HumanMessage(content=rewrite_prompt)])
+                    search_query = rewrite_response.content.strip()
+                except Exception as e:
+                    logging.warning(f"问题重构LLM调用失败，使用原始问题: {e}")
+                    search_query = question
+                
+                # 后处理：确保改写不会过度发散
+                original_query = search_query
+                search_query = self._post_process_rewrite(question, search_query, history_text)
+                
+                if search_query != original_query:
+                    yield json.dumps({"type": "chunk", "content": ">   ⚠️ 重构结果被后处理修正\n"}) + "\n"
+                
+                if search_query != question:
+                    yield json.dumps({"type": "chunk", "content": f">   ✅ 重构完成\n"}) + "\n"
+                    yield json.dumps({"type": "chunk", "content": f">      原问题: `{question}`\n"}) + "\n"
+                    yield json.dumps({"type": "chunk", "content": f">      重构后: `{search_query}`\n"}) + "\n"
+                else:
+                    yield json.dumps({"type": "chunk", "content": ">   ✅ 问题已清晰，无需重构\n"}) + "\n"
             else:
-                yield json.dumps({"type": "thought", "content": "- [x] 独立问题，跳过重构步骤。\n"}) + "\n"
+                reason = "无历史上下文" if len(filtered_messages) == 0 else "问题已完整清晰"
+                yield json.dumps({"type": "chunk", "content": f">   ⏭️ 跳过重构 ({reason})\n"}) + "\n"
         except Exception as e:
-            logger.error(f"Rewrite Query Error: {e}")
-            if "Connection error" in str(e) or "Connection refused" in str(e):
-                yield json.dumps({"type": "chunk", "content": "\n抱歉，连接大模型服务失败，请检查 LLM 服务或 Redis 状态。"}) + "\n"
-                return
-            yield json.dumps({"type": "thought", "content": "- [!] 问题重构失败，将使用原始问题继续。\n"}) + "\n"
+            print(f"Rewrite Query Error: {e}")
+            yield json.dumps({"type": "chunk", "content": f">   ❌ 重构失败: {str(e)}\n"}) + "\n"
+            yield json.dumps({"type": "chunk", "content": ">   ⏭️ 使用原始问题继续\n"}) + "\n"
 
-        # 增加思考过程展示：开始检索
-        yield json.dumps({"type": "thought", "content": "- [ ] 正在执行多路知识召回 (向量库检索 / 关键词 BM25 匹配 / 知识图谱遍历)...\n"}) + "\n"
+        # 步骤3: 查询意图分析
+        yield json.dumps({"type": "chunk", "content": "> **步骤 3/6: 查询意图分析**\n"}) + "\n"
+        intent = self.kb_service._analyze_query_intent(search_query)
+        intent_type = "精确查询" if intent['is_exact_query'] else ("故障排查" if intent['is_troubleshooting'] else "语义查询")
+        yield json.dumps({"type": "chunk", "content": f">   🔍 识别意图: {intent_type}\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": f">   ⚖️ 检索权重: 向量({intent['weights']['vector']}) | BM25({intent['weights']['bm25']}) | 图谱({intent['weights']['graph']})\n"}) + "\n"
 
-        # 3. Retrieval 使用改写后的完整问题进行检索，支持多库
+        # 步骤4: 多路知识召回
+        yield json.dumps({"type": "chunk", "content": "> **步骤 4/6: 多路知识召回**\n"}) + "\n"
+        
         import time
         t1 = time.time()
-        results = self.kb_service.search(search_query, top_k=5, db_names=db_names)
+        
+        # 获取检索统计信息
+        total_chunks = 0
+        index_status = []
+        for db_name in db_names:
+            vs = self.kb_service.vector_stores.get(db_name)
+            if vs and hasattr(vs, 'index') and vs.index:
+                count = vs.index.ntotal if hasattr(vs.index, 'ntotal') else 0
+                total_chunks += count
+                index_status.append(f"{db_name}({count})")
+            else:
+                index_status.append(f"{db_name}(未加载)")
+        
+        yield json.dumps({"type": "chunk", "content": f">   📊 索引状态: {' | '.join(index_status)}\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": f">   📊 总文档数: {total_chunks} 个片段\n"}) + "\n"
+        
+        results = self.kb_service.search(search_query, top_k=15, db_names=db_names)
         t2 = time.time()
         
-        # 将检索到的具体库、数量、耗时展示出来
-        search_details = f"耗时 {round(t2-t1, 2)}s"
-        if results:
-            docs_info = "\n  - " + "\n  - ".join([f"匹配度: {round(score, 3)} | 来源: {doc.metadata.get('doc_name', '未知')}" for doc, score in results[:3]])
-            if len(results) > 3:
-                docs_info += f"\n  - ...等共 {len(results)} 条片段"
-        else:
-            docs_info = "\n  - 未检索到强相关内容"
-
-        # 增加思考过程展示：检索完成，评估工具
-        if enable_tools:
-            yield json.dumps({"type": "thought", "content": f"- [x] 检索完成 ({search_details})，召回并融合重排了 {len(results)} 条知识片段:{docs_info}\n- [ ] 正在评估是否需要调用外部工具获取实时状态...\n"}) + "\n"
-        else:
-            yield json.dumps({"type": "thought", "content": f"- [x] 检索完成 ({search_details})，召回并融合重排了 {len(results)} 条知识片段:{docs_info}\n- [ ] 外部工具调用已禁用，直接进入知识整合阶段...\n"}) + "\n"
+        # 步骤5: 结果融合与重排序
+        yield json.dumps({"type": "chunk", "content": "> **步骤 5/6: 结果融合与重排序**\n"}) + "\n"
         
-        # 3.5 Agent 工具调用 (Function Calling)
-        # 判断大模型是否需要调用工具获取实时数据
-        tool_context = ""
-        if enable_tools:
-            try:
-                from app.services.agent_tools import get_tools_by_names, AVAILABLE_TOOLS
-                
-                # 从配置中动态加载工具列表
-                enabled_tool_names = getattr(Config, 'ENABLED_TOOLS', ['execute_shell_command', 'query_api_endpoint'])
-                tools = get_tools_by_names(enabled_tool_names)
-                
-                if tools:
-                    # 绑定工具到大模型
-                    llm_with_tools = self.llm.bind_tools(tools)
-                    # 强化 Prompt，明确如果问题是命令（如 ping）必须直接调用对应的执行工具
-                    tool_prompt = f"""分析以下用户的输入。如果它是一个系统命令（例如 'ping xxx'，'df -h' 等），或者需要获取实时的主机/系统状态、外部API数据，
-    你**必须**调用相应的工具去获取结果。可用的工具包括：{', '.join(enabled_tool_names)}。
-    如果只是普通的知识问答，不需要调用工具。
-    用户输入：{search_query}"""
-                    
-                    tool_msg = llm_with_tools.invoke([("system", "你是一个能够调用工具的智能助手。"), ("user", tool_prompt)])
-                    if tool_msg.tool_calls:
-                        yield json.dumps({"type": "thought", "content": "- [x] 问题涉及实时状态，触发外部工具调用逻辑。\n"}) + "\n"
-                        for tool_call in tool_msg.tool_calls:
-                            tool_name = tool_call["name"]
-                            tool_args = tool_call["args"]
-                            logger.info(f"Calling tool: {tool_name} with args: {tool_args}")
-                            yield json.dumps({"type": "thought", "content": f"- [ ] 正在执行工具: `{tool_name}` ...\n"}) + "\n"
-                            
-                            # 动态调用对应工具
-                            if tool_name in AVAILABLE_TOOLS:
-                                tool_func = AVAILABLE_TOOLS[tool_name]
-                                res = tool_func.invoke(tool_args)
-                                tool_context += f"【{tool_name} 执行结果】:\n{res}\n\n"
-                                yield json.dumps({"type": "thought", "content": f"- [x] 工具 `{tool_name}` 执行成功，已获取实时数据。\n"}) + "\n"
-                                
-                        yield json.dumps({"type": "thought", "content": "- [x] 所有前置任务完成，开始整合上下文并生成最终分析报告...\n\n"}) + "\n"
-                    else:
-                        yield json.dumps({"type": "thought", "content": "- [x] 评估完毕：无需调用外部工具。\n- [x] 所有前置任务完成，开始整合知识生成最终分析报告...\n\n"}) + "\n"
-                else:
-                    yield json.dumps({"type": "thought", "content": "- [x] 未配置外部工具，跳过评估。\n- [x] 所有前置任务完成，开始整合知识生成最终分析报告...\n\n"}) + "\n"
-            except Exception as e:
-                logger.error(f"Tool Calling Error: {e}")
-                yield json.dumps({"type": "thought", "content": "- [!] 工具调用或评估时发生错误，已跳过。\n- [x] 开始整合可用知识生成分析报告...\n\n"}) + "\n"
+        # 分析检索结果来源
+        vector_count = sum(1 for doc, _ in results if doc.metadata.get('db_name') != 'neo4j')
+        graph_count = sum(1 for doc, _ in results if doc.metadata.get('db_name') == 'neo4j')
+        
+        search_details = f"耗时 {round(t2-t1, 2)}s"
+        
+        yield json.dumps({"type": "chunk", "content": f">   📈 向量检索: 召回 {vector_count} 条\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": f">   📈 图谱检索: 召回 {graph_count} 条\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": f">   📈 融合去重: 剩余 {len(results)} 条\n"}) + "\n"
+        yield json.dumps({"type": "chunk", "content": f">   ⏱️ 检索耗时: {search_details}\n"}) + "\n"
+        
+        if results:
+            # 重排序分数转换：将原始分数转换为0-1范围便于显示
+            def normalize_score(score):
+                import math
+                return 1 / (1 + math.exp(-score))
+            
+            yield json.dumps({"type": "chunk", "content": ">   🏆 Top 匹配结果:\n"}) + "\n"
+            for i, (doc, score) in enumerate(results[:3], 1):
+                match_score = round(normalize_score(score), 3)
+                source = doc.metadata.get('doc_name', '未知')
+                content_preview = doc.page_content[:50].replace('\n', ' ')
+                yield json.dumps({"type": "chunk", "content": f">      #{i} [匹配度:{match_score}] {source}\n"}) + "\n"
+                yield json.dumps({"type": "chunk", "content": f">         {content_preview}...\n"}) + "\n"
+            
+            if len(results) > 3:
+                yield json.dumps({"type": "chunk", "content": f">      ... 等共 {len(results)} 条片段\n"}) + "\n"
+            
+            top_score = float(results[0][1])
         else:
-            # 工具被禁用，直接输出完成信息
-            yield json.dumps({"type": "thought", "content": "- [x] 所有前置任务完成，开始整合知识生成最终分析报告...\n\n"}) + "\n"
+            yield json.dumps({"type": "chunk", "content": ">   ⚠️ 未检索到相关内容\n"}) + "\n"
+            top_score = 0.0
 
-        # 告诉前端思考结束，准备输出正文
-        yield json.dumps({"type": "thought_end"}) + "\n"
+        # 步骤6: 质量检查
+        yield json.dumps({"type": "chunk", "content": "> **步骤 6/6: 质量检查**\n"}) + "\n"
+        
+        print(f"[QA Debug] top_score={top_score}, results_count={len(results)}")
+        if not enable_tools and len(results) == 0:
+            yield json.dumps({"type": "chunk", "content": ">   ❌ 检查未通过: 检索结果为空\n"}) + "\n"
+            yield json.dumps({"type": "chunk", "content": "> ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"}) + "\n"
+            yield json.dumps({"type": "chunk", "content": "抱歉，当前知识库中未找到相关资料，无法提供解答。"}) + "\n"
+            yield json.dumps({"type": "sources", "sources": []}) + "\n"
+            return
 
+        # 质量兜底检查 - 只在完全为空时拦截，不在分数低时拦截
+        if not enable_tools and len(results) == 0:
+            yield json.dumps({"type": "chunk", "content": ">   ❌ 检查未通过: 未检索到任何相关资料\n"}) + "\n"
+            yield json.dumps({"type": "chunk", "content": "> ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"}) + "\n"
+            yield json.dumps({"type": "chunk", "content": "抱歉，当前知识库中未找到相关资料。建议检查知识库是否已导入相关文档。"}) + "\n"
+            yield json.dumps({"type": "sources", "sources": []}) + "\n"
+            return
+        
+        if not enable_tools or len(results) > 0:
+            yield json.dumps({"type": "chunk", "content": f">   ✅ 检查通过: 获取 {len(results)} 条有效资料\n"}) + "\n"
+        
+        yield json.dumps({"type": "chunk", "content": "> ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"}) + "\n"
+        # ========== 思考过程结束 ==========
+        
         # 4. Prepare Context
         context_parts = []
         sources = []
-        
-        # 为了保证 LLM 引用的 [1], [2] 和前端展示的来源一致，我们需要统一计数
         source_index = 1
-        
-        # 优先将工具调用结果作为最强关联资料放入 context
-        if tool_context:
-            context_parts.append(f"资料 [{source_index}] (【工具执行结果】请优先根据此结果回答用户):\n{tool_context}")
-            sources.append({
-                "content": tool_context[:100] + "...",
-                "doc_id": "tool_execution",
-                "doc_name": "系统实时执行结果",
-                "score": 1.0
-            })
-            source_index += 1
+        MAX_CONTEXT_LENGTH = 12000  # 字符上限保护
+        current_context_length = 0
             
         for doc, score in results:
-            # 将序号一并编入 Context 供 LLM 参考
-            context_parts.append(f"资料 [{source_index}]:\n{doc.page_content}")
+            # 解决 ChatPromptTemplate 变量缺失报错：转义检索内容中的单大括号
+            safe_content = doc.page_content.replace("{", "{{").replace("}", "}}")
+            content_to_add = f"资料 [{source_index}]:\n{safe_content}"
+            
+            # 检查字符上限
+            if current_context_length + len(content_to_add) > MAX_CONTEXT_LENGTH:
+                context_parts.append("> ⚠️ 上下文长度已达上限，部分资料已省略")
+                break
+            
+            context_parts.append(content_to_add)
+            current_context_length += len(content_to_add)
             doc_name = doc.metadata.get("doc_name", "Unknown")
             
-            # 如果元数据里是 Unknown，尝试从数据库里查一次
-            if doc_name == "Unknown":
-                try:
-                    from app.db import db
-                    from app.db.models import Document
-                    from flask import current_app
-                    with current_app.app_context():
-                        doc_id = doc.metadata.get("doc_id")
-                        if doc_id:
-                            db_doc = db.session.query(Document).filter_by(doc_id=doc_id).first()
-                            if db_doc:
-                                doc_name = db_doc.doc_name
-                except Exception:
-                    pass
-
+            # 增加返回的参考内容长度，原来是 100 字符，现在扩大到 600 字符，方便前端展示更完整的片段
+            original_content = doc.page_content
+            display_content = original_content[:600] + "..." if len(original_content) > 600 else original_content
+            
             sources.append({
-                "content": doc.page_content[:100] + "...",
+                "content": display_content,
                 "doc_id": doc.metadata.get("doc_id"),
                 "doc_name": doc_name,
                 "score": float(score)
@@ -327,23 +541,95 @@ class QAService:
             
         context = "\n\n".join(context_parts)
         
-        # 4. Generate Answer via Stream
+        # 动态 Prompt 工程
+        base_system_prompt = """你是一位严谨的知识库问答助手。
+【最高指令】：
+1. 你的所有回答**必须完全、仅限于**参考资料中提供的信息。
+2. 绝对不允许使用你的预训练知识进行回答，不允许推测、发散或补充资料中没有的操作步骤、数据或概念。
+3. 如果你在参考资料中找不到直接回答用户问题的答案，你必须直接且仅回复：“抱歉，当前知识库中未找到相关资料。”
+4. 如果你不知道，就说不知道，不要试图编造答案。
+
+【排版要求】：分步骤条理清晰。你必须在回答中准确引用参考资料的编号（如 [1], [2]），引用的编号必须与参考资料中的 `资料 [X]` 严格对应。在生成答案的末尾，请附上你的回答置信度（高/中/低），并标注引用的资料来源。"""
+
+        if top_score < 0.7 and results:
+            base_system_prompt += "\n【注意】当前检索到的资料相关性较低，如果资料确实无法直接回答问题，请直接回答“未找到相关资料”。"
+        elif top_score > 0.9:
+            base_system_prompt += "\n【注意】当前检索到的资料高度相关，请完全限制在提供资料的范围内回答。"
+
+        base_system_prompt += f"\n\n<参考资料>\n{context}\n</参考资料>"
+        
+        # 强制在用户提问中再次强调规则
+        user_query_with_rule = f"用户问题：{search_query}\n\n请仅使用上面提供的参考资料回答，不要使用任何外部知识。如果资料中没有，请回答未找到相关资料。"
+        
+        # 5. Agent 执行 (ReAct Pattern)
         full_answer = ""
-        try:
-            # 使用 LangChain 的 stream 方法，并传入 session_id
-            for chunk in self.chain_with_history.stream(
-                {"context": context, "question": question},
-                config={"configurable": {"session_id": user_id}}
-            ):
-                content = chunk.content
-                if content:
-                    full_answer += content
-                    yield json.dumps({"type": "chunk", "content": content}) + "\n"
-        except Exception as e:
-            logger.error(f"LLM Error: {e}")
-            error_msg = "抱歉，生成答案时出现错误。请检查LLM服务状态。"
-            yield json.dumps({"type": "chunk", "content": error_msg}) + "\n"
-            full_answer = error_msg
+        history_persisted_manually = False
+        if enable_tools:
+            try:
+                yield json.dumps({"type": "chunk", "content": "> - [ ] 正在初始化工具调用链...\n"}) + "\n"
+                full_answer, tool_traces = self._run_tool_calling_workflow(
+                    base_system_prompt=base_system_prompt,
+                    user_query_with_rule=user_query_with_rule,
+                    filtered_messages=filtered_messages,
+                    db_names=db_names
+                )
+                yield json.dumps({"type": "chunk", "content": "> - [x] 工具链初始化完成\n"}) + "\n"
+
+                if tool_traces:
+                    yield json.dumps({"type": "chunk", "content": f"> - [x] 已完成 {len(tool_traces)} 次工具调用\n"}) + "\n"
+                    for trace in tool_traces:
+                        yield json.dumps({
+                            "type": "chunk",
+                            "content": (
+                                f">   🔧 工具: `{trace['name']}`\n"
+                                f">   📥 参数: `{json.dumps(trace['args'], ensure_ascii=False)}`\n"
+                                f">   📤 结果摘要: `{trace['result_preview']}`\n"
+                            )
+                        }) + "\n"
+                else:
+                    yield json.dumps({"type": "chunk", "content": "> - [x] 本轮无需调用工具，直接基于知识上下文生成答案\n"}) + "\n"
+
+                if full_answer:
+                    self._persist_history_turn(history_obj, question, full_answer)
+                    history_persisted_manually = True
+                    yield json.dumps({"type": "chunk", "content": "> - [x] 已完成工具结果整合，开始输出最终答复\n\n---\n\n"}) + "\n"
+                    yield json.dumps({"type": "chunk", "content": full_answer}) + "\n"
+            except Exception as e:
+                print(f"Agent Execution Error: {e}")
+                enable_tools = False
+                yield json.dumps({"type": "chunk", "content": "> - [!] Agent 执行异常，降级为普通知识问答...\n\n---\n\n"}) + "\n"
+        
+        if not enable_tools or not full_answer:
+            yield json.dumps({"type": "chunk", "content": "> - [x] 开始整合知识生成最终分析报告...\n\n---\n\n"}) + "\n"
+            try:
+                # 重新构建带历史的 prompt
+                qa_prompt = ChatPromptTemplate.from_messages([
+                    ("system", base_system_prompt),
+                    MessagesPlaceholder(variable_name="history"),
+                    ("user", "{question}")
+                ])
+                chain = qa_prompt | self.llm
+                from langchain_core.runnables.history import RunnableWithMessageHistory
+                chain_with_history = RunnableWithMessageHistory(
+                    chain,
+                    self.get_session_history,
+                    input_messages_key="question",
+                    history_messages_key="history",
+                )
+                
+                for chunk in chain_with_history.stream(
+                    {"question": user_query_with_rule},
+                    config={"configurable": {"session_id": user_id}}
+                ):
+                    content = chunk.content
+                    if content:
+                        full_answer += content
+                        yield json.dumps({"type": "chunk", "content": content}) + "\n"
+            except Exception as e:
+                print(f"LLM Error: {e}")
+                error_msg = "抱歉，生成答案时出现错误。请检查LLM服务状态。"
+                yield json.dumps({"type": "chunk", "content": error_msg}) + "\n"
+                full_answer = error_msg
             
         # 发送引用来源
         yield json.dumps({"type": "sources", "sources": sources}) + "\n"
@@ -353,11 +639,11 @@ class QAService:
             "answer": full_answer,
             "sources": sources
         }
-        if self.use_redis and full_answer and "错误" not in full_answer:
+        if self.use_redis and cache_key and not filtered_messages and not enable_tools and full_answer and len(full_answer) > 50 and "未找到相关" not in full_answer:
             try:
-                self.redis_client.setex(cache_key, timedelta(seconds=3), json.dumps(result))
+                self.redis_client.setex(cache_key, timedelta(seconds=3600), json.dumps(result))
             except Exception as e:
-                logger.error(f"Redis set error: {e}")
+                print(f"Redis set error: {e}")
         
         # 6. Log Query (使用 app.app_context 确保在生成器线程中也能正常记录数据库)
         try:
@@ -376,7 +662,7 @@ class QAService:
                 db.session.add(log)
                 db.session.commit()
         except Exception as e:
-            logger.error(f"DB Log error: {e}")
+            print(f"DB Log error: {e}")
 
     def stream_reanalyze_question(self, question, previous_answer, score, user_id="anonymous"):
         """处理低于4分的重新分析工作流"""

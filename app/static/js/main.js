@@ -45,8 +45,6 @@ $(document).ready(function() {
     loadCurrentLLM();
     // 初始化页面持久化聊天记录
     loadChatHistory();
-    // 初始化 SSE 进度条监听
-    initProgressSSE();
 
     // 监听文件选择变化，增量添加到全局文件列表
     $('#fileInput').on('change', function() {
@@ -289,6 +287,21 @@ function loadOllamaModels() {
 let currentAbortController = null;
 let currentChatSessionId = null;
 
+function generateChatSessionId() {
+    return 'rag-session-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+}
+
+function ensureChatSessionId(forceReset = false) {
+    if (forceReset || !currentChatSessionId) {
+        currentChatSessionId = forceReset ? null : localStorage.getItem('rag_chat_session_id');
+        if (!currentChatSessionId) {
+            currentChatSessionId = generateChatSessionId();
+            localStorage.setItem('rag_chat_session_id', currentChatSessionId);
+        }
+    }
+    return currentChatSessionId;
+}
+
 // 配置 marked.js
 if (typeof marked !== 'undefined') {
     marked.setOptions({
@@ -338,7 +351,8 @@ function sendMessage() {
         body: JSON.stringify({
             question: query,
             db_names: selectedDbs,
-            enable_tools: enableTools
+            enable_tools: enableTools,
+            session_id: ensureChatSessionId()
         }),
         signal: currentAbortController.signal
     }).then(async response => {
@@ -364,10 +378,6 @@ function sendMessage() {
                         const data = JSON.parse(line);
                         if (data.type === 'chunk') {
                             appendChunkToMessage(botMsgId, data.content);
-                        } else if (data.type === 'thought') {
-                            appendThoughtToMessage(botMsgId, data.content);
-                        } else if (data.type === 'thought_end') {
-                            endThoughtProcess(botMsgId);
                         } else if (data.type === 'action') {
                             $(`#${botMsgId}-text`).append(data.content);
                             scrollToBottom();
@@ -417,14 +427,13 @@ function appendEmptyBotMessage(msgId) {
     var html = `
         <div class="d-flex flex-row justify-content-start mb-3" id="${msgId}-container">
             <div class="chat-bubble bot markdown-body" style="position: relative; width: 100%;">
-                <div class="thinking-block mb-2" id="${msgId}-thinking-container" style="display: none; border-left: 3px solid #6c757d; padding-left: 10px; margin-bottom: 15px;">
-                    <div class="thinking-header d-flex align-items-center text-muted" style="cursor: pointer; user-select: none;" onclick="toggleThinking('${msgId}')">
-                        <i class="fas fa-chevron-down me-2" id="${msgId}-thinking-icon" style="transition: transform 0.3s; font-size: 0.8rem;"></i>
-                        <span class="fw-bold" style="font-size: 0.9rem;">思考过程</span>
-                        <span class="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true" style="width: 0.8rem; height: 0.8rem;" id="${msgId}-thinking-spinner"></span>
-                    </div>
-                    <div class="thinking-content mt-2 text-muted" id="${msgId}-thinking-text" style="font-size: 0.85em; white-space: pre-wrap; max-height: 300px; overflow-y: auto;"></div>
-                </div>
+                <details class="mb-2" id="${msgId}-thinking-container" style="display: none; background-color: #f8f9fa; border-radius: 6px; padding: 5px 10px; border: 1px solid #e9ecef;">
+                    <summary style="cursor: pointer; color: #6c757d; font-size: 0.9em; font-weight: bold; user-select: none;">
+                        🧠 思考过程999 <span class="spinner-border spinner-border-sm ms-1" role="status" aria-hidden="true" style="width: 0.8rem; height: 0.8rem; vertical-align: text-bottom;"></span>
+                    </summary>
+                    <div class="mt-2 text-muted" id="${msgId}-thinking-text" style="font-size: 0.85em; white-space: pre-wrap; max-height: 300px; overflow-y: auto;"></div>
+                    <div id="${msgId}-sources-thinking" class="mt-2"></div>
+                </details>
                 <div class="mb-0 message-content" id="${msgId}-text"></div>
                 <div id="${msgId}-sources" style="display: none;"></div>
                 <div id="${msgId}-rating" class="mt-2 text-end" style="font-size: 0.85rem; border-top: 1px dashed #dee2e6; padding-top: 5px;"></div>
@@ -433,18 +442,6 @@ function appendEmptyBotMessage(msgId) {
     `;
     $('#chatHistory').append(html);
     scrollToBottom();
-}
-
-function toggleThinking(msgId) {
-    var content = $(`#${msgId}-thinking-text`);
-    var icon = $(`#${msgId}-thinking-icon`);
-    if (content.is(':visible')) {
-        content.slideUp(200);
-        icon.css('transform', 'rotate(-90deg)');
-    } else {
-        content.slideDown(200);
-        icon.css('transform', 'rotate(0deg)');
-    }
 }
 
 function appendRatingToMessage(msgId, question) {
@@ -525,7 +522,8 @@ function triggerReanalyze(question, previous_answer, score) {
         body: JSON.stringify({
             question: question,
             answer: previous_answer,
-            score: score
+            score: score,
+            session_id: ensureChatSessionId()
         }),
         signal: currentAbortController.signal
     }).then(async response => {
@@ -548,10 +546,6 @@ function triggerReanalyze(question, previous_answer, score) {
                         const data = JSON.parse(line);
                         if (data.type === 'chunk') {
                             appendChunkToMessage(botMsgId, data.content);
-                        } else if (data.type === 'thought') {
-                            appendThoughtToMessage(botMsgId, data.content);
-                        } else if (data.type === 'thought_end') {
-                            endThoughtProcess(botMsgId);
                         } else if (data.type === 'action') {
                             $(`#${botMsgId}-text`).append(data.content);
                             scrollToBottom();
@@ -599,49 +593,53 @@ function executeAutoScript(scriptName) {
     });
 }
 
-function appendThoughtToMessage(msgId, textChunk) {
-    var thinkingContainer = $(`#${msgId}-thinking-container`);
-    var thinkingText = $(`#${msgId}-thinking-text`);
-    var icon = $(`#${msgId}-thinking-icon`);
-    
-    if (thinkingContainer.css('display') === 'none') {
-        thinkingContainer.show();
-        // 默认展开状态
-        thinkingText.show();
-        icon.css('transform', 'rotate(0deg)');
-    }
-    
-    var currentThinking = thinkingText.attr('data-raw') || '';
-    currentThinking += textChunk;
-    thinkingText.attr('data-raw', currentThinking);
-    
-    // 使用 marked 渲染 markdown 列表等
-    thinkingText.html(marked.parse(currentThinking));
-    scrollToBottom();
-}
-
-function endThoughtProcess(msgId) {
-    var thinkingContainer = $(`#${msgId}-thinking-container`);
-    var spinner = $(`#${msgId}-thinking-spinner`);
-    var thinkingText = $(`#${msgId}-thinking-text`);
-    var icon = $(`#${msgId}-thinking-icon`);
-    
-    // 移除加载动画
-    spinner.remove();
-    
-    // 自动折叠思考过程
-    setTimeout(() => {
-        thinkingText.slideUp(300);
-        icon.css('transform', 'rotate(-90deg)');
-    }, 500);
-}
-
 function appendChunkToMessage(msgId, textChunk) {
     var textElem = $(`#${msgId}-text`);
     
     // 判断是否为思考过程
     if (textChunk.startsWith('> ') || textChunk.includes('思考过程')) {
-        // ... (兼容旧版数据，防止出错)
+        var thinkingContainer = $(`#${msgId}-thinking-container`);
+        var thinkingText = $(`#${msgId}-thinking-text`);
+        
+        if (thinkingContainer.css('display') === 'none') {
+            thinkingContainer.show();
+            // 默认展开
+            thinkingContainer.prop('open', true);
+        }
+        
+        // 追加思考内容并渲染
+        var currentThinking = thinkingText.attr('data-raw') || '';
+        
+        // 如果新到达的 chunk 包含 [x] 或新的 [ ]，并且之前有未完成的 [ ]，我们可以将其标记为完成
+        // 具体针对多路召回：
+        if (textChunk.includes('检索完成')) {
+            currentThinking = currentThinking.replace('[ ] 正在执行多路知识召回', '[x] 正在执行多路知识召回');
+            // 将旧的固定文本替换为更详细的动态内容
+            currentThinking = currentThinking.replace('正在执行多路知识召回 (向量库检索 / 关键词 BM25 匹配 / 知识图谱遍历)...', '正在执行多路知识召回 (向量库检索 / 关键词 BM25 匹配 / 知识图谱遍历)... [已完成]');
+        }
+        if (textChunk.includes('所有前置任务完成')) {
+            currentThinking = currentThinking.replace('[ ] 正在评估是否需要调用外部工具', '[x] 正在评估是否需要调用外部工具');
+        }
+        
+        currentThinking += textChunk;
+        thinkingText.attr('data-raw', currentThinking);
+        thinkingText.html(marked.parse(currentThinking));
+        
+        // 思考过程结束的标志
+        if (
+            textChunk.includes('开始整合知识生成最终分析报告') ||
+            textChunk.includes('开始整合上下文并生成最终分析报告') ||
+            textChunk.includes('开始输出最终答复') ||
+            textChunk.includes('已完成工具结果整合')
+        ) {
+            // 移除 spinner
+            thinkingContainer.find('.spinner-border').remove();
+            // 思考结束后自动折叠
+            setTimeout(() => {
+                thinkingContainer.prop('open', false);
+            }, 1000);
+        }
+        scrollToBottom();
         return;
     }
 
@@ -653,6 +651,42 @@ function appendChunkToMessage(msgId, textChunk) {
         // Format citations before parsing markdown
         var formattedText = formatCitations(rawText);
         
+        // 1. 保护代码块，防止其中的公式符号被错误提取
+        var codePlaceholders = {};
+        var codeCounter = 0;
+        function storeCode(match) {
+            var id = 'CODEPLACEHOLDER' + (codeCounter++) + 'ENDCODE';
+            codePlaceholders[id] = match;
+            return id;
+        }
+        formattedText = formattedText.replace(/```[\s\S]*?```/g, storeCode);
+        formattedText = formattedText.replace(/`[^`]*`/g, storeCode);
+
+        // 2. 预处理数学公式：保护 LaTeX 公式不被 marked 错误解析为斜体或意外换行
+        var mathPlaceholders = {};
+        var mathCounter = 0;
+        function storeMath(match, isBlock) {
+            var id = 'MATHPLACEHOLDER' + (mathCounter++) + 'ENDMATH';
+            mathPlaceholders[id] = { text: match, isBlock: isBlock };
+            return id;
+        }
+
+        // 提取 display math: $$...$$ 和 \[...\]
+        formattedText = formattedText.replace(/\$\$(.*?)\$\$/gs, function(match) { return storeMath(match, true); });
+        formattedText = formattedText.replace(/\\\[(.*?)\\\]/gs, function(match) { return storeMath(match, true); });
+        
+        // 提取 inline math: $...$ 和 \(...\)
+        // 匹配规则：$ 后面不能紧跟空格，结束的 $ 前面也不能是空格
+        formattedText = formattedText.replace(/(^|[^\$])\$([^\s\$](?:[^\$]*?[^\s\$])?)\$([^\$]|$)/g, function(match, p1, p2, p3) { 
+            return p1 + storeMath('$' + p2 + '$', false) + p3; 
+        });
+        formattedText = formattedText.replace(/\\\((.*?)\\\)/gs, function(match) { return storeMath(match, false); });
+        
+        // 3. 恢复代码块
+        for (var id in codePlaceholders) {
+            formattedText = formattedText.replace(id, codePlaceholders[id]);
+        }
+
         var parsedHtml = formattedText;
         if (typeof marked !== 'undefined') {
             if (typeof marked.parse === 'function') {
@@ -665,6 +699,15 @@ function appendChunkToMessage(msgId, textChunk) {
         } else {
             parsedHtml = formattedText.replace(/\n/g, '<br>');
         }
+        
+        // 4. 恢复数学公式
+        for (var id in mathPlaceholders) {
+            var mathObj = mathPlaceholders[id];
+            var wrapped = mathObj.isBlock ? '<div class="math-block">' + mathObj.text + '</div>' : '<span class="math-inline">' + mathObj.text + '</span>';
+            // 使用全局替换，因为 marked.js 可能会包裹 `<p>` 标签，或者在渲染时被复用
+            parsedHtml = parsedHtml.split(id).join(wrapped);
+        }
+        
         textElem.html(parsedHtml);
         
         // Render math formulas if KaTeX is available
@@ -672,11 +715,15 @@ function appendChunkToMessage(msgId, textChunk) {
             renderMathInElement(textElem[0], {
                 delimiters: [
                     {left: '$$', right: '$$', display: true},
-                    {left: '$', right: '$', display: false},
+                    {left: '\\[', right: '\\]', display: true},
                     {left: '\\(', right: '\\)', display: false},
-                    {left: '\\[', right: '\\]', display: true}
+                    {left: '$', right: '$', display: false}
                 ],
-                throwOnError: false
+                throwOnError: false,
+                output: 'html', // 强制输出 HTML 避免控制台警告
+                trust: true,
+                strict: false,
+                errorColor: '#cc0000'
             });
         }
         
@@ -702,19 +749,13 @@ function appendSourcesToMessage(msgId, sources) {
     // 如果有思考过程的容器，优先追加到思考过程里
     var thinkingSourcesElem = $(`#${msgId}-sources-thinking`);
     if (thinkingSourcesElem.length > 0) {
-        thinkingSourcesElem.html(sourcesHtml);
+        thinkingSourcesElem.html(sourcesHtml).show();
+        // 确保包含它的 details 也是可见的
+        $(`#${msgId}-thinking-container`).show();
     } else {
         // 后备：附加到原来的位置
         var sourcesElem = $(`#${msgId}-sources`);
         sourcesElem.html(sourcesHtml).show();
-    }
-    
-    // 初始化 tooltip
-    if (typeof bootstrap !== 'undefined') {
-        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-        tooltipTriggerList.map(function (tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl)
-        });
     }
     
     scrollToBottom();
@@ -725,7 +766,7 @@ function formatCitations(text) {
     if (!text) return text;
     // Replace [数字] with a styled span that stands out
     return text.replace(/\[(\d+)\]/g, function(match, p1) {
-        return `<span class="badge bg-info text-dark citation-badge" data-bs-toggle="tooltip" data-bs-placement="top" title="点击查看参考来源 ${p1}" onclick="showSourceTooltip(${p1})" style="cursor:pointer; margin-left:2px; font-size:0.75em; vertical-align:super;">[${p1}]</span>`;
+        return `<span class="badge bg-info text-dark citation-badge" style="cursor:help; margin-left:2px; font-size:0.75em; vertical-align:super;" title="参考来源 ${p1}">[${p1}]</span>`;
     });
 }
 
@@ -737,6 +778,39 @@ function appendMessage(sender, text, sources) {
     if (sender !== 'user') {
         try {
             var formattedText = formatCitations(text);
+            
+            // 1. 保护代码块，防止其中的公式符号被错误提取
+            var codePlaceholders = {};
+            var codeCounter = 0;
+            function storeCode(match) {
+                var id = 'CODEPLACEHOLDER' + (codeCounter++) + 'ENDCODE';
+                codePlaceholders[id] = match;
+                return id;
+            }
+            formattedText = formattedText.replace(/```[\s\S]*?```/g, storeCode);
+            formattedText = formattedText.replace(/`[^`]*`/g, storeCode);
+
+            // 2. 预处理数学公式：保护 LaTeX 公式不被 marked 错误解析为斜体或意外换行
+            var mathPlaceholders = {};
+            var mathCounter = 0;
+            function storeMath(match, isBlock) {
+                var id = 'MATHPLACEHOLDER' + (mathCounter++) + 'ENDMATH';
+                mathPlaceholders[id] = { text: match, isBlock: isBlock };
+                return id;
+            }
+
+            formattedText = formattedText.replace(/\$\$(.*?)\$\$/gs, function(match) { return storeMath(match, true); });
+            formattedText = formattedText.replace(/\\\[(.*?)\\\]/gs, function(match) { return storeMath(match, true); });
+            formattedText = formattedText.replace(/(^|[^\$])\$([^\s\$](?:[^\$]*?[^\s\$])?)\$([^\$]|$)/g, function(match, p1, p2, p3) { 
+                return p1 + storeMath('$' + p2 + '$', false) + p3; 
+            });
+            formattedText = formattedText.replace(/\\\((.*?)\\\)/gs, function(match) { return storeMath(match, false); });
+            
+            // 3. 恢复代码块
+            for (var id in codePlaceholders) {
+                formattedText = formattedText.replace(id, codePlaceholders[id]);
+            }
+
             if (typeof marked !== 'undefined') {
                 if (typeof marked.parse === 'function') {
                     displayContent = marked.parse(formattedText);
@@ -748,6 +822,15 @@ function appendMessage(sender, text, sources) {
             } else {
                 displayContent = formattedText.replace(/\n/g, '<br>');
             }
+            
+            // 4. 恢复数学公式
+            for (var id in mathPlaceholders) {
+                var mathObj = mathPlaceholders[id];
+                var wrapped = mathObj.isBlock ? '<div class="math-block">' + mathObj.text + '</div>' : '<span class="math-inline">' + mathObj.text + '</span>';
+                // 全局替换
+                displayContent = displayContent.split(id).join(wrapped);
+            }
+            
         } catch (err) {
             console.error("Error formatting message:", err);
             displayContent = text.replace(/\n/g, '<br>');
@@ -779,7 +862,8 @@ function appendMessage(sender, text, sources) {
                     {left: '\\(', right: '\\)', display: false},
                     {left: '\\[', right: '\\]', display: true}
                 ],
-                throwOnError: false
+                throwOnError: false,
+                trust: true
             });
         }
         if (typeof hljs !== 'undefined') {
@@ -799,6 +883,7 @@ function saveChatHistory() {
 }
 
 function loadChatHistory() {
+    ensureChatSessionId();
     var chatContent = localStorage.getItem('rag_chat_history');
     if (chatContent) {
         $('#chatHistory').html(chatContent);
@@ -827,7 +912,9 @@ function loadChatHistory() {
                         {left: "\\[", right: "\\]", display: true},
                         {left: "$", right: "$", display: false},
                         {left: "\\(", right: "\\)", display: false}
-                    ]
+                    ],
+                    throwOnError: false,
+                    trust: true
                 });
             });
         }
@@ -838,24 +925,22 @@ function loadChatHistory() {
     }
 }
 
-// 全局变量保存当前的 sources 以供 tooltip 使用
-let currentSources = [];
-
 function renderSources(sources) {
     if (!sources || sources.length === 0) return '';
-    currentSources = sources; // 更新全局 sources
     
     var html = '<div class="mt-2 pt-2 border-top">';
     html += '<small class="text-muted d-block mb-2">参考资料：</small>';
     html += '<div class="d-flex flex-wrap gap-2">'; // 横向排布容器
     
     sources.forEach(function(src, index) {
+        var scoreHtml = src.score ? ` | 相关度: ${(src.score * 100).toFixed(1)}%` : '';
         html += `
             <div class="source-item position-relative">
-                <span class="badge bg-secondary source-badge" id="source-badge-${index + 1}" onclick="toggleSource(this)" style="cursor: pointer;">来源 ${index + 1}</span>
-                <div class="source-content position-absolute bg-white border rounded shadow p-2" style="display: none; z-index: 1000; width: 350px; max-height: 250px; overflow-y: auto; left: 0; top: 100%; margin-top: 5px;">
-                    <div class="mb-2" style="font-size: 0.85rem; line-height: 1.4;">${src.content.replace(/\n/g, '<br>')}</div>
-                    <div class="text-end text-muted" style="font-size: 0.75rem; border-top: 1px solid #eee; padding-top: 4px;">DocName: <span class="fw-bold text-primary">${src.doc_name || '-'}</span> | Score: ${(src.score || 0).toFixed(3)}</div>
+                <span class="badge bg-secondary source-badge" onclick="toggleSource(this)" style="cursor: pointer;">原文片段 ${index + 1}</span>
+                <div class="source-content position-absolute bg-white border rounded shadow p-2" style="display: none; z-index: 1000; width: 350px; max-height: 250px; overflow-y: auto; left: 0; top: 100%; margin-top: 5px; color: #333;">
+                    <div class="mb-2 fw-bold" style="font-size: 0.85rem; border-bottom: 1px solid #eee; padding-bottom: 4px;">原文内容</div>
+                    <div class="mb-2" style="font-size: 0.85rem; white-space: pre-wrap;">${src.content}</div>
+                    <div class="text-end text-muted" style="font-size: 0.75rem;">DocName: ${src.doc_name || '-'}${scoreHtml}</div>
                 </div>
             </div>
         `;
@@ -863,16 +948,6 @@ function renderSources(sources) {
     
     html += '</div></div>';
     return html;
-}
-
-function showSourceTooltip(sourceIndex) {
-    // 触发对应 source 的点击事件来展开详情
-    var badge = $(`#source-badge-${sourceIndex}`);
-    if (badge.length > 0) {
-        toggleSource(badge[0]);
-        // 如果有滚动条，滚动到来源区域
-        badge[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
 }
 
 function toggleSource(element) {
@@ -917,13 +992,30 @@ function removeLoading(id) {
     $('#' + id).remove();
 }
 
+// 标志位：是否允许自动滚动
+let shouldAutoScroll = true;
+
+// 监听用户的滚动事件
+$(document).ready(function() {
+    var chatContainer = $('#chatHistory');
+    chatContainer.on('scroll', function() {
+        // 判断是否滚动到了底部 (允许 50px 的误差)
+        var isAtBottom = chatContainer[0].scrollHeight - chatContainer.scrollTop() <= chatContainer.outerHeight() + 50;
+        // 如果用户往上滑动了，暂停自动滚动；如果滑回了底部，恢复自动滚动
+        shouldAutoScroll = isAtBottom;
+    });
+});
+
 function scrollToBottom() {
+    if (!shouldAutoScroll) return; // 如果用户正在查看历史记录，不执行滚动
     var chatHistory = document.getElementById("chatHistory");
     // 加一点冗余高度，确保如果有 margin 折叠也能滚到底
     chatHistory.scrollTop = chatHistory.scrollHeight + 100;
 }
 
 function clearChat(save = true) {
+    ensureChatSessionId(true);
+    localStorage.removeItem('rag_chat_history');
     $('#chatHistory').html(`
         <div class="d-flex flex-row justify-content-start mb-3">
             <div class="p-3 bg-white border rounded shadow-sm" style="max-width: 80%;">
@@ -991,50 +1083,4 @@ function clearSystemData() {
             alert('清空失败: ' + (xhr.responseJSON ? xhr.responseJSON.error : '未知错误'));
         }
     });
-}
-
-/**
- * 初始化 SSE 进度条监听
- */
-function initProgressSSE() {
-    const eventSource = new EventSource('/progress');
-    
-    eventSource.onmessage = function(event) {
-        const data = JSON.parse(event.data);
-        if (data.type === 'progress') {
-            const { doc_name, progress, message, step } = data;
-            
-            // 显示进度容器
-            $('#progressContainer').fadeIn();
-            
-            // 更新进度条和文本
-            $('#progressBar').css('width', progress + '%');
-            $('#progressPercent').text(progress + '%');
-            $('#progressText').text(`正在解析: ${doc_name} (${message})`);
-            
-            // 如果完成或失败，延迟隐藏
-            if (step === 'completed' || step === 'failed') {
-                if (step === 'completed') {
-                    $('#progressBar').removeClass('progress-bar-animated').addClass('bg-success');
-                } else {
-                    $('#progressBar').removeClass('progress-bar-animated').addClass('bg-danger');
-                }
-                
-                setTimeout(() => {
-                    $('#progressContainer').fadeOut(() => {
-                        // 重置状态
-                        $('#progressBar').css('width', '0%').removeClass('bg-success bg-danger').addClass('progress-bar-animated');
-                        $('#progressPercent').text('0%');
-                    });
-                    loadDocumentList(); // 刷新文档列表以显示新状态
-                    checkSystemStatus();
-                }, 3000);
-            }
-        }
-    };
-    
-    eventSource.onerror = function(err) {
-        console.error("SSE connection error:", err);
-        // 如果断开连接，尝试重新连接（EventSource 会自动重连，但我们可以记录日志）
-    };
 }

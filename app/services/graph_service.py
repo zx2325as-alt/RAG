@@ -1,12 +1,8 @@
 import json
 import os
-import logging
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from app.config import Config
-
-logger = logging.getLogger(__name__)
-
 try:
     from neo4j import GraphDatabase
 except ImportError:
@@ -21,9 +17,9 @@ class GraphService:
                     Config.NEO4J_URI,
                     auth=(Config.NEO4J_USER, Config.NEO4J_PASSWORD)
                 )
-                logger.info("Neo4j driver initialized successfully in GraphService.")
+                print("Neo4j driver initialized successfully in GraphService.")
             except Exception as e:
-                logger.error(f"Failed to initialize Neo4j driver in GraphService: {e}")
+                print(f"Failed to initialize Neo4j driver in GraphService: {e}")
                 
         # 初始化用于图谱抽取的 LLM
         self.llm = self._init_llm()
@@ -66,10 +62,23 @@ class GraphService:
             return
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", '''你是一个信息抽取专家。请从给定的文本中提取关键实体（如服务器、服务、配置、错误码等）和它们之间的关系。
+            ("system", '''你是一个信息抽取专家。请从给定的文本中提取关键实体和它们之间的关系。
+实体类型包括但不限于：
+- 技术/模型：算法、模型、框架、工具（如 YOLO, SSD, BERT, TensorFlow）
+- 基础设施：服务器、服务、配置、数据库（如 Nginx, MySQL, Redis）
+- 概念：技术概念、方法、流程（如 目标检测, 特征融合, 量化部署）
+
+关系类型包括但不限于：
+- EVOLVED_FROM/EVOLVED_TO：版本演进（如 YOLOv2 → YOLOv3）
+- DEPENDS_ON：依赖关系
+- HAS_COMPONENT：组成关系（如 YOLOv3 包含 Darknet53）
+- COMPARED_WITH：对比关系
+- CONFIGURED_BY/HAS_ERROR/RELATED_TO 等
+
 请返回严格的 JSON 格式，包含 entities 和 relations 两个列表。
-实体格式: {"id": "唯一标识", "type": "实体类型(如Server/Service/Error)", "name": "名称"}
-关系格式: {"source": "源实体id", "target": "目标实体id", "type": "关系类型(如DEPENDS_ON/HAS_ERROR/CONFIGURED_BY)"}
+实体格式: {{"id": "唯一标识", "type": "实体类型", "name": "名称"}}
+关系格式: {{"source": "源实体id", "target": "目标实体id", "type": "关系类型", "source_type": "源实体类型", "target_type": "目标实体类型"}}
+特别注意：当文本提及模型/算法的版本演进时，务必提取 EVOLVED_FROM/EVOLVED_TO 关系。
 如果未发现明显关系，返回空列表。请只输出 JSON 字符串，不要输出 Markdown 格式标记。'''),
             ("user", "文本内容：\n{text}")
         ])
@@ -77,48 +86,125 @@ class GraphService:
         chain = prompt | self.llm
         
         # 完整实现：处理所有文本块
-        with self.driver.session() as session:
-            for i, chunk in enumerate(chunks):
-                text = chunk.content
-                # 过滤掉过短的无意义文本块
-                if len(text.strip()) < 20:
-                    continue
+        import concurrent.futures
+        
+        def process_chunk(chunk_data):
+            i, chunk = chunk_data
+            text = chunk.content
+            # 过滤掉过短的无意义文本块
+            if len(text.strip()) < 20:
+                return []
+                
+            try:
+                # 适当限制单次请求文本长度，避免超出上下文限制
+                response = chain.invoke({"text": text[:2000]}) 
+                result_text = response.content.strip()
+                # 清理可能的 markdown 标记
+                if result_text.startswith("```json"):
+                    result_text = result_text[7:-3].strip()
+                elif result_text.startswith("```"):
+                    result_text = result_text[3:-3].strip()
                     
+                # 尝试解析 JSON
+                import re
+                json_match = re.search(r'(\{.*\})', result_text, re.DOTALL)
+                if json_match:
+                    result_text = json_match.group(1)
+                    
+                data = json.loads(result_text)
+                entities = data.get("entities", [])
+                relations = data.get("relations", [])
+                return {"chunk": chunk, "entities": entities, "relations": relations, "index": i}
+            except Exception as e:
+                print(f"Graph extraction LLM error on chunk {i}: {e}")
+                return []
+
+        print(f"[GraphService] Starting concurrent LLM extraction for {len(chunks)} chunks...")
+        # 1. 并发调用 LLM 获取实体和关系数据
+        results = []
+        # 增加并发数到 10，以进一步提升速度
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            # 提交所有任务
+            future_to_chunk = {executor.submit(process_chunk, (i, chunk)): i for i, chunk in enumerate(chunks)}
+            for future in concurrent.futures.as_completed(future_to_chunk):
                 try:
-                    # 适当限制单次请求文本长度，避免超出上下文限制
-                    response = chain.invoke({"text": text[:2000]}) 
-                    result_text = response.content.strip()
-                    # 清理可能的 markdown 标记
-                    if result_text.startswith("```json"):
-                        result_text = result_text[7:-3].strip()
-                    elif result_text.startswith("```"):
-                        result_text = result_text[3:-3].strip()
-                        
-                    # 尝试解析 JSON
-                    import re
-                    json_match = re.search(r'(\{.*\})', result_text, re.DOTALL)
-                    if json_match:
-                        result_text = json_match.group(1)
-                        
-                    data = json.loads(result_text)
-                    entities = data.get("entities", [])
-                    relations = data.get("relations", [])
-                    
+                    data = future.result()
+                    if data:
+                        results.append(data)
+                except Exception as exc:
+                    print(f"Chunk processing generated an exception: {exc}")
+        
+        print(f"[GraphService] LLM extraction completed. Starting batch Neo4j insertion...")
+        
+        # 2. 批量并发存入 Neo4j (使用 Neo4j 的并发机制或优化事务，提升写入速度)
+        def insert_to_neo4j(item):
+            try:
+                entities = item.get("entities", [])
+                relations = item.get("relations", [])
+                chunk = item.get("chunk")
+                
+                with self.driver.session() as session:
                     # 存入 Neo4j
                     for entity in entities:
+                        # 构建全局唯一ID：仅基于名称，避免因类型不一致导致图分裂
+                        entity_name = str(entity.get('name', '')).strip()
+                        if not entity_name:
+                            continue
+                        entity_id = f"entity_{entity_name}".lower()
                         session.run(
-                            "MERGE (e:Entity {id: $id}) SET e.name = $name, e.type = $type",
-                            id=f"{doc_id}_{entity.get('id', '')}", name=entity.get('name', ''), type=entity.get('type', 'Unknown')
+                            """MERGE (e:Entity {id: $id}) 
+                            ON CREATE SET e.name = $name, e.type = $type
+                            WITH e
+                            SET e.doc_ids = CASE 
+                                WHEN $doc_id IN coalesce(e.doc_ids, []) THEN e.doc_ids 
+                                ELSE coalesce(e.doc_ids, []) + [$doc_id] 
+                            END""",
+                            id=entity_id, name=entity_name, type=entity.get('type', 'Unknown'), doc_id=doc_id
                         )
                         
                     for rel in relations:
+                        source_name = str(rel.get('source', '')).strip()
+                        target_name = str(rel.get('target', '')).strip()
+                        if not source_name or not target_name:
+                            continue
+                        # 构建全局唯一ID
+                        source_id = f"entity_{source_name}".lower()
+                        target_id = f"entity_{target_name}".lower()
+                        rel_type = str(rel.get('type', 'RELATED_TO')).replace(' ', '_').upper()
+                        # 确保关系类型是合法的Neo4j类型
+                        import re
+                        rel_type = re.sub(r'[^A-Z0-9_]', '_', rel_type)
+                        if not rel_type:
+                            rel_type = 'RELATED_TO'
+                            
+                        confidence = rel.get('confidence', 0.8)
+                        chunk_id = getattr(chunk, 'chunk_id', None)
+                        # 这里如果节点不存在，先MERGE节点，防止关系孤立丢失
                         session.run(
-                            f"MATCH (a:Entity {{id: $source}}), (b:Entity {{id: $target}}) "
-                            f"MERGE (a)-[r:{rel.get('type', 'RELATED_TO')}]->(b)",
-                            source=f"{doc_id}_{rel.get('source', '')}", target=f"{doc_id}_{rel.get('target', '')}"
+                            f"""
+                            MERGE (a:Entity {{id: $source}})
+                            ON CREATE SET a.name = $source_name, a.type = $source_type
+                            MERGE (b:Entity {{id: $target}})
+                            ON CREATE SET b.name = $target_name, b.type = $target_type
+                            WITH a, b
+                            MERGE (a)-[r:{rel_type}]->(b)
+                            SET r.confidence = $confidence, 
+                                r.source_doc_id = $doc_id,
+                                r.source_chunk_id = $chunk_id,
+                                r.updated_at = datetime()""",
+                            source=source_id, target=target_id, 
+                            source_name=source_name, source_type=rel.get('source_type', 'Unknown'),
+                            target_name=target_name, target_type=rel.get('target_type', 'Unknown'),
+                            confidence=confidence, doc_id=doc_id, chunk_id=chunk_id
                         )
-                except Exception as e:
-                    logger.error(f"Graph extraction error on chunk {i}: {e}")
+            except Exception as e:
+                print(f"Graph extraction DB error on chunk {item.get('index', 'unknown')}: {e}")
+
+        # 并发写入数据库，Neo4j 支持多 Session 并发执行
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as db_executor:
+            db_executor.map(insert_to_neo4j, results)
+
+        print(f"[GraphService] All chunks processed and inserted into Neo4j.")
 
     def extract_entities_from_query(self, query):
         """利用 LLM 动态提取查询中的实体，增强图谱检索召回率"""
@@ -134,5 +220,5 @@ class GraphService:
             entities = [e.strip() for e in response.content.split(',') if e.strip()]
             return [e for e in entities if e]
         except Exception as e:
-            logger.error(f"LLM entity extraction failed: {e}")
+            print(f"LLM entity extraction failed: {e}")
             return []
