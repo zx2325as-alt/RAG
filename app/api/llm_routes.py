@@ -470,7 +470,8 @@ def query():
     question = data.get('question')
     db_names = data.get('db_names', ['default'])
     enable_tools = data.get('enable_tools', True)
-    user_id = request.remote_addr
+    session_id = data.get('session_id')
+    user_id = session_id or request.remote_addr
     if not question:
         return jsonify({'error': 'No question provided'}), 400
 
@@ -503,7 +504,8 @@ def feedback():
     question = data.get('question')
     answer = data.get('answer')
     correct_answer = data.get('correct_answer')
-    user_id = request.remote_addr
+    session_id = data.get('session_id')
+    user_id = session_id or request.remote_addr
 
     if not score or not question:
         return jsonify({'error': 'Missing parameters'}), 400

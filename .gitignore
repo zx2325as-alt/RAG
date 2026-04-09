@@ -23,3 +23,7 @@ cache/
 aaa.py1
 app/config/.ipynb_checkpoints/
 start.py
+.idea/modules.xml
+.idea/RAG.iml
+.idea/vcs.xml
+.idea/inspectionProfiles/profiles_settings.xml

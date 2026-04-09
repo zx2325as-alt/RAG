@@ -1,11 +1,13 @@
 import os
 import hashlib
 import json
+import logging
 import redis
 from datetime import timedelta
 from app.services.knowledge_base_service import KnowledgeBaseService
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_community.chat_message_histories import RedisChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from app.config import Config
@@ -204,23 +206,122 @@ class QAService:
         
         return rewritten
 
+    def _load_history_context(self, user_id):
+        history_obj = self.get_session_history(user_id)
+        messages = history_obj.messages
+        filtered_messages = []
+        for msg in messages:
+            if msg.type in ['human', 'ai'] and getattr(msg, 'name', None) is None:
+                filtered_messages.append(msg)
+        if len(filtered_messages) > 6:
+            filtered_messages = filtered_messages[-6:]
+        return history_obj, messages, filtered_messages
+
+    def _build_runtime_cache_key(self, question, db_names, enable_tools, filtered_messages):
+        history_signature = ""
+        if filtered_messages:
+            history_signature = "||".join(
+                f"{msg.type}:{str(msg.content)[:200]}"
+                for msg in filtered_messages[-4:]
+            )
+        raw_key = f"{Config.ACTIVE_LLM}|{question}|{'/'.join(db_names)}|{enable_tools}|{history_signature}"
+        return self.get_cache_key(raw_key)
+
+    def _resolve_enabled_tool_names(self):
+        configured = [
+            tool_name.strip()
+            for tool_name in getattr(Config, 'ENABLED_TOOLS', [])
+            if tool_name and str(tool_name).strip()
+        ]
+        preferred = ['search_knowledge_base', 'get_document_details', 'query_metrics']
+        resolved = []
+        for tool_name in preferred + configured:
+            if tool_name not in resolved:
+                resolved.append(tool_name)
+        return resolved
+
+    def _normalize_llm_text(self, content):
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            texts = []
+            for item in content:
+                if isinstance(item, str):
+                    texts.append(item)
+                elif isinstance(item, dict) and item.get("type") == "text":
+                    texts.append(item.get("text", ""))
+            return "".join(texts)
+        return str(content or "")
+
+    def _persist_history_turn(self, history_obj, question, answer):
+        history_obj.add_message(HumanMessage(content=question))
+        history_obj.add_message(AIMessage(content=answer))
+
+    def _run_tool_calling_workflow(self, base_system_prompt, user_query_with_rule, filtered_messages, db_names):
+        from flask import current_app
+        from app.services.agent_tools import AVAILABLE_TOOLS, get_tools_by_names
+
+        enabled_tool_names = self._resolve_enabled_tool_names()
+        tools = get_tools_by_names(enabled_tool_names)
+        if not tools:
+            raise RuntimeError("当前未配置可用工具")
+
+        llm_with_tools = self.llm.bind_tools(tools)
+        current_app.tool_runtime_context = {
+            "db_names": db_names,
+            "enabled_tool_names": enabled_tool_names
+        }
+
+        tool_prompt = (
+            base_system_prompt
+            + "\n\n【工具调用策略】：\n"
+            + "1. 当用户询问知识库内容、文档依据、系统状态、训练状态或部署状态时，优先调用工具获取真实结果。\n"
+            + "2. 先调用 search_knowledge_base 获取候选证据，再决定是否继续调用 get_document_details 深挖具体文档。\n"
+            + "3. 需要系统运行状态、训练状态、部署状态时，调用 query_metrics，不要凭空猜测。\n"
+            + "4. 只有在工具结果和参考资料都不足时，才允许给出保守兜底结论。\n"
+            + "5. 工具参数必须完整、准确，尤其是 query 与文档标识。"
+        )
+
+        messages = [SystemMessage(content=tool_prompt)]
+        if filtered_messages:
+            messages.extend(filtered_messages)
+        messages.append(HumanMessage(content=user_query_with_rule))
+
+        tool_traces = []
+        final_answer = ""
+        try:
+            for step_index in range(4):
+                ai_message = llm_with_tools.invoke(messages)
+                messages.append(ai_message)
+                tool_calls = getattr(ai_message, "tool_calls", None) or []
+                if not tool_calls:
+                    final_answer = self._normalize_llm_text(ai_message.content).strip()
+                    break
+
+                for tool_index, tool_call in enumerate(tool_calls, 1):
+                    tool_name = tool_call.get("name")
+                    tool_args = tool_call.get("args", {}) or {}
+                    tool_call_id = tool_call.get("id") or f"tool_call_{step_index}_{tool_index}"
+                    tool_impl = AVAILABLE_TOOLS.get(tool_name)
+
+                    if tool_impl is None:
+                        tool_result = json.dumps({"error": f"未知工具: {tool_name}"}, ensure_ascii=False)
+                    else:
+                        tool_result = tool_impl.invoke(tool_args)
+
+                    tool_traces.append({
+                        "name": tool_name,
+                        "args": tool_args,
+                        "result_preview": str(tool_result)[:400]
+                    })
+                    messages.append(ToolMessage(content=str(tool_result), tool_call_id=tool_call_id))
+            return final_answer, tool_traces
+        finally:
+            if hasattr(current_app, "tool_runtime_context"):
+                delattr(current_app, "tool_runtime_context")
+
     def stream_answer_question(self, question, user_id="anonymous", db_names=['default'], enable_tools=True):
         start_time = datetime.utcnow()
-        cache_key = self.get_cache_key(question + "_" + "_".join(db_names) + "_" + str(enable_tools))
-        
-        # 1. Check Redis Cache
-        if self.use_redis:
-            try:
-                cached_response = self.redis_client.get(cache_key)
-                if cached_response:
-                    print("Hit Redis Cache")
-                    data = json.loads(cached_response)
-                    # 模拟流式输出缓存内容
-                    yield json.dumps({"type": "chunk", "content": data["answer"]}) + "\n"
-                    yield json.dumps({"type": "sources", "sources": data["sources"]}) + "\n"
-                    return
-            except Exception as e:
-                print(f"Redis get error: {e}")
 
         # ========== 思考过程开始 ==========
         # yield json.dumps({"type": "chunk", "content": "> 🧠 **思考过程**\n"}) + "\n"
@@ -236,35 +337,40 @@ class QAService:
         yield json.dumps({"type": "chunk", "content": "> **步骤 2/6: 历史上下文处理**\n"}) + "\n"
         
         search_query = question
+        history_obj = None
+        filtered_messages = []
+        cache_key = None
         try:
-            history_obj = self.get_session_history(user_id)
-            messages = history_obj.messages
-            
-            # 历史消息干扰：只保留最近 2-3 轮，过滤掉工具调用等中间步骤，只保留最终的 user 和 assistant 消息
-            filtered_messages = []
-            for msg in messages:
-                if msg.type in ['human', 'ai'] and getattr(msg, 'name', None) is None:
-                    filtered_messages.append(msg)
-            
-            # 保留最近 4 条消息（2轮对话）
-            if len(filtered_messages) > 4:
-                filtered_messages = filtered_messages[-4:]
+            history_obj, messages, filtered_messages = self._load_history_context(user_id)
             
             yield json.dumps({"type": "chunk", "content": f">   📜 历史消息数: {len(messages)} 条\n"}) + "\n"
             yield json.dumps({"type": "chunk", "content": f">   📜 有效上下文: {len(filtered_messages)} 条\n"}) + "\n"
+
+            cache_key = self._build_runtime_cache_key(question, db_names, enable_tools, filtered_messages)
+            can_use_cache = self.use_redis and not enable_tools and len(filtered_messages) == 0
+            if can_use_cache:
+                try:
+                    cached_response = self.redis_client.get(cache_key)
+                    if cached_response:
+                        print("Hit Redis Cache")
+                        data = json.loads(cached_response)
+                        yield json.dumps({"type": "chunk", "content": ">   ⚡ 命中无上下文缓存，直接返回结果\n"}) + "\n"
+                        yield json.dumps({"type": "chunk", "content": "> ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"}) + "\n"
+                        yield json.dumps({"type": "chunk", "content": data["answer"]}) + "\n"
+                        yield json.dumps({"type": "sources", "sources": data["sources"]}) + "\n"
+                        return
+                except Exception as e:
+                    print(f"Redis get error: {e}")
             
-            # 问题重构优化：先进行启发式判断，减少不必要的LLM调用
             needs_rewrite = self._check_needs_rewrite(question, filtered_messages)
             
-            if needs_rewrite and len(filtered_messages) > 0 and not enable_tools:
+            if needs_rewrite and len(filtered_messages) > 0:
                 yield json.dumps({"type": "chunk", "content": ">   🔄 执行问题重构...\n"}) + "\n"
                 history_text = "\n".join([f"{msg.type}: {msg.content}" for msg in filtered_messages])
                 
-                # 显示历史上下文摘要
                 history_summary = " | ".join([f"{msg.type[:1].upper()}: {msg.content[:30]}..." for msg in filtered_messages[-2:]])
                 yield json.dumps({"type": "chunk", "content": f">   💭 上下文摘要: {history_summary}\n"}) + "\n"
                 
-                # 优化后的重构提示词，增加意图保持约束
                 rewrite_prompt = f"""请根据以下对话历史记录，将用户的最新问题改写为一个独立、完整且没有歧义的问题。
 
 【改写要求 - 严格遵守】：
@@ -280,7 +386,6 @@ class QAService:
 【最新问题】：{question}
 
 【独立完整的问题】："""
-                from langchain_core.messages import HumanMessage
                 try:
                     rewrite_response = self.llm.invoke([HumanMessage(content=rewrite_prompt)])
                     search_query = rewrite_response.content.strip()
@@ -457,88 +562,41 @@ class QAService:
         user_query_with_rule = f"用户问题：{search_query}\n\n请仅使用上面提供的参考资料回答，不要使用任何外部知识。如果资料中没有，请回答未找到相关资料。"
         
         # 5. Agent 执行 (ReAct Pattern)
-        try:
-            from langchain.agents import AgentExecutor
-        except ImportError:
-            # Older versions might have it in a different path or we can use custom implementation
-            AgentExecutor = None
-
-        try:
-            from langchain.agents import create_tool_calling_agent
-        except ImportError:
-            # Fallback for older langchain versions
-            try:
-                from langchain.agents.format_scratchpad.openai_tools import format_to_openai_tool_messages
-                from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
-            except ImportError:
-                format_to_openai_tool_messages = None
-                OpenAIToolsAgentOutputParser = None
-            create_tool_calling_agent = None
-
-        from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-        
         full_answer = ""
-        if enable_tools and AgentExecutor is not None:
+        history_persisted_manually = False
+        if enable_tools:
             try:
-                yield json.dumps({"type": "chunk", "content": "> - [ ] 正在初始化 Agent 并规划任务...\n"}) + "\n"
-                from app.services.agent_tools import get_tools_by_names
-                enabled_tool_names = getattr(Config, 'ENABLED_TOOLS', ['execute_shell_command', 'query_api_endpoint'])
-                tools = get_tools_by_names(enabled_tool_names)
-                
-                if tools:
-                    # 使用支持 Tool Calling 的 Agent
-                    agent_prompt = ChatPromptTemplate.from_messages([
-                        ("system", base_system_prompt),
-                        MessagesPlaceholder(variable_name="history", optional=True),
-                        ("user", "{input}"),
-                        MessagesPlaceholder(variable_name="agent_scratchpad"),
-                    ])
-                    
-                    if create_tool_calling_agent:
-                        agent = create_tool_calling_agent(self.llm, tools, agent_prompt)
-                    elif format_to_openai_tool_messages and OpenAIToolsAgentOutputParser:
-                        # Fallback implementation if create_tool_calling_agent is not available
-                        llm_with_tools = self.llm.bind_tools(tools)
-                        agent = (
-                            {
-                                "input": lambda x: x["input"],
-                                "agent_scratchpad": lambda x: format_to_openai_tool_messages(
-                                    x["intermediate_steps"]
-                                ),
-                                "history": lambda x: x.get("history", []),
-                            }
-                            | agent_prompt
-                            | llm_with_tools
-                            | OpenAIToolsAgentOutputParser()
-                        )
-                    else:
-                        raise Exception("No suitable Agent creation method found in current langchain version.")
+                yield json.dumps({"type": "chunk", "content": "> - [ ] 正在初始化工具调用链...\n"}) + "\n"
+                full_answer, tool_traces = self._run_tool_calling_workflow(
+                    base_system_prompt=base_system_prompt,
+                    user_query_with_rule=user_query_with_rule,
+                    filtered_messages=filtered_messages,
+                    db_names=db_names
+                )
+                yield json.dumps({"type": "chunk", "content": "> - [x] 工具链初始化完成\n"}) + "\n"
 
-                    # max_iterations=3 允许 Agent 多次思考与工具调用 (ReAct模式)
-                    agent_executor = AgentExecutor(agent=agent, tools=tools, max_iterations=3, verbose=True, return_intermediate_steps=True)
-                    
-                    yield json.dumps({"type": "chunk", "content": "> - [x] Agent 启动，开始推理和工具调用链...\n\n---\n\n"}) + "\n"
-                    
-                    # 传入裁剪后的历史
-                    history_messages = history_obj.messages[-6:] if history_obj else []
-                    
-                    response = agent_executor.invoke({
-                        "input": user_query_with_rule,
-                        "history": history_messages
-                    })
-                    
-                    # 输出工具调用的自省过程 (CoT)
-                    if response.get("intermediate_steps"):
-                        for action, observation in response["intermediate_steps"]:
-                            yield json.dumps({"type": "chunk", "content": f"\n\n*🔧 Agent 调用了工具 `{action.tool}`*\n*输入参数: {action.tool_input}*\n*执行结果片段: {str(observation)[:100]}...*\n\n"}) + "\n"
-                    
-                    full_answer = response["output"]
-                    yield json.dumps({"type": "chunk", "content": full_answer}) + "\n"
+                if tool_traces:
+                    yield json.dumps({"type": "chunk", "content": f"> - [x] 已完成 {len(tool_traces)} 次工具调用\n"}) + "\n"
+                    for trace in tool_traces:
+                        yield json.dumps({
+                            "type": "chunk",
+                            "content": (
+                                f">   🔧 工具: `{trace['name']}`\n"
+                                f">   📥 参数: `{json.dumps(trace['args'], ensure_ascii=False)}`\n"
+                                f">   📤 结果摘要: `{trace['result_preview']}`\n"
+                            )
+                        }) + "\n"
                 else:
-                    raise Exception("No tools available")
+                    yield json.dumps({"type": "chunk", "content": "> - [x] 本轮无需调用工具，直接基于知识上下文生成答案\n"}) + "\n"
+
+                if full_answer:
+                    self._persist_history_turn(history_obj, question, full_answer)
+                    history_persisted_manually = True
+                    yield json.dumps({"type": "chunk", "content": "> - [x] 已完成工具结果整合，开始输出最终答复\n\n---\n\n"}) + "\n"
+                    yield json.dumps({"type": "chunk", "content": full_answer}) + "\n"
             except Exception as e:
                 print(f"Agent Execution Error: {e}")
-                enable_tools = False # 降级为普通生成
+                enable_tools = False
                 yield json.dumps({"type": "chunk", "content": "> - [!] Agent 执行异常，降级为普通知识问答...\n\n---\n\n"}) + "\n"
         
         if not enable_tools or not full_answer:
@@ -581,7 +639,7 @@ class QAService:
             "answer": full_answer,
             "sources": sources
         }
-        if self.use_redis and full_answer and len(full_answer) > 50 and "未找到相关" not in full_answer:
+        if self.use_redis and cache_key and not filtered_messages and not enable_tools and full_answer and len(full_answer) > 50 and "未找到相关" not in full_answer:
             try:
                 self.redis_client.setex(cache_key, timedelta(seconds=3600), json.dumps(result))
             except Exception as e:

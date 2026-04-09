@@ -287,6 +287,21 @@ function loadOllamaModels() {
 let currentAbortController = null;
 let currentChatSessionId = null;
 
+function generateChatSessionId() {
+    return 'rag-session-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+}
+
+function ensureChatSessionId(forceReset = false) {
+    if (forceReset || !currentChatSessionId) {
+        currentChatSessionId = forceReset ? null : localStorage.getItem('rag_chat_session_id');
+        if (!currentChatSessionId) {
+            currentChatSessionId = generateChatSessionId();
+            localStorage.setItem('rag_chat_session_id', currentChatSessionId);
+        }
+    }
+    return currentChatSessionId;
+}
+
 // 配置 marked.js
 if (typeof marked !== 'undefined') {
     marked.setOptions({
@@ -336,7 +351,8 @@ function sendMessage() {
         body: JSON.stringify({
             question: query,
             db_names: selectedDbs,
-            enable_tools: enableTools
+            enable_tools: enableTools,
+            session_id: ensureChatSessionId()
         }),
         signal: currentAbortController.signal
     }).then(async response => {
@@ -506,7 +522,8 @@ function triggerReanalyze(question, previous_answer, score) {
         body: JSON.stringify({
             question: question,
             answer: previous_answer,
-            score: score
+            score: score,
+            session_id: ensureChatSessionId()
         }),
         signal: currentAbortController.signal
     }).then(async response => {
@@ -609,7 +626,12 @@ function appendChunkToMessage(msgId, textChunk) {
         thinkingText.html(marked.parse(currentThinking));
         
         // 思考过程结束的标志
-        if (textChunk.includes('开始整合知识生成最终分析报告') || textChunk.includes('开始整合上下文并生成最终分析报告')) {
+        if (
+            textChunk.includes('开始整合知识生成最终分析报告') ||
+            textChunk.includes('开始整合上下文并生成最终分析报告') ||
+            textChunk.includes('开始输出最终答复') ||
+            textChunk.includes('已完成工具结果整合')
+        ) {
             // 移除 spinner
             thinkingContainer.find('.spinner-border').remove();
             // 思考结束后自动折叠
@@ -861,6 +883,7 @@ function saveChatHistory() {
 }
 
 function loadChatHistory() {
+    ensureChatSessionId();
     var chatContent = localStorage.getItem('rag_chat_history');
     if (chatContent) {
         $('#chatHistory').html(chatContent);
@@ -991,6 +1014,8 @@ function scrollToBottom() {
 }
 
 function clearChat(save = true) {
+    ensureChatSessionId(true);
+    localStorage.removeItem('rag_chat_history');
     $('#chatHistory').html(`
         <div class="d-flex flex-row justify-content-start mb-3">
             <div class="p-3 bg-white border rounded shadow-sm" style="max-width: 80%;">
